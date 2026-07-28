@@ -4,16 +4,12 @@ import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.UsageWindow;
-import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
 public interface BillingMapper {
     int insertAccountIfAbsent(
             @Param("namespace") String namespace,
-            @Param("planCode") String planCode,
-            @Param("now") long now);
-
-    BillingAccount selectAccountByNamespace(@Param("namespace") String namespace);
+            @Param("planCode") String planCode);
 
     BillingAccount selectAccountById(@Param("accountId") Long accountId);
 
@@ -27,8 +23,7 @@ public interface BillingMapper {
             @Param("accountId") Long accountId,
             @Param("periodStart") long periodStart,
             @Param("periodEnd") long periodEnd,
-            @Param("quotaBytes") long quotaBytes,
-            @Param("now") long now);
+            @Param("quotaBytes") long quotaBytes);
 
     BillingPeriod selectPeriod(
             @Param("accountId") Long accountId,
@@ -39,26 +34,21 @@ public interface BillingMapper {
             @Param("periodStart") long periodStart,
             @Param("periodEnd") long periodEnd);
 
-    List<UsageWindow> selectUnbilledUsage(
-            @Param("region") String region,
-            @Param("limit") int limit);
+    UsageWindow selectNextUnbilledUsage(@Param("region") String region);
 
     int advanceBilledBytes(
             @Param("usageWindowId") Long usageWindowId,
             @Param("expectedBilledBytes") long expectedBilledBytes,
-            @Param("expectedUsageBytes") long expectedUsageBytes,
-            @Param("now") long now);
+            @Param("expectedUsageBytes") long expectedUsageBytes);
 
     int increasePeriodUsage(
             @Param("accountId") Long accountId,
             @Param("periodStart") long periodStart,
-            @Param("usageBytes") long usageBytes,
-            @Param("now") long now);
+            @Param("usageBytes") long usageBytes);
 
     int increaseTenMinuteUsage(
             @Param("accountId") Long accountId,
             @Param("tunnelId") String tunnelId,
             @Param("windowStart") long windowStart,
-            @Param("usageBytes") long usageBytes,
-            @Param("now") long now);
+            @Param("usageBytes") long usageBytes);
 }

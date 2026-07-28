@@ -10,12 +10,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BillingPeriod {
-    private Long id;
-    private Long accountId;
     private Long periodStart;
     private Long periodEnd;
     private Long quotaBytes;
     private Long billedBytes;
-    private Long createdAt;
-    private Long updatedAt;
 }

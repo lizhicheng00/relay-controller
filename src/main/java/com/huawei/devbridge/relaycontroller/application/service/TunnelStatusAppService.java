@@ -66,7 +66,7 @@ public class TunnelStatusAppService {
                 continue;
             }
             validateSession(item);
-            statuses.add(toRuntimeStatus(clusterId, request, item, now));
+            statuses.add(toRuntimeStatus(clusterId, request, item));
             TunnelStatusDecisionResponse decision = decide(tunnel, item, snapshots, now);
             decisions.add(decision);
             if (decision.getAction() == TunnelControlAction.KEEP && isActive(item)) {
@@ -125,8 +125,7 @@ public class TunnelStatusAppService {
     private static TunnelRuntimeStatus toRuntimeStatus(
             String clusterId,
             TunnelStatusReportRequest request,
-            TunnelStatusItemRequest item,
-            long now) {
+            TunnelStatusItemRequest item) {
         return TunnelRuntimeStatus.builder()
                 .tunnelId(item.getTunnelId())
                 .clusterId(clusterId)
@@ -138,7 +137,6 @@ public class TunnelStatusAppService {
                 .uploadBytesPerSecond(item.getUploadBytesPerSecond())
                 .downloadBytesPerSecond(item.getDownloadBytesPerSecond())
                 .reportedAt(request.getReportedAt())
-                .updatedAt(now)
                 .build();
     }
 

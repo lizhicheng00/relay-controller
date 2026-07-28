@@ -161,6 +161,6 @@ class TunnelStatusAppServiceTest {
                 .build();
         BillingPeriod period = BillingPeriod.builder().quotaBytes(1000L).billedBytes(100L).build();
         return new LimitSnapshot(
-                account, plan, period, 0L, exhausted ? 1000L : 100L, exhausted ? 0L : 900L, exhausted);
+                account, plan, period, exhausted ? 1000L : 100L, exhausted ? 0L : 900L, exhausted);
     }
 }

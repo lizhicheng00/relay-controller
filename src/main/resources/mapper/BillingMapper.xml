@@ -3,17 +3,9 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.BillingMapper">
     <insert id="insertAccountIfAbsent">
-        INSERT IGNORE INTO billing_account (namespace, plan_code, status, created_at, updated_at)
-        VALUES (#{namespace}, #{planCode}, 'active', #{now}, #{now})
+        INSERT IGNORE INTO billing_account (namespace, plan_code, status)
+        VALUES (#{namespace}, #{planCode}, 'active')
     </insert>
-
-    <select id="selectAccountByNamespace"
-            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingAccount">
-        SELECT *
-        FROM billing_account
-        WHERE namespace = #{namespace}
-        LIMIT 1
-    </select>
 
     <select id="selectAccountById"
             resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingAccount">
@@ -50,10 +42,8 @@
     </select>
 
     <insert id="insertPeriodIfAbsent">
-        INSERT IGNORE INTO billing_period (
-            account_id, period_start, period_end, quota_bytes, billed_bytes, created_at, updated_at
-        )
-        VALUES (#{accountId}, #{periodStart}, #{periodEnd}, #{quotaBytes}, 0, #{now}, #{now})
+        INSERT IGNORE INTO billing_period (account_id, period_start, period_end, quota_bytes, billed_bytes)
+        VALUES (#{accountId}, #{periodStart}, #{periodEnd}, #{quotaBytes}, 0)
     </insert>
 
     <select id="selectPeriod"
@@ -74,21 +64,25 @@
           AND usage_bytes &gt; billed_bytes
     </select>
 
-    <select id="selectUnbilledUsage"
+    <select id="selectNextUnbilledUsage"
             resultType="com.huawei.devbridge.relaycontroller.domain.model.UsageWindow">
-        SELECT u.*
+        SELECT u._id,
+               u.account_id,
+               u.tunnel_id,
+               u.window_start,
+               u.usage_bytes,
+               u.billed_bytes
         FROM tunnel_usage_window u
         INNER JOIN cluster c ON c.cluster_id = u.cluster_id
         WHERE c.region = #{region}
           AND u.usage_bytes &gt; u.billed_bytes
         ORDER BY u.window_start ASC, u._id ASC
-        LIMIT #{limit}
+        LIMIT 1
     </select>
 
     <update id="advanceBilledBytes">
         UPDATE tunnel_usage_window
-        SET billed_bytes = #{expectedUsageBytes},
-            updated_at = #{now}
+        SET billed_bytes = #{expectedUsageBytes}
         WHERE _id = #{usageWindowId}
           AND billed_bytes = #{expectedBilledBytes}
           AND usage_bytes = #{expectedUsageBytes}
@@ -96,19 +90,15 @@
 
     <update id="increasePeriodUsage">
         UPDATE billing_period
-        SET billed_bytes = billed_bytes + #{usageBytes},
-            updated_at = #{now}
+        SET billed_bytes = billed_bytes + #{usageBytes}
         WHERE account_id = #{accountId}
           AND period_start = #{periodStart}
     </update>
 
     <insert id="increaseTenMinuteUsage">
-        INSERT INTO billing_usage_10m (
-            account_id, tunnel_id, window_start, usage_bytes, created_at, updated_at
-        )
-        VALUES (#{accountId}, #{tunnelId}, #{windowStart}, #{usageBytes}, #{now}, #{now})
+        INSERT INTO billing_usage_10m (account_id, tunnel_id, window_start, usage_bytes)
+        VALUES (#{accountId}, #{tunnelId}, #{windowStart}, #{usageBytes})
         ON DUPLICATE KEY UPDATE
-            usage_bytes = usage_bytes + VALUES(usage_bytes),
-            updated_at = VALUES(updated_at)
+            usage_bytes = usage_bytes + VALUES(usage_bytes)
     </insert>
 </mapper>

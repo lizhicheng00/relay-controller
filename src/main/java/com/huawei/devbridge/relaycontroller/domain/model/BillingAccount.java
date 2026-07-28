@@ -14,8 +14,6 @@ public class BillingAccount {
     private String namespace;
     private String planCode;
     private String status;
-    private Long createdAt;
-    private Long updatedAt;
 
     public boolean isActive() {
         return "active".equalsIgnoreCase(status);

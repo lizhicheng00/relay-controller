@@ -23,12 +23,10 @@ public class BillingSettlementJob {
         int batchSize = Math.max(1, relayProperties.getBilling().getSettlementBatchSize());
         for (int attempt = 0; attempt < batchSize; attempt++) {
             SettlementResult result = settlementService.settleNext();
-            if (result == SettlementResult.EMPTY) {
+            if (result != SettlementResult.SETTLED) {
                 break;
             }
-            if (result == SettlementResult.SETTLED) {
-                settled++;
-            }
+            settled++;
         }
         if (settled > 0) {
             log.info("Billing settlement completed: windows={}", settled);

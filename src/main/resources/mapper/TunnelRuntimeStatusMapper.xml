@@ -13,8 +13,7 @@
             channel_count,
             upload_bytes_per_second,
             download_bytes_per_second,
-            reported_at,
-            updated_at
+            reported_at
         )
         VALUES
         <foreach collection="statuses" item="status" separator=",">
@@ -28,8 +27,7 @@
                 #{status.channelCount},
                 #{status.uploadBytesPerSecond},
                 #{status.downloadBytesPerSecond},
-                #{status.reportedAt},
-                #{status.updatedAt}
+                #{status.reportedAt}
             )
         </foreach>
         ON DUPLICATE KEY UPDATE
@@ -43,7 +41,6 @@
                 IF(VALUES(reported_at) &gt;= reported_at, VALUES(upload_bytes_per_second), upload_bytes_per_second),
             download_bytes_per_second =
                 IF(VALUES(reported_at) &gt;= reported_at, VALUES(download_bytes_per_second), download_bytes_per_second),
-            updated_at = IF(VALUES(reported_at) &gt;= reported_at, VALUES(updated_at), updated_at),
             reported_at = GREATEST(reported_at, VALUES(reported_at))
     </insert>
 

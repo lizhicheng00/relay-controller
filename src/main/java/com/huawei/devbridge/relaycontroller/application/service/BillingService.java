@@ -60,9 +60,8 @@ public class BillingService {
         BillingAccount account = requireAccount(billingRepository.lockAccountById(accountId));
         BillingPlan plan = requirePlan(account.getPlanCode());
         PeriodRange range = periodRange(timestamp);
-        long now = TimeUtils.nowSeconds();
         billingRepository.createPeriodIfAbsent(
-                accountId, range.start(), range.end(), plan.getMonthlyQuotaBytes(), now);
+                accountId, range.start(), range.end(), plan.getMonthlyQuotaBytes());
         BillingPeriod period = billingRepository.findPeriod(accountId, range.start());
         if (period == null) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period unavailable");
@@ -81,18 +80,16 @@ public class BillingService {
         }
     }
 
-    private BillingAccount ensureAccount(String namespace) {
-        long now = TimeUtils.nowSeconds();
+    private void ensureAccount(String namespace) {
         billingRepository.createAccountIfAbsent(
-                namespace, relayProperties.getBilling().getDefaultPlanCode(), now);
-        return requireAccount(billingRepository.findAccountByNamespace(namespace));
+                namespace, relayProperties.getBilling().getDefaultPlanCode());
     }
 
     private LimitSnapshot snapshot(BillingAccount account, long now) {
         BillingPlan plan = requirePlan(account.getPlanCode());
         PeriodRange range = periodRange(now);
         billingRepository.createPeriodIfAbsent(
-                account.getId(), range.start(), range.end(), plan.getMonthlyQuotaBytes(), now);
+                account.getId(), range.start(), range.end(), plan.getMonthlyQuotaBytes());
         BillingPeriod period = billingRepository.findPeriod(account.getId(), range.start());
         if (period == null) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period unavailable");
@@ -101,7 +98,7 @@ public class BillingService {
         long used = saturatedAdd(period.getBilledBytes(), pending);
         long remaining = Math.max(0, period.getQuotaBytes() - Math.min(period.getQuotaBytes(), used));
         return new LimitSnapshot(
-                account, plan, period, pending, used, remaining, used >= period.getQuotaBytes());
+                account, plan, period, used, remaining, used >= period.getQuotaBytes());
     }
 
     private static BillingAccount requireAccount(BillingAccount account) {

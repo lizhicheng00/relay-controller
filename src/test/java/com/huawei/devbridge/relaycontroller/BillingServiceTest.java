@@ -31,7 +31,6 @@ class BillingServiceTest {
         BillingService service = service();
         stubAccountAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
-                .accountId(7L)
                 .periodStart(1782864000L)
                 .periodEnd(1785542400L)
                 .quotaBytes(1000L)
@@ -51,7 +50,6 @@ class BillingServiceTest {
         BillingService service = service();
         stubAccountAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
-                .accountId(7L)
                 .periodStart(1782864000L)
                 .periodEnd(1785542400L)
                 .quotaBytes(1000L)
@@ -77,14 +75,12 @@ class BillingServiceTest {
                 .planCode("trial")
                 .status("disabled")
                 .build();
-        when(billingRepository.findAccountByNamespace("ns-user-001")).thenReturn(account);
         when(billingRepository.lockAccountByNamespace("ns-user-001")).thenReturn(account);
         when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
                 .planCode("trial")
                 .monthlyQuotaBytes(1000L)
                 .build());
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
-                .accountId(7L)
                 .quotaBytes(1000L)
                 .billedBytes(0L)
                 .build());
@@ -106,7 +102,6 @@ class BillingServiceTest {
                 .planCode("trial")
                 .status("active")
                 .build();
-        when(billingRepository.findAccountByNamespace("ns-user-001")).thenReturn(account);
         when(billingRepository.lockAccountByNamespace("ns-user-001")).thenReturn(account);
         when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
                 .planCode("trial")

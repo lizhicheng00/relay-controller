@@ -20,5 +20,4 @@ public class TunnelRuntimeStatus {
     private Long uploadBytesPerSecond;
     private Long downloadBytesPerSecond;
     private Long reportedAt;
-    private Long updatedAt;
 }

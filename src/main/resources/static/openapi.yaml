@@ -606,12 +606,8 @@ components:
       required:
         - namespace
         - planCode
-        - periodStart
-        - periodEnd
         - resetAt
         - quotaBytes
-        - billedBytes
-        - pendingBytes
         - usedBytes
         - remainingBytes
         - exhausted
@@ -627,25 +623,11 @@ components:
           type: string
         planCode:
           type: string
-        periodStart:
-          type: integer
-          format: int64
-          description: Inclusive UTC monthly period start as Unix seconds.
-        periodEnd:
-          type: integer
-          format: int64
-          description: Exclusive UTC monthly period end as Unix seconds.
         resetAt:
           type: integer
           format: int64
-          description: Next quota reset time, equal to periodEnd.
+          description: Next UTC monthly quota reset time as Unix seconds.
         quotaBytes:
-          type: integer
-          format: int64
-        billedBytes:
-          type: integer
-          format: int64
-        pendingBytes:
           type: integer
           format: int64
         usedBytes:

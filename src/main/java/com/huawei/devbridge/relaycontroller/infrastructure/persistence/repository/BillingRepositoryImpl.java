@@ -6,7 +6,6 @@ import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.UsageWindow;
 import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.BillingMapper;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -16,13 +15,8 @@ public class BillingRepositoryImpl implements BillingRepository {
     private final BillingMapper billingMapper;
 
     @Override
-    public void createAccountIfAbsent(String namespace, String planCode, long now) {
-        billingMapper.insertAccountIfAbsent(namespace, planCode, now);
-    }
-
-    @Override
-    public BillingAccount findAccountByNamespace(String namespace) {
-        return billingMapper.selectAccountByNamespace(namespace);
+    public void createAccountIfAbsent(String namespace, String planCode) {
+        billingMapper.insertAccountIfAbsent(namespace, planCode);
     }
 
     @Override
@@ -46,9 +40,8 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public void createPeriodIfAbsent(
-            Long accountId, long periodStart, long periodEnd, long quotaBytes, long now) {
-        billingMapper.insertPeriodIfAbsent(accountId, periodStart, periodEnd, quotaBytes, now);
+    public void createPeriodIfAbsent(Long accountId, long periodStart, long periodEnd, long quotaBytes) {
+        billingMapper.insertPeriodIfAbsent(accountId, periodStart, periodEnd, quotaBytes);
     }
 
     @Override
@@ -62,25 +55,22 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public List<UsageWindow> findUnbilledUsage(String region, int limit) {
-        return billingMapper.selectUnbilledUsage(region, limit);
+    public UsageWindow findNextUnbilledUsage(String region) {
+        return billingMapper.selectNextUnbilledUsage(region);
     }
 
     @Override
-    public boolean advanceBilledBytes(
-            Long usageWindowId, long expectedBilledBytes, long expectedUsageBytes, long now) {
-        return billingMapper.advanceBilledBytes(
-                usageWindowId, expectedBilledBytes, expectedUsageBytes, now) == 1;
+    public boolean advanceBilledBytes(Long usageWindowId, long expectedBilledBytes, long expectedUsageBytes) {
+        return billingMapper.advanceBilledBytes(usageWindowId, expectedBilledBytes, expectedUsageBytes) == 1;
     }
 
     @Override
-    public boolean increasePeriodUsage(Long accountId, long periodStart, long usageBytes, long now) {
-        return billingMapper.increasePeriodUsage(accountId, periodStart, usageBytes, now) == 1;
+    public boolean increasePeriodUsage(Long accountId, long periodStart, long usageBytes) {
+        return billingMapper.increasePeriodUsage(accountId, periodStart, usageBytes) == 1;
     }
 
     @Override
-    public void increaseTenMinuteUsage(
-            Long accountId, String tunnelId, long windowStart, long usageBytes, long now) {
-        billingMapper.increaseTenMinuteUsage(accountId, tunnelId, windowStart, usageBytes, now);
+    public void increaseTenMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes) {
+        billingMapper.increaseTenMinuteUsage(accountId, tunnelId, windowStart, usageBytes);
     }
 }

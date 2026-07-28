@@ -18,6 +18,4 @@ public class BillingPlan {
     private Long maxTunnelBandwidthBytesPerSecond;
     private Integer maxHttpRequestsPerMinutePerPort;
     private Integer maxConnectionsPerPort;
-    private Long createdAt;
-    private Long updatedAt;
 }

@@ -65,16 +65,6 @@
         ORDER BY t.created_at DESC
     </select>
 
-    <select id="countActiveByNamespaceAndRegion" resultType="long">
-        SELECT COUNT(1)
-        FROM tunnel t
-        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
-        WHERE t.namespace = #{namespace}
-          AND c.region = #{region}
-          AND t.deleted = 0
-          AND t.expiration &gt; #{now}
-    </select>
-
     <select id="countActiveByAccountId" resultType="long">
         SELECT COUNT(1)
         FROM tunnel

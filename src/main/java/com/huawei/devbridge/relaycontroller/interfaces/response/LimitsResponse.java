@@ -8,12 +8,8 @@ import lombok.Data;
 public class LimitsResponse {
     private String namespace;
     private String planCode;
-    private Long periodStart;
-    private Long periodEnd;
     private Long resetAt;
     private Long quotaBytes;
-    private Long billedBytes;
-    private Long pendingBytes;
     private Long usedBytes;
     private Long remainingBytes;
     private Boolean exhausted;

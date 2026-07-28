@@ -4,7 +4,6 @@ public record LimitSnapshot(
         BillingAccount account,
         BillingPlan plan,
         BillingPeriod period,
-        long pendingBytes,
         long usedBytes,
         long remainingBytes,
         boolean exhausted) {

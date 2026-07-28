@@ -50,7 +50,7 @@ Tunnel `tunnelCode` is a 40-bit `long`; `tunnelId` is the fixed 8-character lowe
 Tunnel URL format is `{tunnelId}.{clusterId}.{relay.domain}`.
 Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, port, and metering operations reject expired tunnels; expired records are physically removed after the configured retention period.
 The seeded `trial` plan gives each namespace 5 GiB per UTC calendar month, at most 10 active tunnels, and at most 10 ports per tunnel. Tunnel and port creation serialize on database rows, so replicas sharing the database cannot exceed those metadata quotas through concurrent requests. Deleted and expired tunnels do not count against the tunnel quota.
-`GET /limits` returns the current period, settled and pending bytes, remaining bytes, reset time, active tunnel count, and all plan limits. `POST /clusters/{clusterId}/tunnels/status` stores the latest Gateway telemetry and returns a per-tunnel `keep` or `disconnect` decision plus data-plane limits.
+`GET /limits` returns the monthly quota, used and remaining bytes, reset time, active tunnel count, and all plan limits. `POST /clusters/{clusterId}/tunnels/status` stores the latest Gateway telemetry and returns a per-tunnel `keep` or `disconnect` decision plus data-plane limits.
 
 Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, `scp`, and `delivery`.
 The optional `forCookies=true` query marks `delivery=cookie`; it does not encrypt the JWT or set a cross-domain cookie. The redirect or Gateway layer must set the returned signed token as a `Secure`, `HttpOnly`, appropriately scoped cookie.
@@ -77,7 +77,7 @@ DEFAULT CHARACTER SET utf8mb4
 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. `V3` adds trial plans, namespace accounts, UTC monthly periods, cumulative usage windows, 10-minute bills, runtime status, and the Tunnel account binding.
+Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. `V3` adds trial plans, namespace accounts, UTC monthly periods, cumulative usage windows, 10-minute bills, runtime status, and the Tunnel account binding. `V4` removes unused audit fields and replaces surrogate IDs with business keys where no external identity is needed.
 
 Gateway phase-two metering writes cumulative values directly to `tunnel_usage_window` every 30 seconds and at session end. The unique key is `(tunnel_id, session_id, window_start)`, where `window_start` is the UTC timestamp floored to ten minutes. Retries must use `GREATEST(existing, incoming)` rather than add the same report again. Relay Controller settles only the unbilled difference every ten minutes, so retries and multiple Controller replicas do not double charge.
 

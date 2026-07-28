@@ -16,8 +16,6 @@ public interface TunnelRepository {
 
     List<Tunnel> findAgedByRegion(String region, long expirationCutoff, int limit);
 
-    long countActiveByNamespaceAndRegion(String namespace, String region, long now);
-
     long countActiveByAccountId(Long accountId, long now);
 
     boolean existsByTunnelId(String tunnelId);

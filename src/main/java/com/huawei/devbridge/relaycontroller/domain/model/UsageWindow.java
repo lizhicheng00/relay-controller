@@ -12,14 +12,8 @@ import lombok.NoArgsConstructor;
 public class UsageWindow {
     private Long id;
     private Long accountId;
-    private String clusterId;
     private String tunnelId;
-    private String sessionId;
     private Long windowStart;
     private Long usageBytes;
     private Long billedBytes;
-    private Boolean sessionEnded;
-    private Long reportedAt;
-    private Long createdAt;
-    private Long updatedAt;
 }

@@ -59,10 +59,7 @@ INSERT INTO tunnel_usage_window (
     window_start,
     usage_bytes,
     billed_bytes,
-    session_ended,
-    reported_at,
-    created_at,
-    updated_at
+    reported_at
 )
 SELECT
     t.account_id,
@@ -72,19 +69,14 @@ SELECT
     ?,
     ?,
     0,
-    ?,
-    ?,
-    UNIX_TIMESTAMP(),
-    UNIX_TIMESTAMP()
+    ?
 FROM tunnel t
 WHERE t.tunnel_id = ?
   AND t.cluster_id = ?
   AND t.deleted = 0
 ON DUPLICATE KEY UPDATE
     usage_bytes = GREATEST(usage_bytes, VALUES(usage_bytes)),
-    session_ended = GREATEST(session_ended, VALUES(session_ended)),
-    reported_at = GREATEST(reported_at, VALUES(reported_at)),
-    updated_at = UNIX_TIMESTAMP();
+    reported_at = GREATEST(reported_at, VALUES(reported_at));
 ```
 
 Selecting `account_id` from `tunnel` prevents a caller-supplied account mismatch. Gateway must verify that one row was inserted or updated and must not increment `billed_bytes`.
@@ -93,7 +85,7 @@ The scheduled Controller job uses a conditional update from the previously bille
 
 ## Quota Decisions
 
-`GET /limits` calculates:
+Internally, the current balance is calculated as:
 
 ```text
 usedBytes = billing_period.billed_bytes

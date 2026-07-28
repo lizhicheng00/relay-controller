@@ -33,11 +33,6 @@ public interface TunnelMapper extends BaseMapper<TunnelEntity> {
             @Param("expirationCutoff") long expirationCutoff,
             @Param("limit") int limit);
 
-    long countActiveByNamespaceAndRegion(
-            @Param("namespace") String namespace,
-            @Param("region") String region,
-            @Param("now") long now);
-
     long countActiveByAccountId(
             @Param("accountId") Long accountId,
             @Param("now") long now);

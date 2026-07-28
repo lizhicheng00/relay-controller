@@ -19,7 +19,6 @@ import com.huawei.devbridge.relaycontroller.domain.model.UsageWindow;
 import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -47,36 +46,24 @@ class BillingSettlementServiceTest {
                 .usageBytes(1000L)
                 .billedBytes(400L)
                 .build();
-        when(billingRepository.findUnbilledUsage("region-a", 1)).thenReturn(List.of(window));
-        when(billingRepository.advanceBilledBytes(
-                eq(11L),
-                eq(400L),
-                eq(1000L),
-                anyLong())).thenReturn(true);
+        when(billingRepository.findNextUnbilledUsage("region-a")).thenReturn(window);
+        when(billingRepository.advanceBilledBytes(eq(11L), eq(400L), eq(1000L)))
+                .thenReturn(true);
         when(billingService.ensurePeriod(7L, 1785206400L)).thenReturn(BillingPeriod.builder()
-                .accountId(7L)
                 .periodStart(1782864000L)
                 .build());
-        when(billingRepository.increasePeriodUsage(
-                eq(7L),
-                eq(1782864000L),
-                eq(600L),
-                anyLong())).thenReturn(true);
+        when(billingRepository.increasePeriodUsage(eq(7L), eq(1782864000L), eq(600L)))
+                .thenReturn(true);
 
         SettlementResult result = service.settleNext();
 
         assertThat(result).isEqualTo(SettlementResult.SETTLED);
-        verify(billingRepository).increasePeriodUsage(
-                eq(7L),
-                eq(1782864000L),
-                eq(600L),
-                anyLong());
+        verify(billingRepository).increasePeriodUsage(eq(7L), eq(1782864000L), eq(600L));
         verify(billingRepository).increaseTenMinuteUsage(
                 eq(7L),
                 eq("aaaadysa"),
                 eq(1785206400L),
-                eq(600L),
-                anyLong());
+                eq(600L));
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"),
                 eq("region-a"),
@@ -97,15 +84,12 @@ class BillingSettlementServiceTest {
                 .usageBytes(1000L)
                 .billedBytes(400L)
                 .build();
-        when(billingRepository.findUnbilledUsage("region-a", 1)).thenReturn(List.of(window));
-        when(billingRepository.advanceBilledBytes(
-                eq(11L),
-                eq(400L),
-                eq(1000L),
-                anyLong())).thenReturn(false);
+        when(billingRepository.findNextUnbilledUsage("region-a")).thenReturn(window);
+        when(billingRepository.advanceBilledBytes(eq(11L), eq(400L), eq(1000L)))
+                .thenReturn(false);
 
         assertThat(service.settleNext()).isEqualTo(SettlementResult.CONTENDED);
-        verify(billingRepository, never()).increasePeriodUsage(anyLong(), anyLong(), anyLong(), anyLong());
+        verify(billingRepository, never()).increasePeriodUsage(anyLong(), anyLong(), anyLong());
         verify(tunnelRepository, never()).increaseBandwidthUsed(anyString(), anyString(), anyLong(), anyLong());
     }
 
@@ -122,11 +106,10 @@ class BillingSettlementServiceTest {
                 .usageBytes(1000L)
                 .billedBytes(400L)
                 .build();
-        when(billingRepository.findUnbilledUsage("region-a", 1)).thenReturn(List.of(window));
-        when(billingRepository.advanceBilledBytes(eq(11L), eq(400L), eq(1000L), anyLong()))
+        when(billingRepository.findNextUnbilledUsage("region-a")).thenReturn(window);
+        when(billingRepository.advanceBilledBytes(eq(11L), eq(400L), eq(1000L)))
                 .thenReturn(true);
         when(billingService.ensurePeriod(7L, 1785206400L)).thenReturn(BillingPeriod.builder()
-                .accountId(7L)
                 .periodStart(1782864000L)
                 .build());
 
@@ -135,7 +118,7 @@ class BillingSettlementServiceTest {
                 .extracting(exception -> ((BizException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.INTERNAL_ERROR);
         verify(billingRepository, never())
-                .increaseTenMinuteUsage(anyLong(), anyString(), anyLong(), anyLong(), anyLong());
+                .increaseTenMinuteUsage(anyLong(), anyString(), anyLong(), anyLong());
         verify(tunnelRepository, never()).increaseBandwidthUsed(anyString(), anyString(), anyLong(), anyLong());
     }
 }

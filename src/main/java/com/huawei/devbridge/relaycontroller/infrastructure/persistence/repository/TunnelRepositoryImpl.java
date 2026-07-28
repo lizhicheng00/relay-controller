@@ -58,11 +58,6 @@ public class TunnelRepositoryImpl implements TunnelRepository {
     }
 
     @Override
-    public long countActiveByNamespaceAndRegion(String namespace, String region, long now) {
-        return tunnelMapper.countActiveByNamespaceAndRegion(namespace, region, now);
-    }
-
-    @Override
     public long countActiveByAccountId(Long accountId, long now) {
         return tunnelMapper.countActiveByAccountId(accountId, now);
     }
