@@ -6,6 +6,10 @@ import java.util.List;
 public interface TunnelRepository {
     Tunnel findByTunnelIdAndRegion(String tunnelId, String region);
 
+    Tunnel findByTunnelIdAndRegionForUpdate(String tunnelId, String region);
+
+    List<Tunnel> findByTunnelIdsAndRegion(List<String> tunnelIds, String region);
+
     List<Tunnel> findByNamespaceAndRegion(String namespace, String region);
 
     List<Tunnel> findActiveByNamespaceAndRegion(String namespace, String clusterId, String region, long now);
@@ -13,6 +17,8 @@ public interface TunnelRepository {
     List<Tunnel> findAgedByRegion(String region, long expirationCutoff, int limit);
 
     long countActiveByNamespaceAndRegion(String namespace, String region, long now);
+
+    long countActiveByAccountId(Long accountId, long now);
 
     boolean existsByTunnelId(String tunnelId);
 
@@ -23,6 +29,9 @@ public interface TunnelRepository {
     void update(Tunnel tunnel);
 
     void refreshExpiration(String tunnelId, String region, long activityAt);
+
+    void refreshExpirationFromHeartbeat(
+            String tunnelId, String region, long activityAt, int minimumExtensionSeconds);
 
     boolean deleteAgedByTunnelId(String tunnelId, long expirationCutoff);
 

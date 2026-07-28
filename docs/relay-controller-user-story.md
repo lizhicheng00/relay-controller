@@ -23,10 +23,10 @@ Business rules:
 - tunnel URL is `{tunnelId}.{clusterId}.{relay.domain}`.
 - default expiration is 72 hours and the maximum is 720 hours.
 - create and update requests use `expiration`; tunnel responses return the inactivity window as `expirationHours` and its current Unix deadline as `tunnelExpiration`.
-- tunnel expiration is extended by successful tunnel or port changes and by positive metering reports when metering integration is enabled.
+- tunnel expiration is extended by successful tunnel or port changes, positive legacy metering, and active Gateway status.
 - a namespace owns at most 10 active tunnels by default.
 - list returns only non-deleted, non-expired tunnels and includes `portCount`.
-- delete is soft delete for tunnel metadata and hard delete for its port policies.
+- explicit delete physically removes tunnel metadata and its port policies.
 - expired or deleted tunnels cannot issue tokens or accept port operations.
 
 ## 3. Token
@@ -49,7 +49,7 @@ The response contains:
 }
 ```
 
-Every call signs a new JWT. Tokens are not cached and Redis is not required. `lifetime` is the fixed configured token TTL and does not follow the tunnel expiration. JWT claims are `iss`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`.
+Every call signs a new JWT. Tokens are not cached. `lifetime` is the fixed configured token TTL and does not follow the tunnel expiration. JWT claims include `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, `scp`, and `delivery`. Token issuance checks the current monthly balance.
 
 ## 4. Tunnel Port
 
@@ -69,7 +69,7 @@ Host connection activity is not reported to Relay Controller in this version. Re
 
 ## 5. Metering And Aging
 
-Gateway can report usage only for a local cluster and a matching active tunnel. Positive usage updates tunnel bandwidth totals, writes a metering record, and refreshes tunnel activity when metering integration is enabled.
+The phase-one compatibility endpoint accepts usage only for a local cluster and matching active tunnel. Phase-two Gateway billing instead writes idempotent cumulative windows directly to the shared database.
 
 Expired tunnels remain recoverable for the configured retention period. The hourly cleanup job hard-deletes aged tunnel metadata and related port policies in bounded batches.
 
@@ -79,4 +79,4 @@ Expired tunnels remain recoverable for the configured retention period. The hour
 - Concurrent tunnel creation cannot exceed the namespace quota inside one controller instance.
 - Invalid request values return 4xx responses; unexpected failures return 5xx responses.
 - OpenAPI YAML is the source of controller mappings and Maven compilation generates the API interfaces.
-- MySQL and a JWT private key are the only data/security prerequisites; Redis is not required.
+- Relay Controller itself does not depend on Redis. Gateway uses Redis for the distributed single-Host lock.

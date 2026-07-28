@@ -4,6 +4,7 @@ import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelPortRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
+import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRuntimeStatusRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class TunnelCleanupJob {
 
     private final TunnelRepository tunnelRepository;
     private final TunnelPortRepository tunnelPortRepository;
+    private final TunnelRuntimeStatusRepository statusRepository;
     private final RelayProperties relayProperties;
 
     @Scheduled(
@@ -41,6 +43,8 @@ public class TunnelCleanupJob {
                 deleted++;
             }
         }
+        long statusRetention = Math.max(0, relayProperties.getBilling().getStatusRetentionSeconds());
+        statusRepository.deleteStale(now - statusRetention);
         if (deleted > 0) {
             log.info("Aged tunnels deleted: region={}, count={}", relayProperties.getRegion(), deleted);
         }

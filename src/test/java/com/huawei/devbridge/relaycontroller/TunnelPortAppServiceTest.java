@@ -7,10 +7,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.huawei.devbridge.relaycontroller.application.service.BillingService;
 import com.huawei.devbridge.relaycontroller.application.service.LocalClusterService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelPortAppService;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
+import com.huawei.devbridge.relaycontroller.domain.model.AccountPlan;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelPort;
@@ -40,6 +44,8 @@ class TunnelPortAppServiceTest {
     private TunnelPortRepository tunnelPortRepository;
     @Mock
     private ClusterRepository clusterRepository;
+    @Mock
+    private BillingService billingService;
 
     @Test
     void createTunnelPortWritesPolicy() {
@@ -49,7 +55,9 @@ class TunnelPortAppServiceTest {
         request.setProtocol(TunnelProtocol.HTTP);
         request.setAllowAnonymous(false);
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a"))
+                .thenReturn(tunnel("ns-user-001", "cluster-a"));
+        when(billingService.accountPlan(7L)).thenReturn(accountPlan());
         when(tunnelPortRepository.save(org.mockito.ArgumentMatchers.any(TunnelPort.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -71,13 +79,33 @@ class TunnelPortAppServiceTest {
         request.setProtocol(TunnelProtocol.AUTO);
         request.setAllowAnonymous(false);
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a"))
+                .thenReturn(tunnel("ns-user-001", "cluster-a"));
         when(tunnelPortRepository.existsByTunnelCodeAndPort(123456L, 8080L)).thenReturn(true);
 
         assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_PORT_ALREADY_EXISTS);
+    }
+
+    @Test
+    void createTunnelPortRejectsEleventhPort() {
+        TunnelPortAppService service = newService();
+        CreateTunnelPortRequest request = new CreateTunnelPortRequest();
+        request.setPort(8080L);
+        request.setProtocol(TunnelProtocol.AUTO);
+        request.setAllowAnonymous(false);
+
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a"))
+                .thenReturn(tunnel("ns-user-001", "cluster-a"));
+        when(billingService.accountPlan(7L)).thenReturn(accountPlan());
+        when(tunnelPortRepository.countByTunnelCode(123456L)).thenReturn(10L);
+
+        assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
+                .isInstanceOf(BizException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TUNNEL_PORT_QUOTA_EXCEEDED);
     }
 
     @Test
@@ -88,7 +116,8 @@ class TunnelPortAppServiceTest {
         request.setProtocol(TunnelProtocol.AUTO);
         request.setAllowAnonymous(false);
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a"))
+                .thenReturn(tunnel("ns-user-001", "cluster-a"));
 
         assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
@@ -102,7 +131,8 @@ class TunnelPortAppServiceTest {
         CreateTunnelPortRequest request = new CreateTunnelPortRequest();
         request.setAllowAnonymous(false);
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a"))
+                .thenReturn(tunnel("ns-user-001", "cluster-a"));
 
         assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
@@ -118,7 +148,8 @@ class TunnelPortAppServiceTest {
         request.setProtocol(TunnelProtocol.AUTO);
         request.setAllowAnonymous(false);
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-a", "cluster-a"));
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a"))
+                .thenReturn(tunnel("ns-user-a", "cluster-a"));
 
         assertThatThrownBy(() -> service.create("ns-user-b", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
@@ -273,7 +304,8 @@ class TunnelPortAppServiceTest {
                 new NamespaceService(),
                 new TunnelDomainService(),
                 new TunnelPortDomainService(),
-                properties);
+                properties,
+                billingService);
     }
 
     private Tunnel tunnel(String namespace, String clusterId) {
@@ -281,6 +313,7 @@ class TunnelPortAppServiceTest {
                 .tunnelId("aaaadysa")
                 .tunnelCode(123456L)
                 .namespace(namespace)
+                .accountId(7L)
                 .clusterId(clusterId)
                 .deleted(0)
                 .build();
@@ -289,5 +322,11 @@ class TunnelPortAppServiceTest {
     private void localCluster(String clusterId) {
         when(clusterRepository.findByClusterIdAndRegion(clusterId, "region-a"))
                 .thenReturn(Cluster.builder().clusterId(clusterId).region("region-a").build());
+    }
+
+    private static AccountPlan accountPlan() {
+        return new AccountPlan(
+                BillingAccount.builder().id(7L).namespace("ns-user-001").planCode("trial").status("active").build(),
+                BillingPlan.builder().planCode("trial").maxPortsPerTunnel(10).build());
     }
 }

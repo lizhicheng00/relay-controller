@@ -4,6 +4,7 @@ import com.huawei.devbridge.relaycontroller.application.assembler.TunnelAssemble
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
+import com.huawei.devbridge.relaycontroller.domain.model.AccountPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtScope;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtToken;
@@ -22,7 +23,6 @@ import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResp
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
-import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,6 @@ public class TunnelAppService {
     private static final int TUNNEL_CODE_MAX_RETRY = 5;
     private static final int SECONDS_PER_HOUR = 3600;
     private static final int MAX_EXPIRATION_HOURS = 30 * 24;
-    private static final int CREATE_LOCK_STRIPES = 64;
     private final TunnelRepository tunnelRepository;
     private final LocalClusterService localClusterService;
     private final NamespaceService namespaceService;
@@ -45,21 +44,16 @@ public class TunnelAppService {
     private final TunnelDomainService tunnelDomainService;
     private final TunnelPortRepository tunnelPortRepository;
     private final RelayProperties relayProperties;
-    private final Object[] createLocks = createLocks();
+    private final BillingService billingService;
 
     @Transactional
     public CreateTunnelResponse createTunnel(String rawNamespace, CreateTunnelRequest request) {
         String namespace = namespaceService.requireNamespace(rawNamespace);
-        synchronized (createLock(namespace)) {
-            return createTunnelLocked(namespace, request);
-        }
-    }
-
-    private CreateTunnelResponse createTunnelLocked(String namespace, CreateTunnelRequest request) {
         TunnelType type = request.getType() == null ? TunnelType.BRIDGE : request.getType();
         Cluster cluster = localClusterService.requireLocalCluster(request.getClusterId());
         long now = TimeUtils.nowSeconds();
-        assertTunnelQuota(namespace, now);
+        AccountPlan accountPlan = billingService.lockAccountForQuota(namespace);
+        assertTunnelQuota(accountPlan, now);
         TunnelExpiration expiration = resolveExpiration(request.getExpiration(), now);
         TunnelCode code = allocateTunnelCode();
         Tunnel tunnel = Tunnel.builder()
@@ -70,6 +64,7 @@ public class TunnelAppService {
                 .expiration(expiration.expiresAt())
                 .expirationHours(expiration.expirationHours())
                 .namespace(namespace)
+                .accountId(accountPlan.account().getId())
                 .description(request.getDescription())
                 .bandwidthUsed(0L)
                 .url(buildTunnelUrl(code.tunnelId(), cluster))
@@ -83,17 +78,6 @@ public class TunnelAppService {
                 tunnel.getTunnelId(), tunnel.getTunnelCode(), tunnel.getNamespace(), tunnel.getClusterId(),
                 tunnel.getType(), tunnel.getExpiration());
         return TunnelAssembler.toCreateResponse(tunnel);
-    }
-
-    private Object createLock(String namespace) {
-        String key = relayProperties.getRegion() + ":" + namespace;
-        return createLocks[Math.floorMod(key.hashCode(), createLocks.length)];
-    }
-
-    private static Object[] createLocks() {
-        Object[] locks = new Object[CREATE_LOCK_STRIPES];
-        Arrays.setAll(locks, ignored -> new Object());
-        return locks;
     }
 
     public List<TunnelListItemResponse> listTunnels(String rawNamespace, String clusterId) {
@@ -116,10 +100,12 @@ public class TunnelAppService {
         return TunnelAssembler.toDetailResponse(tunnel);
     }
 
-    public TunnelTokenResponse issueToken(String rawNamespace, String tunnelId, String scopeValue) {
+    public TunnelTokenResponse issueToken(
+            String rawNamespace, String tunnelId, String scopeValue, Boolean forCookies) {
         JwtScope scope = parseScope(scopeValue);
         Tunnel tunnel = findOwnedActiveTunnel(rawNamespace, tunnelId);
-        JwtToken issuedToken = jwtTokenService.issueToken(tunnel, scope);
+        billingService.assertTrafficAllowed(tunnel.getNamespace());
+        JwtToken issuedToken = jwtTokenService.issueToken(tunnel, scope, Boolean.TRUE.equals(forCookies));
         return TunnelTokenResponse.builder()
                 .tunnelId(tunnel.getTunnelId())
                 .scope(scope)
@@ -131,7 +117,8 @@ public class TunnelAppService {
 
     @Transactional
     public Boolean updateTunnel(String rawNamespace, String tunnelId, UpdateTunnelRequest request) {
-        Tunnel tunnel = findOwnedActiveTunnel(rawNamespace, tunnelId);
+        Tunnel tunnel = findOwnedTunnelForUpdate(rawNamespace, tunnelId);
+        tunnelDomainService.assertNotExpired(tunnel);
         long now = TimeUtils.nowSeconds();
         applyUpdates(tunnel, request, now);
         tunnel.setUpdatedAt(now);
@@ -142,7 +129,7 @@ public class TunnelAppService {
 
     @Transactional
     public Boolean deleteTunnel(String rawNamespace, String tunnelId) {
-        Tunnel tunnel = findOwnedTunnel(rawNamespace, tunnelId);
+        Tunnel tunnel = findOwnedTunnelForUpdate(rawNamespace, tunnelId);
         tunnelPortRepository.deleteByTunnelCode(tunnel.getTunnelCode());
         tunnelRepository.deleteByTunnelId(tunnelId);
         log.info("Tunnel deleted: tunnelId={}, tunnelCode={}, namespace={}",
@@ -154,11 +141,19 @@ public class TunnelAppService {
     public Boolean deleteTunnels(String rawNamespace) {
         String namespace = namespaceService.requireNamespace(rawNamespace);
         List<Tunnel> tunnels = tunnelRepository.findByNamespaceAndRegion(namespace, relayProperties.getRegion());
-        tunnels.forEach(tunnel -> {
-            tunnelPortRepository.deleteByTunnelCode(tunnel.getTunnelCode());
-            tunnelRepository.deleteByTunnelId(tunnel.getTunnelId());
-        });
-        log.info("Tunnels deleted: namespace={}, count={}", namespace, tunnels.size());
+        int deleted = 0;
+        for (Tunnel tunnel : tunnels) {
+            Tunnel locked = tunnelRepository.findByTunnelIdAndRegionForUpdate(
+                    tunnel.getTunnelId(), relayProperties.getRegion());
+            if (locked == null) {
+                continue;
+            }
+            tunnelDomainService.assertOwnedBy(locked, namespace);
+            tunnelPortRepository.deleteByTunnelCode(locked.getTunnelCode());
+            tunnelRepository.deleteByTunnelId(locked.getTunnelId());
+            deleted++;
+        }
+        log.info("Tunnels deleted: namespace={}, count={}", namespace, deleted);
         return true;
     }
 
@@ -190,12 +185,12 @@ public class TunnelAppService {
         throw new BizException(ErrorCode.TUNNEL_ID_CONFLICT);
     }
 
-    private void assertTunnelQuota(String namespace, long now) {
-        int maxTunnels = relayProperties.getTunnel().getMaxPerNamespace();
+    private void assertTunnelQuota(AccountPlan accountPlan, long now) {
+        int maxTunnels = accountPlan.plan().getMaxTunnels();
         if (maxTunnels <= 0) {
             return;
         }
-        long activeCount = tunnelRepository.countActiveByNamespaceAndRegion(namespace, relayProperties.getRegion(), now);
+        long activeCount = tunnelRepository.countActiveByAccountId(accountPlan.account().getId(), now);
         if (activeCount >= maxTunnels) {
             throw new BizException(ErrorCode.TUNNEL_QUOTA_EXCEEDED,
                     "active tunnel quota exceeded: max=" + maxTunnels);
@@ -213,6 +208,13 @@ public class TunnelAppService {
         String namespace = namespaceService.requireNamespace(rawNamespace);
         Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegion(tunnelId, relayProperties.getRegion());
         tunnelDomainService.assertOwnedAndNotExpired(tunnel, namespace);
+        return tunnel;
+    }
+
+    private Tunnel findOwnedTunnelForUpdate(String rawNamespace, String tunnelId) {
+        String namespace = namespaceService.requireNamespace(rawNamespace);
+        Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegionForUpdate(tunnelId, relayProperties.getRegion());
+        tunnelDomainService.assertOwnedBy(tunnel, namespace);
         return tunnel;
     }
 

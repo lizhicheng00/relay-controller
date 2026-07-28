@@ -223,6 +223,9 @@
                                 <importMapping>TunnelPortResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse</importMapping>
                                 <importMapping>GatewayTunnelPortPolicyResponse=com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse</importMapping>
                                 <importMapping>TunnelTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse</importMapping>
+                                <importMapping>LimitsResponse=com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse</importMapping>
+                                <importMapping>TunnelStatusReportRequest=com.huawei.devbridge.relaycontroller.interfaces.request.TunnelStatusReportRequest</importMapping>
+                                <importMapping>TunnelStatusReportResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusReportResponse</importMapping>
                                 <importMapping>ErrorResponse=com.huawei.devbridge.relaycontroller.common.model.ErrorResponse</importMapping>
                             </importMappings>
                             <schemaMappings>
@@ -238,6 +241,9 @@
                                 <schemaMapping>TunnelPortResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse</schemaMapping>
                                 <schemaMapping>GatewayTunnelPortPolicyResponse=com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse</schemaMapping>
                                 <schemaMapping>TunnelTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse</schemaMapping>
+                                <schemaMapping>LimitsResponse=com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse</schemaMapping>
+                                <schemaMapping>TunnelStatusReportRequest=com.huawei.devbridge.relaycontroller.interfaces.request.TunnelStatusReportRequest</schemaMapping>
+                                <schemaMapping>TunnelStatusReportResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusReportResponse</schemaMapping>
                                 <schemaMapping>ErrorResponse=com.huawei.devbridge.relaycontroller.common.model.ErrorResponse</schemaMapping>
                             </schemaMappings>
                         </configuration>

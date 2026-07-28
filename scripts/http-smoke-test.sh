@@ -44,12 +44,16 @@ request "05 tunnel detail" GET "$API_BASE/tunnels/$TUNNEL_ID" "" yes
 request "06 update tunnel env" PUT "$API_BASE/tunnels/$TUNNEL_ID" "{\"type\":\"env\"}" yes
 request "07 metering" POST "$API_BASE/clusters/$CLUSTER_ID/metering" "{\"tunnelCode\":123456,\"tunnelId\":\"$TUNNEL_ID\",\"usage\":1024}"
 request "08 issue host token" POST "$API_BASE/tunnels/$TUNNEL_ID/token?scope=host" "" yes
-request "09 create port" POST "$API_BASE/tunnels/$TUNNEL_ID/ports" "{\"port\":8080,\"protocol\":\"auto\",\"allowAnonymous\":false}" yes
-request "10 list ports" GET "$API_BASE/tunnels/$TUNNEL_ID/ports" "" yes
-request "11 get port" GET "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
-request "12 update port" PUT "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "{\"allowAnonymous\":true}" yes
-request "13 gateway port policy" GET "$API_BASE/clusters/$CLUSTER_ID/tunnels/$TUNNEL_ID/ports/8080"
-request "14 delete port" DELETE "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
-request "15 delete tunnel" DELETE "$API_BASE/tunnels/$TUNNEL_ID" "" yes
-request "16 delete tunnels" DELETE "$API_BASE/tunnels" "" yes
-request "17 openapi yaml" GET "$BASE_URL/openapi.yaml"
+request "09 issue cookie token" POST "$API_BASE/tunnels/$TUNNEL_ID/token?scope=connect&forCookies=true" "" yes
+request "10 limits" GET "$API_BASE/limits" "" yes
+request "11 create port" POST "$API_BASE/tunnels/$TUNNEL_ID/ports" "{\"port\":8080,\"protocol\":\"auto\",\"allowAnonymous\":false}" yes
+request "12 list ports" GET "$API_BASE/tunnels/$TUNNEL_ID/ports" "" yes
+request "13 get port" GET "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
+request "14 update port" PUT "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "{\"allowAnonymous\":true}" yes
+request "15 gateway port policy" GET "$API_BASE/clusters/$CLUSTER_ID/tunnels/$TUNNEL_ID/ports/8080"
+request "16 gateway status" POST "$API_BASE/clusters/$CLUSTER_ID/tunnels/status" \
+  "{\"gatewayId\":\"gateway-smoke\",\"reportedAt\":$(date +%s),\"tunnels\":[{\"tunnelId\":\"$TUNNEL_ID\",\"sessionId\":\"session-smoke\",\"hostConnections\":1,\"clientConnections\":1,\"channelCount\":1,\"uploadBytesPerSecond\":1024,\"downloadBytesPerSecond\":2048}]}"
+request "17 delete port" DELETE "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
+request "18 delete tunnel" DELETE "$API_BASE/tunnels/$TUNNEL_ID" "" yes
+request "19 delete tunnels" DELETE "$API_BASE/tunnels" "" yes
+request "20 openapi yaml" GET "$BASE_URL/openapi.yaml"

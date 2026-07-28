@@ -1,0 +1,116 @@
+package com.huawei.devbridge.relaycontroller;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+
+import com.huawei.devbridge.relaycontroller.application.service.BillingService;
+import com.huawei.devbridge.relaycontroller.common.exception.BizException;
+import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
+import com.huawei.devbridge.relaycontroller.domain.model.LimitSnapshot;
+import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
+import com.huawei.devbridge.relaycontroller.domain.service.NamespaceService;
+import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class BillingServiceTest {
+    @Mock
+    private BillingRepository billingRepository;
+
+    @Test
+    void currentSnapshotIncludesUnsettledUsage() {
+        BillingService service = service();
+        stubAccountAndPlan(1000L);
+        when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
+                .accountId(7L)
+                .periodStart(1782864000L)
+                .periodEnd(1785542400L)
+                .quotaBytes(1000L)
+                .billedBytes(400L)
+                .build());
+        when(billingRepository.sumPendingUsage(eq(7L), anyLong(), anyLong())).thenReturn(250L);
+
+        LimitSnapshot snapshot = service.currentSnapshot("ns-user-001");
+
+        assertThat(snapshot.usedBytes()).isEqualTo(650L);
+        assertThat(snapshot.remainingBytes()).isEqualTo(350L);
+        assertThat(snapshot.exhausted()).isFalse();
+    }
+
+    @Test
+    void tokenIssuanceIsRejectedAsSoonAsBilledAndPendingUsageReachQuota() {
+        BillingService service = service();
+        stubAccountAndPlan(1000L);
+        when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
+                .accountId(7L)
+                .periodStart(1782864000L)
+                .periodEnd(1785542400L)
+                .quotaBytes(1000L)
+                .billedBytes(900L)
+                .build());
+        when(billingRepository.sumPendingUsage(eq(7L), anyLong(), anyLong())).thenReturn(100L);
+
+        assertThatThrownBy(() -> service.assertTrafficAllowed("ns-user-001"))
+                .isInstanceOf(BizException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_QUOTA_EXCEEDED);
+    }
+
+    @Test
+    void disabledAccountIsRejectedEvenWhenQuotaEnforcementIsDisabled() {
+        RelayProperties properties = new RelayProperties();
+        properties.getBilling().setEnforcementEnabled(false);
+        BillingService service = new BillingService(
+                billingRepository, new NamespaceService(), properties);
+        BillingAccount account = BillingAccount.builder()
+                .id(7L)
+                .namespace("ns-user-001")
+                .planCode("trial")
+                .status("disabled")
+                .build();
+        when(billingRepository.findAccountByNamespace("ns-user-001")).thenReturn(account);
+        when(billingRepository.lockAccountByNamespace("ns-user-001")).thenReturn(account);
+        when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
+                .planCode("trial")
+                .monthlyQuotaBytes(1000L)
+                .build());
+        when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
+                .accountId(7L)
+                .quotaBytes(1000L)
+                .billedBytes(0L)
+                .build());
+
+        assertThatThrownBy(() -> service.assertTrafficAllowed("ns-user-001"))
+                .isInstanceOf(BizException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_DISABLED);
+    }
+
+    private BillingService service() {
+        return new BillingService(billingRepository, new NamespaceService(), new RelayProperties());
+    }
+
+    private void stubAccountAndPlan(long quotaBytes) {
+        BillingAccount account = BillingAccount.builder()
+                .id(7L)
+                .namespace("ns-user-001")
+                .planCode("trial")
+                .status("active")
+                .build();
+        when(billingRepository.findAccountByNamespace("ns-user-001")).thenReturn(account);
+        when(billingRepository.lockAccountByNamespace("ns-user-001")).thenReturn(account);
+        when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
+                .planCode("trial")
+                .monthlyQuotaBytes(quotaBytes)
+                .build());
+    }
+}

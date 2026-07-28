@@ -38,8 +38,9 @@ public class TunnelController implements TunnelApi {
     }
 
     @Override
-    public TunnelTokenResponse issueTunnelToken(String xNamespace, String tunnelId, String scope) {
-        return tunnelAppService.issueToken(xNamespace, tunnelId, scope);
+    public TunnelTokenResponse issueTunnelToken(
+            String xNamespace, String tunnelId, String scope, Boolean forCookies) {
+        return tunnelAppService.issueToken(xNamespace, tunnelId, scope, forCookies);
     }
 
     @Override

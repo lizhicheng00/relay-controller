@@ -5,7 +5,7 @@
 The project uses a small layered structure:
 
 - `interfaces`: generated OpenAPI contracts, controllers, request/response models, rate limiting;
-- `application`: tunnel, port, metering, cluster, and cleanup workflows;
+- `application`: tunnel, port, account limits, settlement, status, metering compatibility, cluster, and cleanup workflows;
 - `domain`: business models, enums, repositories, and validation services;
 - `infrastructure`: MySQL persistence, JWT signing, and configuration.
 
@@ -31,7 +31,7 @@ The public collection supports create and list only. Repository-level `deleteByT
 
 1. Require `X-Namespace`.
 2. Verify the requested cluster belongs to the local region.
-3. Enforce the active tunnel quota under a namespace-striped lock.
+3. Create or lock the namespace billing account and enforce the active tunnel quota in the database transaction.
 4. Resolve the expiration duration and cap it at 720 hours.
 5. Allocate a unique 40-bit code and Base32 tunnel ID.
 6. Persist and return metadata without issuing tokens.
@@ -45,7 +45,7 @@ The repository returns only active local-region rows and computes `portCount`. E
 1. Verify namespace ownership, local region, and expiration.
 2. Validate `scope` as `host` or `connect`.
 3. Set expiration from the fixed configured token TTL.
-4. Add a random `jti` and sign a new RS256 JWT.
+4. Add `aud=relay-gateway`, a delivery claim, and a random `jti`, then sign a new RS256 JWT.
 5. Return `tunnelId`, `scope`, `lifetime`, `expiration`, and `token`.
 
 No cache is read or written. This makes each call independent and removes Redis from the runtime architecture.
@@ -56,7 +56,7 @@ Create and update use the `TunnelProtocol` enum from request through persistence
 
 ### Tunnel Activity
 
-Successful tunnel and port changes refresh `tunnelExpiration`. Positive traffic reports will also refresh it when metering integration is enabled. The persistence update uses `GREATEST` so concurrent refreshes can only move the deadline forward. Reads, zero-usage reports, and token issuance do not refresh it. Gateway host activity is not integrated in this version.
+Successful tunnel and port changes refresh `tunnelExpiration`. Positive legacy traffic reports also refresh it. Active Gateway status refreshes it with a five-minute write granularity. Reads, zero-usage reports, and token issuance do not refresh it.
 
 ## 4. API Summary
 
@@ -77,13 +77,15 @@ DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 
 GET    /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}
 POST   /open-api-inner/v1/relay-controller/clusters/{clusterId}/metering
+GET    /open-api-inner/v1/relay-controller/limits
+POST   /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/status
 ```
 
 ## 5. Persistence And Lifecycle
 
-Flyway `V1__init_schema.sql` creates `cluster`, `tunnel`, `tunnel_port`, and `metering`. Compound database names use snake_case while Java fields use camelCase.
+Flyway `V1` creates the phase-one tables. `V3` adds plans, accounts, UTC monthly periods, cumulative usage windows, ten-minute bills, runtime status, and the Tunnel account binding. Compound database names use snake_case while Java fields use camelCase.
 
-Tunnel expiration is refreshed by meaningful configuration changes and positive metering reports when available. Tunnel deletion is soft delete so IDs and metering references remain stable. Related port policies are hard-deleted. The scheduled cleanup later hard-deletes tunnels whose expiration is older than the configured retention period.
+Tunnel expiration is refreshed by meaningful configuration changes, positive legacy metering, and active Gateway status. Tunnel and related Port rows are physically deleted by explicit deletion; the scheduled cleanup also removes aged Tunnel rows after retention.
 
 ## 6. Runtime Configuration
 
@@ -101,4 +103,4 @@ mTLS additionally requires the server keystore and client-CA truststore variable
 
 ## 7. Verification
 
-Tests cover API mappings and errors, tunnel quota and region isolation, expiration handling, token claims and uniqueness, port protocol behavior, gateway policy checks, rate limiting, metering, and aged tunnel cleanup.
+Tests cover API mappings and errors, database-scoped metadata quotas, monthly balance, idempotent settlement claims, status decisions, expiration handling, token claims and uniqueness, port protocol behavior, rate limiting, metering compatibility, and aged tunnel cleanup.

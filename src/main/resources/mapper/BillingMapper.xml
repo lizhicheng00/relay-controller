@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.BillingMapper">
+    <insert id="insertAccountIfAbsent">
+        INSERT IGNORE INTO billing_account (namespace, plan_code, status, created_at, updated_at)
+        VALUES (#{namespace}, #{planCode}, 'active', #{now}, #{now})
+    </insert>
+
+    <select id="selectAccountByNamespace"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingAccount">
+        SELECT *
+        FROM billing_account
+        WHERE namespace = #{namespace}
+        LIMIT 1
+    </select>
+
+    <select id="selectAccountById"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingAccount">
+        SELECT *
+        FROM billing_account
+        WHERE _id = #{accountId}
+        LIMIT 1
+    </select>
+
+    <select id="selectAccountByNamespaceForUpdate"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingAccount">
+        SELECT *
+        FROM billing_account
+        WHERE namespace = #{namespace}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="selectAccountByIdForUpdate"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingAccount">
+        SELECT *
+        FROM billing_account
+        WHERE _id = #{accountId}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="selectPlanByCode"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingPlan">
+        SELECT *
+        FROM billing_plan
+        WHERE plan_code = #{planCode}
+        LIMIT 1
+    </select>
+
+    <insert id="insertPeriodIfAbsent">
+        INSERT IGNORE INTO billing_period (
+            account_id, period_start, period_end, quota_bytes, billed_bytes, created_at, updated_at
+        )
+        VALUES (#{accountId}, #{periodStart}, #{periodEnd}, #{quotaBytes}, 0, #{now}, #{now})
+    </insert>
+
+    <select id="selectPeriod"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod">
+        SELECT *
+        FROM billing_period
+        WHERE account_id = #{accountId}
+          AND period_start = #{periodStart}
+        LIMIT 1
+    </select>
+
+    <select id="sumPendingUsage" resultType="long">
+        SELECT COALESCE(SUM(usage_bytes - billed_bytes), 0)
+        FROM tunnel_usage_window
+        WHERE account_id = #{accountId}
+          AND window_start &gt;= #{periodStart}
+          AND window_start &lt; #{periodEnd}
+          AND usage_bytes &gt; billed_bytes
+    </select>
+
+    <select id="selectUnbilledUsage"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.UsageWindow">
+        SELECT u.*
+        FROM tunnel_usage_window u
+        INNER JOIN cluster c ON c.cluster_id = u.cluster_id
+        WHERE c.region = #{region}
+          AND u.usage_bytes &gt; u.billed_bytes
+        ORDER BY u.window_start ASC, u._id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="advanceBilledBytes">
+        UPDATE tunnel_usage_window
+        SET billed_bytes = #{expectedUsageBytes},
+            updated_at = #{now}
+        WHERE _id = #{usageWindowId}
+          AND billed_bytes = #{expectedBilledBytes}
+          AND usage_bytes = #{expectedUsageBytes}
+    </update>
+
+    <update id="increasePeriodUsage">
+        UPDATE billing_period
+        SET billed_bytes = billed_bytes + #{usageBytes},
+            updated_at = #{now}
+        WHERE account_id = #{accountId}
+          AND period_start = #{periodStart}
+    </update>
+
+    <insert id="increaseTenMinuteUsage">
+        INSERT INTO billing_usage_10m (
+            account_id, tunnel_id, window_start, usage_bytes, created_at, updated_at
+        )
+        VALUES (#{accountId}, #{tunnelId}, #{windowStart}, #{usageBytes}, #{now}, #{now})
+        ON DUPLICATE KEY UPDATE
+            usage_bytes = usage_bytes + VALUES(usage_bytes),
+            updated_at = VALUES(updated_at)
+    </insert>
+</mapper>

@@ -10,6 +10,14 @@ public interface TunnelMapper extends BaseMapper<TunnelEntity> {
             @Param("tunnelId") String tunnelId,
             @Param("region") String region);
 
+    TunnelEntity selectByTunnelIdAndRegionForUpdate(
+            @Param("tunnelId") String tunnelId,
+            @Param("region") String region);
+
+    List<TunnelEntity> selectByTunnelIdsAndRegion(
+            @Param("tunnelIds") List<String> tunnelIds,
+            @Param("region") String region);
+
     List<TunnelEntity> selectByNamespaceAndRegion(
             @Param("namespace") String namespace,
             @Param("region") String region);
@@ -30,6 +38,10 @@ public interface TunnelMapper extends BaseMapper<TunnelEntity> {
             @Param("region") String region,
             @Param("now") long now);
 
+    long countActiveByAccountId(
+            @Param("accountId") Long accountId,
+            @Param("now") long now);
+
     int increaseBandwidthUsed(
             @Param("tunnelId") String tunnelId,
             @Param("region") String region,
@@ -40,4 +52,10 @@ public interface TunnelMapper extends BaseMapper<TunnelEntity> {
             @Param("tunnelId") String tunnelId,
             @Param("region") String region,
             @Param("activityAt") long activityAt);
+
+    int refreshExpirationFromHeartbeat(
+            @Param("tunnelId") String tunnelId,
+            @Param("region") String region,
+            @Param("activityAt") long activityAt,
+            @Param("minimumExtensionSeconds") int minimumExtensionSeconds);
 }

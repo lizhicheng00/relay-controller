@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.TunnelRuntimeStatusMapper">
+    <insert id="upsertAll">
+        INSERT INTO tunnel_runtime_status (
+            tunnel_id,
+            cluster_id,
+            gateway_id,
+            session_id,
+            host_connections,
+            client_connections,
+            channel_count,
+            upload_bytes_per_second,
+            download_bytes_per_second,
+            reported_at,
+            updated_at
+        )
+        VALUES
+        <foreach collection="statuses" item="status" separator=",">
+            (
+                #{status.tunnelId},
+                #{status.clusterId},
+                #{status.gatewayId},
+                #{status.sessionId},
+                #{status.hostConnections},
+                #{status.clientConnections},
+                #{status.channelCount},
+                #{status.uploadBytesPerSecond},
+                #{status.downloadBytesPerSecond},
+                #{status.reportedAt},
+                #{status.updatedAt}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            cluster_id = IF(VALUES(reported_at) &gt;= reported_at, VALUES(cluster_id), cluster_id),
+            gateway_id = IF(VALUES(reported_at) &gt;= reported_at, VALUES(gateway_id), gateway_id),
+            session_id = IF(VALUES(reported_at) &gt;= reported_at, VALUES(session_id), session_id),
+            host_connections = IF(VALUES(reported_at) &gt;= reported_at, VALUES(host_connections), host_connections),
+            client_connections = IF(VALUES(reported_at) &gt;= reported_at, VALUES(client_connections), client_connections),
+            channel_count = IF(VALUES(reported_at) &gt;= reported_at, VALUES(channel_count), channel_count),
+            upload_bytes_per_second =
+                IF(VALUES(reported_at) &gt;= reported_at, VALUES(upload_bytes_per_second), upload_bytes_per_second),
+            download_bytes_per_second =
+                IF(VALUES(reported_at) &gt;= reported_at, VALUES(download_bytes_per_second), download_bytes_per_second),
+            updated_at = IF(VALUES(reported_at) &gt;= reported_at, VALUES(updated_at), updated_at),
+            reported_at = GREATEST(reported_at, VALUES(reported_at))
+    </insert>
+
+    <delete id="deleteStale">
+        DELETE trs
+        FROM tunnel_runtime_status trs
+        LEFT JOIN tunnel t
+          ON t.tunnel_id = trs.tunnel_id
+         AND t.deleted = 0
+        WHERE trs.reported_at &lt; #{reportedBefore}
+           OR t._id IS NULL
+    </delete>
+</mapper>

@@ -53,6 +53,12 @@ public class TunnelPortRepositoryImpl implements TunnelPortRepository {
     }
 
     @Override
+    public long countByTunnelCode(Long tunnelCode) {
+        return tunnelPortMapper.selectCount(new LambdaQueryWrapper<TunnelPortEntity>()
+                .eq(TunnelPortEntity::getTunnelCode, tunnelCode));
+    }
+
+    @Override
     public void updatePolicy(Long tunnelCode, Long port, TunnelProtocol protocol, Boolean allowAnonymous) {
         tunnelPortMapper.update(null, new LambdaUpdateWrapper<TunnelPortEntity>()
                 .eq(TunnelPortEntity::getTunnelCode, tunnelCode)

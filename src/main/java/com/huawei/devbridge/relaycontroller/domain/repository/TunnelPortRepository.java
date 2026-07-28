@@ -13,6 +13,8 @@ public interface TunnelPortRepository {
 
     boolean existsByTunnelCodeAndPort(Long tunnelCode, Long port);
 
+    long countByTunnelCode(Long tunnelCode);
+
     void updatePolicy(Long tunnelCode, Long port, TunnelProtocol protocol, Boolean allowAnonymous);
 
     void deleteByTunnelCodeAndPort(Long tunnelCode, Long port);

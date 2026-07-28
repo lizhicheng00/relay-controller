@@ -13,14 +13,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.huawei.devbridge.relaycontroller.application.service.MeteringAppService;
+import com.huawei.devbridge.relaycontroller.application.service.LimitsAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelPortAppService;
+import com.huawei.devbridge.relaycontroller.application.service.TunnelStatusAppService;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.exception.GlobalExceptionHandler;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.MeteringController;
+import com.huawei.devbridge.relaycontroller.interfaces.controller.LimitsController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelPortController;
+import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelStatusController;
 import com.huawei.devbridge.relaycontroller.interfaces.config.TokenCacheControlAdvice;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelRequest;
@@ -29,12 +33,18 @@ import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortR
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.DataPlaneLimitsResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.MeteringReportResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusDecisionResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusReportResponse;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtScope;
+import com.huawei.devbridge.relaycontroller.domain.model.TunnelControlAction;
+import com.huawei.devbridge.relaycontroller.domain.model.TunnelControlReason;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelProtocol;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,13 +72,19 @@ class RelayControllerApiTest {
     private MeteringAppService meteringAppService;
     @Mock
     private TunnelPortAppService tunnelPortAppService;
+    @Mock
+    private LimitsAppService limitsAppService;
+    @Mock
+    private TunnelStatusAppService tunnelStatusAppService;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
                         new TunnelController(tunnelAppService),
                         new MeteringController(meteringAppService),
-                        new TunnelPortController(tunnelPortAppService))
+                        new TunnelPortController(tunnelPortAppService),
+                        new LimitsController(limitsAppService),
+                        new TunnelStatusController(tunnelStatusAppService))
                 .setControllerAdvice(new GlobalExceptionHandler(), new TokenCacheControlAdvice())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter())
                 .defaultRequest(get("/").accept(MediaType.APPLICATION_JSON))
@@ -235,7 +251,7 @@ class RelayControllerApiTest {
 
     @Test
     void issueTunnelTokenApi() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "host"))
+        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "host", false))
                 .thenReturn(TunnelTokenResponse.builder()
                         .tunnelId(TUNNEL_ID)
                         .scope(JwtScope.HOST)
@@ -257,8 +273,107 @@ class RelayControllerApiTest {
     }
 
     @Test
+    void issueCookieTunnelTokenApi() throws Exception {
+        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "connect", true))
+                .thenReturn(TunnelTokenResponse.builder()
+                        .tunnelId(TUNNEL_ID)
+                        .scope(JwtScope.CONNECT)
+                        .lifetime(3600L)
+                        .expiration(1720086400L)
+                        .token("cookie-token")
+                        .build());
+
+        mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)
+                        .header("X-Namespace", NAMESPACE)
+                        .param("scope", "connect")
+                        .param("forCookies", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope").value("connect"))
+                .andExpect(jsonPath("$.token").value("cookie-token"))
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    void getLimitsApi() throws Exception {
+        when(limitsAppService.getLimits(NAMESPACE)).thenReturn(LimitsResponse.builder()
+                .namespace(NAMESPACE)
+                .planCode("trial")
+                .periodStart(1782864000L)
+                .periodEnd(1785542400L)
+                .resetAt(1785542400L)
+                .quotaBytes(5368709120L)
+                .billedBytes(1024L)
+                .pendingBytes(512L)
+                .usedBytes(1536L)
+                .remainingBytes(5368707584L)
+                .exhausted(false)
+                .activeTunnels(2L)
+                .maxTunnels(10)
+                .maxPortsPerTunnel(10)
+                .maxHostsPerTunnel(1)
+                .maxTunnelBandwidthBytesPerSecond(5242880L)
+                .maxHttpRequestsPerMinutePerPort(500)
+                .maxConnectionsPerPort(100)
+                .build());
+
+        mockMvc.perform(get(BASE + "/limits").header("X-Namespace", NAMESPACE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.planCode").value("trial"))
+                .andExpect(jsonPath("$.quotaBytes").value(5368709120L))
+                .andExpect(jsonPath("$.usedBytes").value(1536L))
+                .andExpect(jsonPath("$.remainingBytes").value(5368707584L))
+                .andExpect(jsonPath("$.maxTunnels").value(10))
+                .andExpect(jsonPath("$.maxConnectionsPerPort").value(100));
+    }
+
+    @Test
+    void reportTunnelStatusApi() throws Exception {
+        when(tunnelStatusAppService.report(eq(CLUSTER_ID), any()))
+                .thenReturn(TunnelStatusReportResponse.builder()
+                        .nextReportInSeconds(10)
+                        .tunnels(List.of(TunnelStatusDecisionResponse.builder()
+                                .tunnelId(TUNNEL_ID)
+                                .action(TunnelControlAction.KEEP)
+                                .reason(TunnelControlReason.NONE)
+                                .remainingBytes(4096L)
+                                .limits(DataPlaneLimitsResponse.builder()
+                                        .maxHostsPerTunnel(1)
+                                        .maxTunnelBandwidthBytesPerSecond(5242880L)
+                                        .maxHttpRequestsPerMinutePerPort(500)
+                                        .maxConnectionsPerPort(100)
+                                        .build())
+                                .build()))
+                        .build());
+
+        mockMvc.perform(post(BASE + "/clusters/{clusterId}/tunnels/status", CLUSTER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "gatewayId": "gateway-a",
+                                  "reportedAt": 1785225600,
+                                  "tunnels": [
+                                    {
+                                      "tunnelId": "aaaadysa",
+                                      "sessionId": "session-a",
+                                      "hostConnections": 1,
+                                      "clientConnections": 2,
+                                      "channelCount": 3,
+                                      "uploadBytesPerSecond": 1024,
+                                      "downloadBytesPerSecond": 2048
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextReportInSeconds").value(10))
+                .andExpect(jsonPath("$.tunnels[0].action").value("keep"))
+                .andExpect(jsonPath("$.tunnels[0].reason").value("none"))
+                .andExpect(jsonPath("$.tunnels[0].limits.maxHostsPerTunnel").value(1));
+    }
+
+    @Test
     void issueTunnelTokenWithInvalidScopeReturnsBadRequest() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "admin"))
+        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "admin", false))
                 .thenThrow(new BizException(ErrorCode.PARAM_INVALID, "scope must be host or connect"));
 
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)

@@ -10,11 +10,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.huawei.devbridge.relaycontroller.application.service.BillingService;
 import com.huawei.devbridge.relaycontroller.application.service.LocalClusterService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelAppService;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
+import com.huawei.devbridge.relaycontroller.domain.model.AccountPlan;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
+import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtScope;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtToken;
@@ -34,12 +38,6 @@ import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResp
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -55,6 +53,8 @@ class TunnelAppServiceTest {
     private JwtTokenService jwtTokenService;
     @Mock
     private TunnelPortRepository tunnelPortRepository;
+    @Mock
+    private BillingService billingService;
 
     @Test
     void createTunnelAllocatesCodeAndReturnsMetadata() {
@@ -68,7 +68,9 @@ class TunnelAppServiceTest {
                 jwtTokenService,
                 new TunnelDomainService(),
                 tunnelPortRepository,
-                properties);
+                properties,
+                billingService);
+        when(billingService.lockAccountForQuota("ns-user-001")).thenReturn(accountPlan());
         CreateTunnelRequest request = new CreateTunnelRequest();
         request.setName("dev");
         request.setClusterId("cluster-a");
@@ -160,7 +162,8 @@ class TunnelAppServiceTest {
 
         when(clusterRepository.findByClusterIdAndRegion("cluster-a", "region-a"))
                 .thenReturn(Cluster.builder().clusterId("cluster-a").region("region-a").build());
-        when(tunnelRepository.countActiveByNamespaceAndRegion(eq("ns-user-001"), eq("region-a"), anyLong()))
+        when(billingService.lockAccountForQuota("ns-user-001")).thenReturn(accountPlan());
+        when(tunnelRepository.countActiveByAccountId(eq(7L), anyLong()))
                 .thenReturn(10L);
 
         assertThatThrownBy(() -> service.createTunnel("ns-user-001", request))
@@ -170,51 +173,35 @@ class TunnelAppServiceTest {
     }
 
     @Test
-    void createTunnelDoesNotExceedQuotaWhenConcurrent() throws Exception {
-        AtomicLong activeCount = new AtomicLong();
+    void createTunnelUsesAccountScopedDatabaseQuota() {
         RelayProperties properties = new RelayProperties();
         TunnelAppService service = new TunnelAppService(
                 tunnelRepository,
                 new LocalClusterService(clusterRepository, properties),
                 new NamespaceService(),
-                new SequenceTunnelCodeGenerator(),
+                new FixedTunnelCodeGenerator(),
                 jwtTokenService,
                 new TunnelDomainService(),
                 tunnelPortRepository,
-                properties);
+                properties,
+                billingService);
         CreateTunnelRequest request = new CreateTunnelRequest();
         request.setName("dev");
         request.setClusterId("cluster-a");
 
+        when(billingService.lockAccountForQuota("ns-user-001")).thenReturn(accountPlan());
         when(clusterRepository.findByClusterIdAndRegion("cluster-a", "region-a"))
                 .thenReturn(Cluster.builder().clusterId("cluster-a").region("region-a").build());
-        when(tunnelRepository.countActiveByNamespaceAndRegion(eq("ns-user-001"), eq("region-a"), anyLong()))
-                .thenAnswer(ignored -> {
-                    long count = activeCount.get();
-                    Thread.sleep(5);
-                    return count;
-                });
+        when(tunnelRepository.countActiveByAccountId(eq(7L), anyLong())).thenReturn(9L);
         when(tunnelRepository.existsByTunnelCode(anyLong())).thenReturn(false);
         when(tunnelRepository.existsByTunnelId(anyString())).thenReturn(false);
-        when(tunnelRepository.save(org.mockito.ArgumentMatchers.any(Tunnel.class))).thenAnswer(invocation -> {
-            activeCount.incrementAndGet();
-            return invocation.getArgument(0);
-        });
-        ExecutorService executor = Executors.newFixedThreadPool(8);
-        try {
-            List<Callable<Boolean>> tasks = IntStream.range(0, 20)
-                    .mapToObj(ignored -> (Callable<Boolean>) () -> createTunnelIfAllowed(service, request))
-                    .toList();
-            List<Future<Boolean>> futures = executor.invokeAll(tasks);
-            long created = futures.stream()
-                    .filter(TunnelAppServiceTest::created)
-                    .count();
+        when(tunnelRepository.save(org.mockito.ArgumentMatchers.any(Tunnel.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-            assertThat(created).isEqualTo(10);
-            assertThat(activeCount.get()).isEqualTo(10);
-        } finally {
-            executor.shutdownNow();
-        }
+        service.createTunnel("ns-user-001", request);
+
+        verify(billingService).lockAccountForQuota("ns-user-001");
+        verify(tunnelRepository).countActiveByAccountId(eq(7L), anyLong());
     }
 
     @Test
@@ -230,7 +217,7 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 1800))
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
 
         long before = TimeUtils.nowSeconds();
         Boolean updated = service.updateTunnel("ns-user-001", "aaaadysa", request);
@@ -257,7 +244,7 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 60))
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
 
         long before = TimeUtils.nowSeconds();
         service.updateTunnel("ns-user-001", "aaaadysa", request);
@@ -315,7 +302,7 @@ class TunnelAppServiceTest {
                 .type(TunnelType.BRIDGE)
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
 
         Boolean updated = service.updateTunnel("ns-user-001", "aaaadysa", request);
 
@@ -335,7 +322,7 @@ class TunnelAppServiceTest {
                 .deleted(0)
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
 
         Boolean deleted = service.deleteTunnel("ns-user-001", "aaaadysa");
 
@@ -356,6 +343,7 @@ class TunnelAppServiceTest {
                 .build();
 
         when(tunnelRepository.findByNamespaceAndRegion("ns-user-001", "region-a")).thenReturn(List.of(first));
+        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(first);
 
         Boolean deleted = service.deleteTunnels("ns-user-001");
 
@@ -373,16 +361,17 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 3600))
                 .build();
         when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
-        when(jwtTokenService.issueToken(tunnel, JwtScope.HOST))
+        when(jwtTokenService.issueToken(tunnel, JwtScope.HOST, false))
                 .thenReturn(new JwtToken("host-token", 3600L, 200000L));
 
-        TunnelTokenResponse response = service.issueToken("ns-user-001", "aaaadysa", "host");
+        TunnelTokenResponse response = service.issueToken("ns-user-001", "aaaadysa", "host", false);
 
         assertThat(response.getTunnelId()).isEqualTo("aaaadysa");
         assertThat(response.getScope()).isEqualTo(JwtScope.HOST);
         assertThat(response.getLifetime()).isEqualTo(3600L);
         assertThat(response.getExpiration()).isEqualTo(200000L);
         assertThat(response.getToken()).isEqualTo("host-token");
+        verify(billingService).assertTrafficAllowed("ns-user-001");
         verify(tunnelRepository, never()).refreshExpiration(anyString(), anyString(), anyLong());
     }
 
@@ -390,13 +379,16 @@ class TunnelAppServiceTest {
     void issueTokenRejectsUnsupportedScope() {
         TunnelAppService service = newService(new RelayProperties());
 
-        assertThatThrownBy(() -> service.issueToken("ns-user-001", "aaaadysa", "admin"))
+        assertThatThrownBy(() -> service.issueToken("ns-user-001", "aaaadysa", "admin", false))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PARAM_INVALID);
     }
 
     private TunnelAppService newService(RelayProperties properties) {
+        org.mockito.Mockito.lenient()
+                .when(billingService.lockAccountForQuota("ns-user-001"))
+                .thenReturn(accountPlan());
         return new TunnelAppService(
                 tunnelRepository,
                 new LocalClusterService(clusterRepository, properties),
@@ -405,7 +397,8 @@ class TunnelAppServiceTest {
                 jwtTokenService,
                 new TunnelDomainService(),
                 tunnelPortRepository,
-                properties);
+                properties,
+                billingService);
     }
 
     private static class FixedTunnelCodeGenerator extends TunnelCodeGenerator {
@@ -415,37 +408,9 @@ class TunnelAppServiceTest {
         }
     }
 
-    private static class SequenceTunnelCodeGenerator extends TunnelCodeGenerator {
-        private final AtomicLong next = new AtomicLong(100000L);
-
-        @Override
-        public long generate() {
-            return next.incrementAndGet();
-        }
-
-        @Override
-        public String toTunnelId(long tunnelCode) {
-            return "t" + tunnelCode;
-        }
-    }
-
-    private static boolean createTunnelIfAllowed(TunnelAppService service, CreateTunnelRequest request) {
-        try {
-            service.createTunnel("ns-user-001", request);
-            return true;
-        } catch (BizException exception) {
-            if (exception.getErrorCode() == ErrorCode.TUNNEL_QUOTA_EXCEEDED) {
-                return false;
-            }
-            throw exception;
-        }
-    }
-
-    private static boolean created(Future<Boolean> future) {
-        try {
-            return future.get();
-        } catch (Exception exception) {
-            throw new AssertionError(exception);
-        }
+    private static AccountPlan accountPlan() {
+        return new AccountPlan(
+                BillingAccount.builder().id(7L).namespace("ns-user-001").planCode("trial").status("active").build(),
+                BillingPlan.builder().planCode("trial").maxTunnels(10).maxPortsPerTunnel(10).build());
     }
 }

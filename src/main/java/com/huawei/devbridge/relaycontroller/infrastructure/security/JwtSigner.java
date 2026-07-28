@@ -24,16 +24,19 @@ public class JwtSigner {
     private final RelayProperties relayProperties;
     private final JwtKeyProvider jwtKeyProvider;
 
-    public String signToken(Tunnel tunnel, JwtScope scope, long issuedAt, long expiration) {
+    public String signToken(
+            Tunnel tunnel, JwtScope scope, long issuedAt, long expiration, boolean forCookies) {
         try {
             JWTClaimsSet claims = new JWTClaimsSet.Builder()
                     .issuer(relayProperties.getJwt().getIssuer())
+                    .audience(relayProperties.getJwt().getAudience())
                     .expirationTime(Date.from(Instant.ofEpochSecond(expiration)))
                     .notBeforeTime(Date.from(Instant.ofEpochSecond(issuedAt)))
                     .jwtID(UUID.randomUUID().toString())
                     .claim("tunnelId", tunnel.getTunnelId())
                     .claim("clusterId", tunnel.getClusterId())
                     .claim("scp", scope.value())
+                    .claim("delivery", forCookies ? "cookie" : "api")
                     .build();
             return sign(claims);
         } catch (Exception exception) {

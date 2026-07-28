@@ -18,6 +18,7 @@ public class Tunnel {
     private Integer expiration;
     private Integer expirationHours;
     private String namespace;
+    private Long accountId;
     private String description;
     private Long bandwidthUsed;
     private String url;

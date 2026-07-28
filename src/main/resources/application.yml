@@ -63,7 +63,6 @@ relay:
   region: ${RELAY_REGION}
   default-expiration-hours: 72
   tunnel:
-    max-per-namespace: 10
     cleanup-retention-days: 3
     cleanup-initial-delay-ms: 3600000
     cleanup-interval-ms: 3600000
@@ -72,7 +71,18 @@ relay:
     requests-per-minute: ${RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE}
   jwt:
     issuer: devbridge
+    audience: relay-gateway
     key-id: "1"
     private-key: ${RELAY_JWT_PRIVATE_KEY:}
     token:
       ttl-seconds: 86400
+  billing:
+    default-plan-code: trial
+    enforcement-enabled: true
+    settlement-enabled: true
+    settlement-cron: "0 */10 * * * *"
+    settlement-batch-size: 500
+    status-report-interval-seconds: 10
+    activity-refresh-interval-seconds: 300
+    status-retention-seconds: 86400
+    status-max-clock-skew-seconds: 300

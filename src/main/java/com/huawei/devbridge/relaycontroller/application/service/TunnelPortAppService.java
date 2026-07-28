@@ -4,6 +4,7 @@ import com.huawei.devbridge.relaycontroller.application.assembler.TunnelPortAsse
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
+import com.huawei.devbridge.relaycontroller.domain.model.AccountPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelPort;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelProtocol;
@@ -34,15 +35,23 @@ public class TunnelPortAppService {
     private final TunnelDomainService tunnelDomainService;
     private final TunnelPortDomainService tunnelPortDomainService;
     private final RelayProperties relayProperties;
+    private final BillingService billingService;
 
     @Transactional
     public TunnelPortResponse create(String rawNamespace, String tunnelId, CreateTunnelPortRequest request) {
-        Tunnel tunnel = ownedTunnel(rawNamespace, tunnelId);
+        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, tunnelId);
         tunnelPortDomainService.validatePort(request.getPort());
         tunnelPortDomainService.validateProtocol(request.getProtocol());
         tunnelPortDomainService.validateAllowAnonymous(request.getAllowAnonymous());
         if (tunnelPortRepository.existsByTunnelCodeAndPort(tunnel.getTunnelCode(), request.getPort())) {
             throw new BizException(ErrorCode.TUNNEL_PORT_ALREADY_EXISTS);
+        }
+        AccountPlan accountPlan = billingService.accountPlan(tunnel.getAccountId());
+        int maxPorts = accountPlan.plan().getMaxPortsPerTunnel();
+        long portCount = tunnelPortRepository.countByTunnelCode(tunnel.getTunnelCode());
+        if (maxPorts > 0 && portCount >= maxPorts) {
+            throw new BizException(ErrorCode.TUNNEL_PORT_QUOTA_EXCEEDED,
+                    "tunnel port quota exceeded: max=" + maxPorts);
         }
 
         TunnelPort tunnelPort = tunnelPortRepository.save(TunnelPort.builder()
@@ -112,6 +121,13 @@ public class TunnelPortAppService {
     private Tunnel ownedTunnel(String rawNamespace, String tunnelId) {
         String namespace = namespaceService.requireNamespace(rawNamespace);
         Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegion(tunnelId, relayProperties.getRegion());
+        tunnelDomainService.assertOwnedAndNotExpired(tunnel, namespace);
+        return tunnel;
+    }
+
+    private Tunnel ownedTunnelForUpdate(String rawNamespace, String tunnelId) {
+        String namespace = namespaceService.requireNamespace(rawNamespace);
+        Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegionForUpdate(tunnelId, relayProperties.getRegion());
         tunnelDomainService.assertOwnedAndNotExpired(tunnel, namespace);
         return tunnel;
     }

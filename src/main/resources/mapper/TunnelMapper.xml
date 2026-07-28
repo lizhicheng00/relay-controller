@@ -13,6 +13,31 @@
         LIMIT 1
     </select>
 
+    <select id="selectByTunnelIdAndRegionForUpdate"
+            resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
+        SELECT t.*
+        FROM tunnel t
+        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
+        WHERE t.tunnel_id = #{tunnelId}
+          AND c.region = #{region}
+          AND t.deleted = 0
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="selectByTunnelIdsAndRegion"
+            resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
+        SELECT t.*
+        FROM tunnel t
+        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
+        WHERE c.region = #{region}
+          AND t.deleted = 0
+          AND t.tunnel_id IN
+        <foreach collection="tunnelIds" item="tunnelId" open="(" separator="," close=")">
+            #{tunnelId}
+        </foreach>
+    </select>
+
     <select id="selectByNamespaceAndRegion"
             resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
         SELECT t.*
@@ -50,6 +75,14 @@
           AND t.expiration &gt; #{now}
     </select>
 
+    <select id="countActiveByAccountId" resultType="long">
+        SELECT COUNT(1)
+        FROM tunnel
+        WHERE account_id = #{accountId}
+          AND deleted = 0
+          AND expiration &gt; #{now}
+    </select>
+
     <select id="selectAgedByRegion"
             resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
         SELECT t.*
@@ -79,5 +112,16 @@
           AND c.region = #{region}
           AND t.deleted = 0
           AND t.expiration &gt; #{activityAt}
+    </update>
+
+    <update id="refreshExpirationFromHeartbeat">
+        UPDATE tunnel t
+        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
+        SET t.expiration = #{activityAt} + t.expiration_hours * 3600
+        WHERE t.tunnel_id = #{tunnelId}
+          AND c.region = #{region}
+          AND t.deleted = 0
+          AND t.expiration &gt; #{activityAt}
+          AND t.expiration &lt; #{activityAt} + t.expiration_hours * 3600 - #{minimumExtensionSeconds}
     </update>
 </mapper>
