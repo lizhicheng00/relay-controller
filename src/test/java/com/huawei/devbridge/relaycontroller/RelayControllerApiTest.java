@@ -36,6 +36,7 @@ import com.huawei.devbridge.relaycontroller.interfaces.response.MeteringReportRe
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtScope;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelProtocol;
@@ -226,12 +227,13 @@ class RelayControllerApiTest {
                 .tunnelExpiration(1722592000L)
                 .url("aaaadysa.cluster-a.myhuaweicloud.com")
                 .type("bridge")
-                .hostConnections(1)
-                .clientConnections(2)
-                .channelCount(3)
-                .uploadBytesPerSecond(1024L)
-                .downloadBytesPerSecond(2048L)
-                .statusReportedAt(1720000000L)
+                .status(TunnelStatusResponse.builder()
+                        .hostConnectionCount(1)
+                        .clientConnectionCount(3)
+                        .uploadBytesPerSecond(1024L)
+                        .downloadBytesPerSecond(2048L)
+                        .reportedAt(1720000000L)
+                        .build())
                 .build());
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
@@ -241,12 +243,11 @@ class RelayControllerApiTest {
                 .andExpect(jsonPath("$.clusterId").value(CLUSTER_ID))
                 .andExpect(jsonPath("$.expirationHours").value(720))
                 .andExpect(jsonPath("$.tunnelExpiration").value(1722592000L))
-                .andExpect(jsonPath("$.hostConnections").value(1))
-                .andExpect(jsonPath("$.clientConnections").value(2))
-                .andExpect(jsonPath("$.channelCount").value(3))
-                .andExpect(jsonPath("$.uploadBytesPerSecond").value(1024L))
-                .andExpect(jsonPath("$.downloadBytesPerSecond").value(2048L))
-                .andExpect(jsonPath("$.statusReportedAt").value(1720000000L))
+                .andExpect(jsonPath("$.status.hostConnectionCount").value(1))
+                .andExpect(jsonPath("$.status.clientConnectionCount").value(3))
+                .andExpect(jsonPath("$.status.uploadBytesPerSecond").value(1024L))
+                .andExpect(jsonPath("$.status.downloadBytesPerSecond").value(2048L))
+                .andExpect(jsonPath("$.status.reportedAt").value(1720000000L))
                 .andExpect(jsonPath("$.expiresAt").doesNotExist())
                 .andExpect(jsonPath("$.jwt").doesNotExist());
     }
@@ -298,13 +299,9 @@ class RelayControllerApiTest {
     @Test
     void getLimitsApi() throws Exception {
         when(limitsAppService.getLimits(NAMESPACE)).thenReturn(LimitsResponse.builder()
-                .namespace(NAMESPACE)
-                .planCode("trial")
                 .resetAt(1785542400L)
                 .quotaBytes(5368709120L)
-                .usedBytes(1536L)
                 .remainingBytes(5368707584L)
-                .exhausted(false)
                 .activeTunnels(2L)
                 .maxTunnels(10)
                 .maxPortsPerTunnel(10)
@@ -316,11 +313,13 @@ class RelayControllerApiTest {
 
         mockMvc.perform(get(BASE + "/limits").header("X-Namespace", NAMESPACE))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.planCode").value("trial"))
                 .andExpect(jsonPath("$.resetAt").value(1785542400L))
                 .andExpect(jsonPath("$.quotaBytes").value(5368709120L))
-                .andExpect(jsonPath("$.usedBytes").value(1536L))
                 .andExpect(jsonPath("$.remainingBytes").value(5368707584L))
+                .andExpect(jsonPath("$.namespace").doesNotExist())
+                .andExpect(jsonPath("$.planCode").doesNotExist())
+                .andExpect(jsonPath("$.usedBytes").doesNotExist())
+                .andExpect(jsonPath("$.exhausted").doesNotExist())
                 .andExpect(jsonPath("$.billedBytes").doesNotExist())
                 .andExpect(jsonPath("$.pendingBytes").doesNotExist())
                 .andExpect(jsonPath("$.maxTunnels").value(10))

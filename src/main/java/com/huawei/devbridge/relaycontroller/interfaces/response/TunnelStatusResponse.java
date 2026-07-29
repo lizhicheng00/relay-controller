@@ -1,15 +1,11 @@
-package com.huawei.devbridge.relaycontroller.domain.model;
+package com.huawei.devbridge.relaycontroller.interfaces.response;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 @Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class TunnelRuntimeStatus {
+public class TunnelStatusResponse {
     private Integer hostConnectionCount;
     private Integer clientConnectionCount;
     private Long uploadBytesPerSecond;

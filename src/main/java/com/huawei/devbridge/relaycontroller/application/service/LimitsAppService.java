@@ -22,13 +22,9 @@ public class LimitsAppService {
         long activeTunnels = tunnelRepository.countActiveByAccountId(
                 snapshot.account().getId(), TimeUtils.nowSeconds());
         return LimitsResponse.builder()
-                .namespace(snapshot.account().getNamespace())
-                .planCode(plan.getPlanCode())
                 .resetAt(period.getPeriodEnd())
                 .quotaBytes(period.getQuotaBytes())
-                .usedBytes(snapshot.usedBytes())
                 .remainingBytes(snapshot.remainingBytes())
-                .exhausted(snapshot.exhausted())
                 .activeTunnels(activeTunnels)
                 .maxTunnels(plan.getMaxTunnels())
                 .maxPortsPerTunnel(plan.getMaxPortsPerTunnel())

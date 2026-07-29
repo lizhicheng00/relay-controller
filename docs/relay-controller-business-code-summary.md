@@ -82,7 +82,7 @@ GET    /open-api-inner/v1/relay-controller/limits
 
 ## 5. Persistence And Lifecycle
 
-Flyway `V1` creates the phase-one tables. `V3` adds plans, accounts, UTC monthly periods, cumulative usage windows, billing details, runtime status, and the Tunnel account binding. `V5` changes usage and billing windows to one minute. Compound database names use snake_case while Java fields use camelCase.
+Flyway `V1` creates the phase-one tables. The consolidated `V3` adds the final phase-two plans, accounts, UTC monthly periods, one-minute usage and billing windows, runtime status, and the Tunnel account binding. Compound database names use snake_case while Java fields use camelCase.
 
 Tunnel expiration is refreshed by meaningful configuration changes, positive legacy metering, and direct Gateway activity updates. Tunnel and related Port rows are physically deleted by explicit deletion; the scheduled cleanup also removes aged Tunnel rows after retention.
 

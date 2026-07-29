@@ -484,31 +484,39 @@ components:
         - $ref: '#/components/schemas/Tunnel'
         - type: object
           properties:
-            hostConnections:
-              type: integer
-              format: int32
-              minimum: 0
-            clientConnections:
-              type: integer
-              format: int32
-              minimum: 0
-            channelCount:
-              type: integer
-              format: int32
-              minimum: 0
-            uploadBytesPerSecond:
-              type: integer
-              format: int64
-              minimum: 0
-            downloadBytesPerSecond:
-              type: integer
-              format: int64
-              minimum: 0
-            statusReportedAt:
-              type: integer
-              format: int64
-              minimum: 0
-              description: Latest Gateway runtime status time as Unix seconds.
+            status:
+              $ref: '#/components/schemas/TunnelStatusResponse'
+    TunnelStatusResponse:
+      type: object
+      required:
+        - hostConnectionCount
+        - clientConnectionCount
+        - uploadBytesPerSecond
+        - downloadBytesPerSecond
+        - reportedAt
+      properties:
+        hostConnectionCount:
+          type: integer
+          format: int32
+          minimum: 0
+        clientConnectionCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Current client connection count measured as active SSH channels.
+        uploadBytesPerSecond:
+          type: integer
+          format: int64
+          minimum: 0
+        downloadBytesPerSecond:
+          type: integer
+          format: int64
+          minimum: 0
+        reportedAt:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Latest Gateway runtime status time as Unix seconds.
     Tunnel:
       type: object
       properties:
@@ -607,13 +615,9 @@ components:
     LimitsResponse:
       type: object
       required:
-        - namespace
-        - planCode
         - resetAt
         - quotaBytes
-        - usedBytes
         - remainingBytes
-        - exhausted
         - activeTunnels
         - maxTunnels
         - maxPortsPerTunnel
@@ -622,10 +626,6 @@ components:
         - maxHttpRequestsPerMinutePerPort
         - maxConnectionsPerPort
       properties:
-        namespace:
-          type: string
-        planCode:
-          type: string
         resetAt:
           type: integer
           format: int64
@@ -633,14 +633,9 @@ components:
         quotaBytes:
           type: integer
           format: int64
-        usedBytes:
-          type: integer
-          format: int64
         remainingBytes:
           type: integer
           format: int64
-        exhausted:
-          type: boolean
         activeTunnels:
           type: integer
           format: int64

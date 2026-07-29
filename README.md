@@ -1,6 +1,6 @@
 # Relay Controller
 
-Relay Controller is the DevBridge / Relay Tunnel control plane service. It manages tunnel metadata, namespace accounts, limits, JWT signing, billing settlement, runtime decisions, and port policies.
+Relay Controller is the DevBridge / Relay Tunnel control plane service. It manages tunnel metadata, namespace accounts, limits, JWT signing, billing settlement, runtime status, and port policies.
 
 This service does not implement WebSocket, WebTransport, TCP, or HTTP body forwarding. Real traffic bridging belongs to Relay Gateway.
 
@@ -48,7 +48,7 @@ Tunnel `tunnelCode` is a 40-bit `long`; `tunnelId` is the fixed 8-character lowe
 Tunnel URL format is `{tunnelId}.{clusterId}.{relay.domain}`.
 Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, port, and metering operations reject expired tunnels; expired records are physically removed after the configured retention period.
 The seeded `trial` plan gives each namespace 5 GiB per UTC calendar month, at most 10 active tunnels, and at most 10 ports per tunnel. Tunnel and port creation serialize on database rows, so replicas sharing the database cannot exceed those metadata quotas through concurrent requests. Deleted and expired tunnels do not count against the tunnel quota.
-`GET /limits` returns the monthly quota, used and remaining bytes, reset time, active tunnel count, and all plan limits. Tunnel detail includes the latest connection counts and rates written by Gateway to `tunnel_runtime_status`.
+`GET /limits` returns the monthly quota balance, reset time, current tunnel count, and enforceable plan limits. Request context, internal plan identifiers, and values derivable from the balance are not repeated. Tunnel detail includes a `status` object with the latest Host connection count, SSH-channel connection count, rates, and report time written by Gateway.
 
 Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, `scp`, and `delivery`.
 The optional `forCookies=true` query marks `delivery=cookie`; it does not encrypt the JWT or set a cross-domain cookie. The redirect or Gateway layer must set the returned signed token as a `Secure`, `HttpOnly`, appropriately scoped cookie.
@@ -75,7 +75,8 @@ DEFAULT CHARACTER SET utf8mb4
 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. `V3` adds trial plans, namespace accounts, UTC monthly periods, cumulative usage windows, billing details, runtime status, and the Tunnel account binding. `V4` removes unused audit fields and replaces surrogate IDs with business keys where no external identity is needed. `V5` changes usage and billing windows to one minute.
+Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the final phase-two schema: trial plans, namespace accounts, UTC monthly periods, one-minute usage and billing windows, runtime status, and the Tunnel account binding.
+Because this consolidation happened before phase two was released, development databases that already applied the former V3-V5 sequence must be rebuilt or explicitly realigned; deployed migration history must not be rewritten after release.
 
 Gateway phase-two metering writes cumulative values directly to `tunnel_usage_window` every 30 seconds and at session end. The unique key is `(tunnel_id, session_id, window_start)`, where `window_start` is the UTC timestamp floored to one minute. Retries must use `GREATEST(existing, incoming)` rather than add the same report again. Relay Controller settles only the unbilled difference every minute, so retries and multiple Controller replicas do not double charge.
 

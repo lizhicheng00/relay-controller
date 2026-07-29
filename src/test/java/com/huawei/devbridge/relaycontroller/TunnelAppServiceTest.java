@@ -305,9 +305,8 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 3600))
                 .build();
         TunnelRuntimeStatus status = TunnelRuntimeStatus.builder()
-                .hostConnections(1)
-                .clientConnections(2)
-                .channelCount(3)
+                .hostConnectionCount(1)
+                .clientConnectionCount(3)
                 .uploadBytesPerSecond(1024L)
                 .downloadBytesPerSecond(2048L)
                 .reportedAt(1720000000L)
@@ -317,12 +316,11 @@ class TunnelAppServiceTest {
 
         TunnelDetailResponse response = service.getTunnelDetail("ns-user-001", "aaaadysa");
 
-        assertThat(response.getHostConnections()).isEqualTo(1);
-        assertThat(response.getClientConnections()).isEqualTo(2);
-        assertThat(response.getChannelCount()).isEqualTo(3);
-        assertThat(response.getUploadBytesPerSecond()).isEqualTo(1024L);
-        assertThat(response.getDownloadBytesPerSecond()).isEqualTo(2048L);
-        assertThat(response.getStatusReportedAt()).isEqualTo(1720000000L);
+        assertThat(response.getStatus().getHostConnectionCount()).isEqualTo(1);
+        assertThat(response.getStatus().getClientConnectionCount()).isEqualTo(3);
+        assertThat(response.getStatus().getUploadBytesPerSecond()).isEqualTo(1024L);
+        assertThat(response.getStatus().getDownloadBytesPerSecond()).isEqualTo(2048L);
+        assertThat(response.getStatus().getReportedAt()).isEqualTo(1720000000L);
     }
 
     @Test

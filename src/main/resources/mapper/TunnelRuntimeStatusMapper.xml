@@ -4,9 +4,8 @@
 <mapper namespace="com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.TunnelRuntimeStatusMapper">
     <select id="selectByTunnelId"
             resultType="com.huawei.devbridge.relaycontroller.domain.model.TunnelRuntimeStatus">
-        SELECT host_connections,
-               client_connections,
-               channel_count,
+        SELECT host_connection_count,
+               client_connection_count,
                upload_bytes_per_second,
                download_bytes_per_second,
                reported_at

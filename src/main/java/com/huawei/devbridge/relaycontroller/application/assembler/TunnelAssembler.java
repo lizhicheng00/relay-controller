@@ -6,6 +6,7 @@ import com.huawei.devbridge.relaycontroller.domain.model.TunnelType;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusResponse;
 
 public final class TunnelAssembler {
     private TunnelAssembler() {
@@ -42,12 +43,13 @@ public final class TunnelAssembler {
                 .url(tunnel.getUrl())
                 .type(typeValue(tunnel));
         if (runtimeStatus != null) {
-            builder.hostConnections(runtimeStatus.getHostConnections())
-                    .clientConnections(runtimeStatus.getClientConnections())
-                    .channelCount(runtimeStatus.getChannelCount())
+            builder.status(TunnelStatusResponse.builder()
+                    .hostConnectionCount(runtimeStatus.getHostConnectionCount())
+                    .clientConnectionCount(runtimeStatus.getClientConnectionCount())
                     .uploadBytesPerSecond(runtimeStatus.getUploadBytesPerSecond())
                     .downloadBytesPerSecond(runtimeStatus.getDownloadBytesPerSecond())
-                    .statusReportedAt(runtimeStatus.getReportedAt());
+                    .reportedAt(runtimeStatus.getReportedAt())
+                    .build());
         }
         return builder.build();
     }

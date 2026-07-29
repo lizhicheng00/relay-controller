@@ -1,5 +1,6 @@
 package com.huawei.devbridge.relaycontroller.interfaces.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,10 +18,6 @@ public class TunnelDetailResponse {
     private Long created;
     private String url;
     private String type;
-    private Integer hostConnections;
-    private Integer clientConnections;
-    private Integer channelCount;
-    private Long uploadBytesPerSecond;
-    private Long downloadBytesPerSecond;
-    private Long statusReportedAt;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private TunnelStatusResponse status;
 }
