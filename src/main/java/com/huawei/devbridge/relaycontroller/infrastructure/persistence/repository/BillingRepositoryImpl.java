@@ -3,9 +3,10 @@ package com.huawei.devbridge.relaycontroller.infrastructure.persistence.reposito
 import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
-import com.huawei.devbridge.relaycontroller.domain.model.UsageWindow;
+import com.huawei.devbridge.relaycontroller.domain.model.MeteringRecord;
 import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.BillingMapper;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -50,18 +51,8 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public long sumPendingUsage(Long accountId, long periodStart, long periodEnd) {
-        return billingMapper.sumPendingUsage(accountId, periodStart, periodEnd);
-    }
-
-    @Override
-    public UsageWindow findNextUnbilledUsage(String region) {
-        return billingMapper.selectNextUnbilledUsage(region);
-    }
-
-    @Override
-    public boolean advanceBilledBytes(Long usageWindowId, long expectedBilledBytes, long expectedUsageBytes) {
-        return billingMapper.advanceBilledBytes(usageWindowId, expectedBilledBytes, expectedUsageBytes) == 1;
+    public List<MeteringRecord> lockUnsettledMetering(String region, int limit) {
+        return billingMapper.selectUnsettledMeteringForUpdate(region, limit);
     }
 
     @Override
@@ -72,5 +63,10 @@ public class BillingRepositoryImpl implements BillingRepository {
     @Override
     public void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes) {
         billingMapper.increaseMinuteUsage(accountId, tunnelId, windowStart, usageBytes);
+    }
+
+    @Override
+    public int markMeteringSettled(List<Long> meteringIds) {
+        return billingMapper.markMeteringSettled(meteringIds);
     }
 }

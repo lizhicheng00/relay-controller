@@ -55,38 +55,25 @@
         LIMIT 1
     </select>
 
-    <select id="sumPendingUsage" resultType="long">
-        SELECT COALESCE(SUM(usage_bytes - billed_bytes), 0)
-        FROM tunnel_usage_window
-        WHERE account_id = #{accountId}
-          AND window_start &gt;= #{periodStart}
-          AND window_start &lt; #{periodEnd}
-          AND usage_bytes &gt; billed_bytes
+    <select id="selectUnsettledMeteringForUpdate"
+            resultType="com.huawei.devbridge.relaycontroller.domain.model.MeteringRecord">
+        SELECT m._id,
+               m.account_id,
+               m.tunnel_id,
+               m.usage_bytes,
+               m.reported_at
+        FROM tunnel_metering m
+        WHERE m.settled = 0
+          AND EXISTS (
+              SELECT 1
+              FROM cluster c
+              WHERE c.cluster_id = m.cluster_id
+                AND c.region = #{region}
+          )
+        ORDER BY m.created_at ASC, m._id ASC
+        LIMIT #{limit}
+        FOR UPDATE SKIP LOCKED
     </select>
-
-    <select id="selectNextUnbilledUsage"
-            resultType="com.huawei.devbridge.relaycontroller.domain.model.UsageWindow">
-        SELECT u._id,
-               u.account_id,
-               u.tunnel_id,
-               u.window_start,
-               u.usage_bytes,
-               u.billed_bytes
-        FROM tunnel_usage_window u
-        INNER JOIN cluster c ON c.cluster_id = u.cluster_id
-        WHERE c.region = #{region}
-          AND u.usage_bytes &gt; u.billed_bytes
-        ORDER BY u.window_start ASC, u._id ASC
-        LIMIT 1
-    </select>
-
-    <update id="advanceBilledBytes">
-        UPDATE tunnel_usage_window
-        SET billed_bytes = #{expectedUsageBytes}
-        WHERE _id = #{usageWindowId}
-          AND billed_bytes = #{expectedBilledBytes}
-          AND usage_bytes = #{expectedUsageBytes}
-    </update>
 
     <update id="increasePeriodUsage">
         UPDATE billing_period
@@ -101,4 +88,14 @@
         ON DUPLICATE KEY UPDATE
             usage_bytes = usage_bytes + VALUES(usage_bytes)
     </insert>
+
+    <update id="markMeteringSettled">
+        UPDATE tunnel_metering
+        SET settled = 1
+        WHERE settled = 0
+          AND _id IN
+        <foreach collection="meteringIds" item="meteringId" open="(" separator="," close=")">
+            #{meteringId}
+        </foreach>
+    </update>
 </mapper>

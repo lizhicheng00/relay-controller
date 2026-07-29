@@ -17,7 +17,7 @@ Relay Gateway owns:
 - traffic byte counting at the Host side;
 - one-Host Redis lock;
 - bandwidth, HTTP request, and connection token buckets;
-- cumulative usage-window writes and shutdown flush;
+- incremental metering writes and shutdown flush;
 - latest runtime-status writes;
 - active Tunnel expiration refresh;
 - immediate admission and disconnect execution.
@@ -42,26 +42,25 @@ Monthly periods use UTC and are immutable rows. A new `billing_period` is create
 
 ## Gateway Usage Contract
 
-Gateway writes one cumulative row for each Host session and one-minute window. It writes every 30 seconds and once more when the session closes.
+Gateway appends one incremental usage row every 30 seconds and once more when the Host session closes.
 
 ```text
-windowStart = floor(reportTimestamp / 60) * 60
-unique key  = tunnelId + sessionId + windowStart
-usageBytes  = cumulative bytes within that window
+unique key = tunnelId + sessionId + reportedAt
+usageBytes = bytes since the previous successful report
 ```
 
-The write must be idempotent:
+An exact retry must keep the same `reportedAt` and `usageBytes`. Gateway allows at most one report per session in the same second and coalesces a session-end flush with a periodic report when necessary.
 
 ```sql
-INSERT INTO tunnel_usage_window (
+INSERT IGNORE INTO tunnel_metering (
     account_id,
     cluster_id,
     tunnel_id,
     session_id,
-    window_start,
     usage_bytes,
-    billed_bytes,
-    reported_at
+    reported_at,
+    created_at,
+    settled
 )
 SELECT
     t.account_id,
@@ -70,35 +69,32 @@ SELECT
     ?,
     ?,
     ?,
-    0,
-    ?
+    UNIX_TIMESTAMP(),
+    0
 FROM tunnel t
 WHERE t.tunnel_id = ?
   AND t.cluster_id = ?
-  AND t.deleted = 0
-ON DUPLICATE KEY UPDATE
-    usage_bytes = GREATEST(usage_bytes, VALUES(usage_bytes)),
-    reported_at = GREATEST(reported_at, VALUES(reported_at));
+  AND t.deleted = 0;
 ```
 
-Selecting `account_id` from `tunnel` prevents a caller-supplied account mismatch. Gateway must verify that one row was inserted or updated and must not increment `billed_bytes`.
+The placeholders after `tunnel_id` are `session_id`, `usage_bytes`, and `reported_at`. Selecting account and cluster ownership from `tunnel` prevents caller-supplied ownership mismatches. Gateway retains the local byte count until this insert succeeds; a duplicate-key result is successful only for an exact retry.
 
-The scheduled Controller job runs every minute and uses a conditional update from the previously billed value to the observed cumulative value. Only the replica that wins that update adds the delta to `billing_period` and `billing_usage_1m`. A later larger cumulative report produces only another delta.
+Every minute Controller selects bounded local-Region batches where `settled = 0` using `FOR UPDATE SKIP LOCKED` until the current backlog is drained. It groups records by account, Tunnel, and `floor(reportedAt / 60)`, then updates `billing_period`, `billing_usage_1m`, and Tunnel usage before marking the selected records settled. Each batch shares one transaction: either every aggregate and marker commits, or all records remain available for retry. `SKIP LOCKED` lets multiple Controller replicas work without charging the same row twice.
 
 ## Quota Decisions
 
 Internally, the current balance is calculated as:
 
 ```text
-usedBytes = billing_period.billed_bytes
-          + SUM(tunnel_usage_window.usage_bytes - tunnel_usage_window.billed_bytes)
-
+usedBytes      = billing_period.billed_bytes
 remainingBytes = max(0, quotaBytes - usedBytes)
 ```
 
-Including pending bytes prevents the settlement delay from allowing new tokens after the known quota is exhausted.
+Balance and Gateway enforcement use settled monthly state. This intentionally accepts up to one settlement interval of delay in exchange for one consistent quota source.
 
 Existing JWTs remain valid cryptographically until expiration. Gateway must check quota when accepting a connection and disconnect active traffic when the shared account state is exhausted.
+
+Gateway may delete only `settled = 1` metering rows older than seven days, in small batches. The raw table is an operational audit buffer; `billing_usage_1m` and `billing_period` remain the durable billing results. Initial deployment uses indexes rather than table partitioning.
 
 ## Tunnel Runtime Status
 

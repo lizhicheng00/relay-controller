@@ -27,7 +27,7 @@ class BillingServiceTest {
     private BillingRepository billingRepository;
 
     @Test
-    void currentSnapshotIncludesUnsettledUsage() {
+    void currentSnapshotUsesSettledPeriodUsage() {
         BillingService service = service();
         stubAccountAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
@@ -36,26 +36,23 @@ class BillingServiceTest {
                 .quotaBytes(1000L)
                 .billedBytes(400L)
                 .build());
-        when(billingRepository.sumPendingUsage(eq(7L), anyLong(), anyLong())).thenReturn(250L);
-
         LimitSnapshot snapshot = service.currentSnapshot("ns-user-001");
 
-        assertThat(snapshot.usedBytes()).isEqualTo(650L);
-        assertThat(snapshot.remainingBytes()).isEqualTo(350L);
+        assertThat(snapshot.usedBytes()).isEqualTo(400L);
+        assertThat(snapshot.remainingBytes()).isEqualTo(600L);
         assertThat(snapshot.exhausted()).isFalse();
     }
 
     @Test
-    void tokenIssuanceIsRejectedAsSoonAsBilledAndPendingUsageReachQuota() {
+    void tokenIssuanceIsRejectedWhenSettledUsageReachesQuota() {
         BillingService service = service();
         stubAccountAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
                 .periodStart(1782864000L)
                 .periodEnd(1785542400L)
                 .quotaBytes(1000L)
-                .billedBytes(900L)
+                .billedBytes(1000L)
                 .build());
-        when(billingRepository.sumPendingUsage(eq(7L), anyLong(), anyLong())).thenReturn(100L);
 
         assertThatThrownBy(() -> service.assertTrafficAllowed("ns-user-001"))
                 .isInstanceOf(BizException.class)

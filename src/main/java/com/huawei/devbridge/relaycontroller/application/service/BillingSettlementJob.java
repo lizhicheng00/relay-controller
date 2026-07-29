@@ -1,6 +1,5 @@
 package com.huawei.devbridge.relaycontroller.application.service;
 
-import com.huawei.devbridge.relaycontroller.application.service.BillingSettlementService.SettlementResult;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,17 +18,15 @@ public class BillingSettlementJob {
         if (!relayProperties.getBilling().isSettlementEnabled()) {
             return;
         }
-        int settled = 0;
         int batchSize = Math.max(1, relayProperties.getBilling().getSettlementBatchSize());
-        for (int attempt = 0; attempt < batchSize; attempt++) {
-            SettlementResult result = settlementService.settleNext();
-            if (result != SettlementResult.SETTLED) {
-                break;
-            }
-            settled++;
-        }
-        if (settled > 0) {
-            log.info("Billing settlement completed: windows={}", settled);
+        long settledRecords = 0;
+        int settledBatch;
+        do {
+            settledBatch = settlementService.settleBatch(batchSize);
+            settledRecords += settledBatch;
+        } while (settledBatch == batchSize);
+        if (settledRecords > 0) {
+            log.info("Billing settlement completed: records={}", settledRecords);
         }
     }
 }

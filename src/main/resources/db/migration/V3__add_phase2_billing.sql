@@ -65,21 +65,21 @@ CREATE TABLE billing_period (
     PRIMARY KEY (account_id, period_start)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Monthly UTC billing period';
 
-CREATE TABLE tunnel_usage_window (
+CREATE TABLE tunnel_metering (
     _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
     account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id',
     cluster_id VARCHAR(128) NOT NULL COMMENT 'cluster identifier',
     tunnel_id VARCHAR(32) NOT NULL COMMENT 'base32 tunnel id',
     session_id VARCHAR(128) NOT NULL COMMENT 'host connection session id',
-    window_start BIGINT UNSIGNED NOT NULL COMMENT 'one-minute UTC window start',
-    usage_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'cumulative bytes in this window',
-    billed_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'bytes already settled',
-    reported_at BIGINT UNSIGNED NOT NULL COMMENT 'latest gateway report unix seconds',
+    usage_bytes BIGINT UNSIGNED NOT NULL COMMENT 'incremental bytes in this report',
+    reported_at BIGINT UNSIGNED NOT NULL COMMENT 'gateway report unix seconds',
+    created_at BIGINT UNSIGNED NOT NULL COMMENT 'database write unix seconds',
+    settled TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 pending, 1 settled',
     PRIMARY KEY (_id),
-    UNIQUE KEY uk_usage_tunnel_session_window (tunnel_id, session_id, window_start),
-    KEY idx_usage_account_window (account_id, window_start),
-    KEY idx_usage_cluster_unbilled (cluster_id, billed_bytes, window_start)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Gateway cumulative one-minute traffic window';
+    UNIQUE KEY uk_metering_report (tunnel_id, session_id, reported_at),
+    KEY idx_metering_settlement (settled, created_at, _id),
+    KEY idx_metering_account_reported (account_id, reported_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Gateway append-only traffic metering';
 
 CREATE TABLE billing_usage_1m (
     account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id',

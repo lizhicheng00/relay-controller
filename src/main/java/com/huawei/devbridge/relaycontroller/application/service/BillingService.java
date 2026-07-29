@@ -87,8 +87,7 @@ public class BillingService {
         if (period == null) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period unavailable");
         }
-        long pending = billingRepository.sumPendingUsage(account.getId(), range.start(), range.end());
-        long used = saturatedAdd(period.getBilledBytes(), pending);
+        long used = period.getBilledBytes();
         long remaining = Math.max(0, period.getQuotaBytes() - Math.min(period.getQuotaBytes(), used));
         return new LimitSnapshot(
                 account, plan, period, used, remaining, used >= period.getQuotaBytes());
@@ -122,13 +121,6 @@ public class BillingService {
         long start = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
         long end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
         return new PeriodRange(start, end);
-    }
-
-    private static long saturatedAdd(long left, long right) {
-        if (right > Long.MAX_VALUE - left) {
-            return Long.MAX_VALUE;
-        }
-        return left + right;
     }
 
     private record PeriodRange(long start, long end) {

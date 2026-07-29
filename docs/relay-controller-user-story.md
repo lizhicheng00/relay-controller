@@ -69,7 +69,7 @@ Gateway writes the latest Host activity directly to the shared runtime-status ta
 
 ## 5. Metering And Aging
 
-The phase-one compatibility endpoint accepts usage only for a local cluster and matching active tunnel. Phase-two Gateway billing instead writes idempotent cumulative one-minute windows directly to the shared database, and Relay Controller settles their unbilled deltas every minute.
+The phase-one compatibility endpoint accepts usage only for a local cluster and matching active tunnel. Phase-two Gateway billing instead appends idempotent incremental reports directly to the shared database, and Relay Controller settles each report once into one-minute and monthly totals.
 
 Expired tunnels remain recoverable for the configured retention period. The hourly cleanup job hard-deletes aged tunnel metadata and related port policies in bounded batches.
 

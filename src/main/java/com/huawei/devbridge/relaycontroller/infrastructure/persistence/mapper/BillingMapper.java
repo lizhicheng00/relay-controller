@@ -3,7 +3,8 @@ package com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
-import com.huawei.devbridge.relaycontroller.domain.model.UsageWindow;
+import com.huawei.devbridge.relaycontroller.domain.model.MeteringRecord;
+import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
 public interface BillingMapper {
@@ -29,17 +30,9 @@ public interface BillingMapper {
             @Param("accountId") Long accountId,
             @Param("periodStart") long periodStart);
 
-    long sumPendingUsage(
-            @Param("accountId") Long accountId,
-            @Param("periodStart") long periodStart,
-            @Param("periodEnd") long periodEnd);
-
-    UsageWindow selectNextUnbilledUsage(@Param("region") String region);
-
-    int advanceBilledBytes(
-            @Param("usageWindowId") Long usageWindowId,
-            @Param("expectedBilledBytes") long expectedBilledBytes,
-            @Param("expectedUsageBytes") long expectedUsageBytes);
+    List<MeteringRecord> selectUnsettledMeteringForUpdate(
+            @Param("region") String region,
+            @Param("limit") int limit);
 
     int increasePeriodUsage(
             @Param("accountId") Long accountId,
@@ -51,4 +44,6 @@ public interface BillingMapper {
             @Param("tunnelId") String tunnelId,
             @Param("windowStart") long windowStart,
             @Param("usageBytes") long usageBytes);
+
+    int markMeteringSettled(@Param("meteringIds") List<Long> meteringIds);
 }

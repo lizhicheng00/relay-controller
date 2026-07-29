@@ -9,11 +9,10 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UsageWindow {
+public class MeteringRecord {
     private Long id;
     private Long accountId;
     private String tunnelId;
-    private Long windowStart;
     private Long usageBytes;
-    private Long billedBytes;
+    private Long reportedAt;
 }

@@ -75,12 +75,12 @@ DEFAULT CHARACTER SET utf8mb4
 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the final phase-two schema: trial plans, namespace accounts, UTC monthly periods, one-minute usage and billing windows, runtime status, and the Tunnel account binding.
+Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the final phase-two schema: trial plans, namespace accounts, UTC monthly periods, append-only metering, one-minute billing aggregates, runtime status, and the Tunnel account binding.
 Because this consolidation happened before phase two was released, development databases that already applied the former V3-V5 sequence must be rebuilt or explicitly realigned; deployed migration history must not be rewritten after release.
 
-Gateway phase-two metering writes cumulative values directly to `tunnel_usage_window` every 30 seconds and at session end. The unique key is `(tunnel_id, session_id, window_start)`, where `window_start` is the UTC timestamp floored to one minute. Retries must use `GREATEST(existing, incoming)` rather than add the same report again. Relay Controller settles only the unbilled difference every minute, so retries and multiple Controller replicas do not double charge.
+Gateway phase-two metering appends incremental usage directly to `tunnel_metering` every 30 seconds and at session end. The unique key `(tunnel_id, session_id, reported_at)` makes an exact retry idempotent. Every minute Relay Controller locks an unsettled batch with `SKIP LOCKED`, updates monthly and one-minute totals, and marks the same records settled in one transaction.
 
-The existing `/metering` endpoint remains compatible with phase one but is not part of monthly billing. A Gateway must use either that legacy flow or the phase-two usage-window flow, never both. See [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md) for the database contract and ownership boundaries.
+The existing `/metering` endpoint remains compatible with phase one but is not part of monthly billing. A Gateway must use either that legacy flow or the phase-two direct-write flow, never both. See [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md) for the database contract and ownership boundaries.
 
 Database columns use snake_case for compound words, for example `tunnel_id`, `tunnel_code`, `cluster_id`, `bandwidth_used`, and `allow_anonymous`. Java fields remain camelCase and rely on MyBatis Plus underscore-to-camel mapping. The list-only `portCount` projection is explicitly marked as non-persistent.
 
