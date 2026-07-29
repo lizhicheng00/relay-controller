@@ -33,6 +33,21 @@ CREATE TABLE IF NOT EXISTS tunnel (
     KEY idx_namespace_deleted (namespace, deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Tunnel metadata';
 
+CREATE TABLE IF NOT EXISTS metering (
+    _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+    cluster_id VARCHAR(128) NOT NULL COMMENT 'cluster identifier',
+    tunnel_code BIGINT UNSIGNED NOT NULL COMMENT 'tunnel code',
+    tunnel_id VARCHAR(32) NOT NULL COMMENT 'base32 tunnel id',
+    usage_bytes BIGINT UNSIGNED NOT NULL COMMENT 'usage bytes',
+    reported_at BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'reported unix seconds',
+    created_at BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'created unix seconds',
+    PRIMARY KEY (_id),
+    KEY idx_cluster_id (cluster_id),
+    KEY idx_tunnel_id (tunnel_id),
+    KEY idx_tunnel_code (tunnel_code),
+    KEY idx_reported_at (reported_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Metering report';
+
 CREATE TABLE IF NOT EXISTS tunnel_port (
     _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
     tunnel_code BIGINT UNSIGNED NOT NULL COMMENT 'tunnel code',

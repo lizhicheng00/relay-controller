@@ -100,3 +100,5 @@ CREATE TABLE tunnel_runtime_status (
     PRIMARY KEY (tunnel_id),
     KEY idx_runtime_reported_at (reported_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Latest gateway tunnel runtime status';
+
+DROP TABLE IF EXISTS metering;
