@@ -23,7 +23,7 @@ Business rules:
 - tunnel URL is `{tunnelId}.{clusterId}.{relay.domain}`.
 - default expiration is 72 hours and the maximum is 720 hours.
 - create and update requests use `expiration`; tunnel responses return the inactivity window as `expirationHours` and its current Unix deadline as `tunnelExpiration`.
-- tunnel expiration is extended by successful tunnel or port changes, positive legacy metering, and active Gateway status.
+- tunnel expiration is extended by successful tunnel or port changes, positive legacy metering, and direct Gateway activity updates.
 - a namespace owns at most 10 active tunnels by default.
 - list returns only non-deleted, non-expired tunnels and includes `portCount`.
 - explicit delete physically removes tunnel metadata and its port policies.
@@ -65,11 +65,11 @@ There is no public delete-all port endpoint. Deleting a tunnel and the aging job
 
 Gateway reads a port policy using its `clusterId`. Relay Controller verifies that the cluster is local and that the tunnel belongs to it before returning the policy.
 
-Host connection activity is not reported to Relay Controller in this version. Read operations and token issuance do not extend the tunnel lifetime.
+Gateway writes the latest Host connection activity directly to the shared runtime-status table. Tunnel detail reads that state; read operations and token issuance do not extend the tunnel lifetime.
 
 ## 5. Metering And Aging
 
-The phase-one compatibility endpoint accepts usage only for a local cluster and matching active tunnel. Phase-two Gateway billing instead writes idempotent cumulative windows directly to the shared database.
+The phase-one compatibility endpoint accepts usage only for a local cluster and matching active tunnel. Phase-two Gateway billing instead writes idempotent cumulative one-minute windows directly to the shared database, and Relay Controller settles their unbilled deltas every minute.
 
 Expired tunnels remain recoverable for the configured retention period. The hourly cleanup job hard-deletes aged tunnel metadata and related port policies in bounded batches.
 

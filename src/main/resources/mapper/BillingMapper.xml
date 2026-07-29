@@ -95,8 +95,8 @@
           AND period_start = #{periodStart}
     </update>
 
-    <insert id="increaseTenMinuteUsage">
-        INSERT INTO billing_usage_10m (account_id, tunnel_id, window_start, usage_bytes)
+    <insert id="increaseMinuteUsage">
+        INSERT INTO billing_usage_1m (account_id, tunnel_id, window_start, usage_bytes)
         VALUES (#{accountId}, #{tunnelId}, #{windowStart}, #{usageBytes})
         ON DUPLICATE KEY UPDATE
             usage_bytes = usage_bytes + VALUES(usage_bytes)

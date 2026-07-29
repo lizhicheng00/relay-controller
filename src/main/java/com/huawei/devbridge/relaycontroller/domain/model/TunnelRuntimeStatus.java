@@ -10,10 +10,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TunnelRuntimeStatus {
-    private String tunnelId;
-    private String clusterId;
-    private String gatewayId;
-    private String sessionId;
     private Integer hostConnections;
     private Integer clientConnections;
     private Integer channelCount;

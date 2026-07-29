@@ -28,5 +28,5 @@ public interface BillingRepository {
 
     boolean increasePeriodUsage(Long accountId, long periodStart, long usageBytes);
 
-    void increaseTenMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes);
+    void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes);
 }

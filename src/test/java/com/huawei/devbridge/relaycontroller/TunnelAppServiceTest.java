@@ -23,10 +23,12 @@ import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtScope;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtToken;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
+import com.huawei.devbridge.relaycontroller.domain.model.TunnelRuntimeStatus;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelType;
 import com.huawei.devbridge.relaycontroller.domain.repository.ClusterRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelPortRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
+import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRuntimeStatusRepository;
 import com.huawei.devbridge.relaycontroller.domain.service.JwtTokenService;
 import com.huawei.devbridge.relaycontroller.domain.service.NamespaceService;
 import com.huawei.devbridge.relaycontroller.domain.service.TunnelCodeGenerator;
@@ -35,6 +37,7 @@ import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayPropertie
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
 import java.util.List;
@@ -54,6 +57,8 @@ class TunnelAppServiceTest {
     @Mock
     private TunnelPortRepository tunnelPortRepository;
     @Mock
+    private TunnelRuntimeStatusRepository tunnelRuntimeStatusRepository;
+    @Mock
     private BillingService billingService;
 
     @Test
@@ -68,6 +73,7 @@ class TunnelAppServiceTest {
                 jwtTokenService,
                 new TunnelDomainService(),
                 tunnelPortRepository,
+                tunnelRuntimeStatusRepository,
                 properties,
                 billingService);
         when(billingService.lockAccountForQuota("ns-user-001")).thenReturn(accountPlan());
@@ -183,6 +189,7 @@ class TunnelAppServiceTest {
                 jwtTokenService,
                 new TunnelDomainService(),
                 tunnelPortRepository,
+                tunnelRuntimeStatusRepository,
                 properties,
                 billingService);
         CreateTunnelRequest request = new CreateTunnelRequest();
@@ -287,6 +294,35 @@ class TunnelAppServiceTest {
         List<TunnelListItemResponse> response = service.listTunnels("ns-user-001", null);
 
         assertThat(response).isEmpty();
+    }
+
+    @Test
+    void tunnelDetailIncludesLatestRuntimeStatus() {
+        TunnelAppService service = newService(new RelayProperties());
+        Tunnel tunnel = Tunnel.builder()
+                .tunnelId("aaaadysa")
+                .namespace("ns-user-001")
+                .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 3600))
+                .build();
+        TunnelRuntimeStatus status = TunnelRuntimeStatus.builder()
+                .hostConnections(1)
+                .clientConnections(2)
+                .channelCount(3)
+                .uploadBytesPerSecond(1024L)
+                .downloadBytesPerSecond(2048L)
+                .reportedAt(1720000000L)
+                .build();
+        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRuntimeStatusRepository.findByTunnelId("aaaadysa")).thenReturn(status);
+
+        TunnelDetailResponse response = service.getTunnelDetail("ns-user-001", "aaaadysa");
+
+        assertThat(response.getHostConnections()).isEqualTo(1);
+        assertThat(response.getClientConnections()).isEqualTo(2);
+        assertThat(response.getChannelCount()).isEqualTo(3);
+        assertThat(response.getUploadBytesPerSecond()).isEqualTo(1024L);
+        assertThat(response.getDownloadBytesPerSecond()).isEqualTo(2048L);
+        assertThat(response.getStatusReportedAt()).isEqualTo(1720000000L);
     }
 
     @Test
@@ -397,6 +433,7 @@ class TunnelAppServiceTest {
                 jwtTokenService,
                 new TunnelDomainService(),
                 tunnelPortRepository,
+                tunnelRuntimeStatusRepository,
                 properties,
                 billingService);
     }

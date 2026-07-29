@@ -17,4 +17,10 @@ public class TunnelDetailResponse {
     private Long created;
     private String url;
     private String type;
+    private Integer hostConnections;
+    private Integer clientConnections;
+    private Integer channelCount;
+    private Long uploadBytesPerSecond;
+    private Long downloadBytesPerSecond;
+    private Long statusReportedAt;
 }

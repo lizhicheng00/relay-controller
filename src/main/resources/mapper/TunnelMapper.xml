@@ -25,19 +25,6 @@
         FOR UPDATE
     </select>
 
-    <select id="selectByTunnelIdsAndRegion"
-            resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
-        SELECT t.*
-        FROM tunnel t
-        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
-        WHERE c.region = #{region}
-          AND t.deleted = 0
-          AND t.tunnel_id IN
-        <foreach collection="tunnelIds" item="tunnelId" open="(" separator="," close=")">
-            #{tunnelId}
-        </foreach>
-    </select>
-
     <select id="selectByNamespaceAndRegion"
             resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
         SELECT t.*
@@ -104,14 +91,4 @@
           AND t.expiration &gt; #{activityAt}
     </update>
 
-    <update id="refreshExpirationFromHeartbeat">
-        UPDATE tunnel t
-        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
-        SET t.expiration = #{activityAt} + t.expiration_hours * 3600
-        WHERE t.tunnel_id = #{tunnelId}
-          AND c.region = #{region}
-          AND t.deleted = 0
-          AND t.expiration &gt; #{activityAt}
-          AND t.expiration &lt; #{activityAt} + t.expiration_hours * 3600 - #{minimumExtensionSeconds}
-    </update>
 </mapper>

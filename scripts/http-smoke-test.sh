@@ -51,9 +51,7 @@ request "12 list ports" GET "$API_BASE/tunnels/$TUNNEL_ID/ports" "" yes
 request "13 get port" GET "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
 request "14 update port" PUT "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "{\"allowAnonymous\":true}" yes
 request "15 gateway port policy" GET "$API_BASE/clusters/$CLUSTER_ID/tunnels/$TUNNEL_ID/ports/8080"
-request "16 gateway status" POST "$API_BASE/clusters/$CLUSTER_ID/tunnels/status" \
-  "{\"gatewayId\":\"gateway-smoke\",\"reportedAt\":$(date +%s),\"tunnels\":[{\"tunnelId\":\"$TUNNEL_ID\",\"sessionId\":\"session-smoke\",\"hostConnections\":1,\"clientConnections\":1,\"channelCount\":1,\"uploadBytesPerSecond\":1024,\"downloadBytesPerSecond\":2048}]}"
-request "17 delete port" DELETE "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
-request "18 delete tunnel" DELETE "$API_BASE/tunnels/$TUNNEL_ID" "" yes
-request "19 delete tunnels" DELETE "$API_BASE/tunnels" "" yes
-request "20 openapi yaml" GET "$BASE_URL/openapi.yaml"
+request "16 delete port" DELETE "$API_BASE/tunnels/$TUNNEL_ID/ports/8080" "" yes
+request "17 delete tunnel" DELETE "$API_BASE/tunnels/$TUNNEL_ID" "" yes
+request "18 delete tunnels" DELETE "$API_BASE/tunnels" "" yes
+request "19 openapi yaml" GET "$BASE_URL/openapi.yaml"

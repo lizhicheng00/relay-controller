@@ -12,6 +12,7 @@ import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelType;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelPortRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
+import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRuntimeStatusRepository;
 import com.huawei.devbridge.relaycontroller.domain.service.JwtTokenService;
 import com.huawei.devbridge.relaycontroller.domain.service.NamespaceService;
 import com.huawei.devbridge.relaycontroller.domain.service.TunnelCodeGenerator;
@@ -43,6 +44,7 @@ public class TunnelAppService {
     private final JwtTokenService jwtTokenService;
     private final TunnelDomainService tunnelDomainService;
     private final TunnelPortRepository tunnelPortRepository;
+    private final TunnelRuntimeStatusRepository tunnelRuntimeStatusRepository;
     private final RelayProperties relayProperties;
     private final BillingService billingService;
 
@@ -97,7 +99,8 @@ public class TunnelAppService {
     public TunnelDetailResponse getTunnelDetail(String rawNamespace, String tunnelId) {
         Tunnel tunnel = findOwnedTunnel(rawNamespace, tunnelId);
         tunnelDomainService.assertNotExpired(tunnel);
-        return TunnelAssembler.toDetailResponse(tunnel);
+        return TunnelAssembler.toDetailResponse(
+                tunnel, tunnelRuntimeStatusRepository.findByTunnelId(tunnelId));
     }
 
     public TunnelTokenResponse issueToken(

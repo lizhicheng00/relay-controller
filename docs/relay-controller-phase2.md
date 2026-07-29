@@ -7,9 +7,9 @@ Relay Controller owns:
 - namespace account and trial plan;
 - monthly quota state;
 - Tunnel and Port metadata quotas;
-- ten-minute usage settlement;
+- one-minute usage settlement;
 - `GET /limits`;
-- Gateway tunnel status ingestion and control decisions;
+- Tunnel detail runtime status;
 - quota checks during token issuance.
 
 Relay Gateway owns:
@@ -18,6 +18,8 @@ Relay Gateway owns:
 - one-Host Redis lock;
 - bandwidth, HTTP request, and connection token buckets;
 - cumulative usage-window writes and shutdown flush;
+- latest runtime-status writes;
+- active Tunnel expiration refresh;
 - immediate admission and disconnect execution.
 
 CLI echo, ping, random port allocation, verbose logging, and local HTTP request printing are not Relay Controller code.
@@ -40,10 +42,10 @@ Monthly periods use UTC and are immutable rows. A new `billing_period` is create
 
 ## Gateway Usage Contract
 
-Gateway writes one cumulative row for each Host session and ten-minute window. It writes every 30 seconds and once more when the session closes.
+Gateway writes one cumulative row for each Host session and one-minute window. It writes every 30 seconds and once more when the session closes.
 
 ```text
-windowStart = floor(reportTimestamp / 600) * 600
+windowStart = floor(reportTimestamp / 60) * 60
 unique key  = tunnelId + sessionId + windowStart
 usageBytes  = cumulative bytes within that window
 ```
@@ -81,7 +83,7 @@ ON DUPLICATE KEY UPDATE
 
 Selecting `account_id` from `tunnel` prevents a caller-supplied account mismatch. Gateway must verify that one row was inserted or updated and must not increment `billed_bytes`.
 
-The scheduled Controller job uses a conditional update from the previously billed value to the observed cumulative value. Only the replica that wins that update adds the delta to `billing_period` and `billing_usage_10m`. A later larger cumulative report produces only another delta.
+The scheduled Controller job runs every minute and uses a conditional update from the previously billed value to the observed cumulative value. Only the replica that wins that update adds the delta to `billing_period` and `billing_usage_1m`. A later larger cumulative report produces only another delta.
 
 ## Quota Decisions
 
@@ -94,26 +96,15 @@ usedBytes = billing_period.billed_bytes
 remainingBytes = max(0, quotaBytes - usedBytes)
 ```
 
-Including pending bytes prevents a ten-minute settlement delay from allowing new tokens after the known quota is exhausted.
+Including pending bytes prevents the settlement delay from allowing new tokens after the known quota is exhausted.
 
-Existing JWTs remain valid cryptographically until expiration. Gateway must check quota when accepting a connection and obey `disconnect` from the next status response. A ten-second heartbeat still permits a small overrun, so strict byte-level cutoff belongs in Gateway.
+Existing JWTs remain valid cryptographically until expiration. Gateway must check quota when accepting a connection and disconnect active traffic when the shared account state is exhausted.
 
-## Tunnel Status
+## Tunnel Runtime Status
 
-Gateway calls:
+Gateway writes the latest runtime state directly to `tunnel_runtime_status`, using `tunnel_id` as the key. The write must verify that the Tunnel belongs to the reporting cluster and update connection counts, rates, and `reported_at` only when the incoming timestamp is not older than the stored value. Controller only reads this table and exposes Host/client connections, channel count, current rates, and `statusReportedAt` in Tunnel detail.
 
-```text
-POST /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/status
-```
-
-The batch reports Host/client connections, channel count, current rates, session ID, and report time. Controller stores only the latest row per Tunnel and returns:
-
-- `keep` for an active, funded Tunnel;
-- `disconnect` for missing, mismatched, expired, disabled, over-quota, or over-Host-limit state;
-- current remaining bytes and data-plane limits when the account is available;
-- `nextReportInSeconds=10`.
-
-Status telemetry is operational state, not billing truth. Active status extends Tunnel inactivity expiration with a five-minute write granularity.
+Status telemetry is operational state, not billing truth. While a Tunnel has an active Host session, Gateway must also conditionally move `tunnel.expiration` forward using its configured `expiration_hours`, with a five-minute write granularity. Gateway owns quota, one-Host, bandwidth, HTTP, and connection enforcement; there is no Controller status callback or control-decision response.
 
 ## Cookie Token
 

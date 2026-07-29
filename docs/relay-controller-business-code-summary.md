@@ -5,7 +5,7 @@
 The project uses a small layered structure:
 
 - `interfaces`: generated OpenAPI contracts, controllers, request/response models, rate limiting;
-- `application`: tunnel, port, account limits, settlement, status, metering compatibility, cluster, and cleanup workflows;
+- `application`: tunnel, port, account limits, settlement, metering compatibility, cluster, and cleanup workflows;
 - `domain`: business models, enums, repositories, and validation services;
 - `infrastructure`: MySQL persistence, JWT signing, and configuration.
 
@@ -56,7 +56,7 @@ Create and update use the `TunnelProtocol` enum from request through persistence
 
 ### Tunnel Activity
 
-Successful tunnel and port changes refresh `tunnelExpiration`. Positive legacy traffic reports also refresh it. Active Gateway status refreshes it with a five-minute write granularity. Reads, zero-usage reports, and token issuance do not refresh it.
+Successful tunnel and port changes refresh `tunnelExpiration`. Positive legacy traffic reports also refresh it. Gateway directly refreshes active Tunnel expiration with a five-minute write granularity. Reads, zero-usage reports, and token issuance do not refresh it.
 
 ## 4. API Summary
 
@@ -78,14 +78,13 @@ DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 GET    /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}
 POST   /open-api-inner/v1/relay-controller/clusters/{clusterId}/metering
 GET    /open-api-inner/v1/relay-controller/limits
-POST   /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/status
 ```
 
 ## 5. Persistence And Lifecycle
 
-Flyway `V1` creates the phase-one tables. `V3` adds plans, accounts, UTC monthly periods, cumulative usage windows, ten-minute bills, runtime status, and the Tunnel account binding. Compound database names use snake_case while Java fields use camelCase.
+Flyway `V1` creates the phase-one tables. `V3` adds plans, accounts, UTC monthly periods, cumulative usage windows, billing details, runtime status, and the Tunnel account binding. `V5` changes usage and billing windows to one minute. Compound database names use snake_case while Java fields use camelCase.
 
-Tunnel expiration is refreshed by meaningful configuration changes, positive legacy metering, and active Gateway status. Tunnel and related Port rows are physically deleted by explicit deletion; the scheduled cleanup also removes aged Tunnel rows after retention.
+Tunnel expiration is refreshed by meaningful configuration changes, positive legacy metering, and direct Gateway activity updates. Tunnel and related Port rows are physically deleted by explicit deletion; the scheduled cleanup also removes aged Tunnel rows after retention.
 
 ## 6. Runtime Configuration
 
@@ -103,4 +102,4 @@ mTLS additionally requires the server keystore and client-CA truststore variable
 
 ## 7. Verification
 
-Tests cover API mappings and errors, database-scoped metadata quotas, monthly balance, idempotent settlement claims, status decisions, expiration handling, token claims and uniqueness, port protocol behavior, rate limiting, metering compatibility, and aged tunnel cleanup.
+Tests cover API mappings and errors, database-scoped metadata quotas, monthly balance, idempotent settlement claims, runtime detail, expiration handling, token claims and uniqueness, port protocol behavior, rate limiting, metering compatibility, and aged tunnel cleanup.

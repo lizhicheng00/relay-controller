@@ -70,7 +70,7 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public void increaseTenMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes) {
-        billingMapper.increaseTenMinuteUsage(accountId, tunnelId, windowStart, usageBytes);
+    public void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes) {
+        billingMapper.increaseMinuteUsage(accountId, tunnelId, windowStart, usageBytes);
     }
 }

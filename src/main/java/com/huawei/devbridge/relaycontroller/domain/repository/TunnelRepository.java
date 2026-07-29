@@ -8,8 +8,6 @@ public interface TunnelRepository {
 
     Tunnel findByTunnelIdAndRegionForUpdate(String tunnelId, String region);
 
-    List<Tunnel> findByTunnelIdsAndRegion(List<String> tunnelIds, String region);
-
     List<Tunnel> findByNamespaceAndRegion(String namespace, String region);
 
     List<Tunnel> findActiveByNamespaceAndRegion(String namespace, String clusterId, String region, long now);
@@ -27,9 +25,6 @@ public interface TunnelRepository {
     void update(Tunnel tunnel);
 
     void refreshExpiration(String tunnelId, String region, long activityAt);
-
-    void refreshExpirationFromHeartbeat(
-            String tunnelId, String region, long activityAt, int minimumExtensionSeconds);
 
     boolean deleteAgedByTunnelId(String tunnelId, long expirationCutoff);
 

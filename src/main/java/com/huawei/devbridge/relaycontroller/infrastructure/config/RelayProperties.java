@@ -43,12 +43,9 @@ public class RelayProperties {
         private String defaultPlanCode = "trial";
         private boolean enforcementEnabled = true;
         private boolean settlementEnabled = true;
-        private String settlementCron = "0 */10 * * * *";
+        private String settlementCron = "0 * * * * *";
         private int settlementBatchSize = 500;
-        private int statusReportIntervalSeconds = 10;
-        private int activityRefreshIntervalSeconds = 300;
         private int statusRetentionSeconds = 86400;
-        private int statusMaxClockSkewSeconds = 300;
     }
 
     @Data

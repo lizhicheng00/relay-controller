@@ -41,7 +41,7 @@ public class BillingSettlementService {
         if (!billingRepository.increasePeriodUsage(window.getAccountId(), period.getPeriodStart(), delta)) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period update failed");
         }
-        billingRepository.increaseTenMinuteUsage(
+        billingRepository.increaseMinuteUsage(
                 window.getAccountId(), window.getTunnelId(), window.getWindowStart(), delta);
         tunnelRepository.increaseBandwidthUsed(window.getTunnelId(), relayProperties.getRegion(), delta, now);
         return SettlementResult.SETTLED;

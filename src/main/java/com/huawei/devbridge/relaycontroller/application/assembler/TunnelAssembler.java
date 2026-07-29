@@ -1,6 +1,7 @@
 package com.huawei.devbridge.relaycontroller.application.assembler;
 
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
+import com.huawei.devbridge.relaycontroller.domain.model.TunnelRuntimeStatus;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelType;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
@@ -26,8 +27,9 @@ public final class TunnelAssembler {
                 .build();
     }
 
-    public static TunnelDetailResponse toDetailResponse(Tunnel tunnel) {
-        return TunnelDetailResponse.builder()
+    public static TunnelDetailResponse toDetailResponse(
+            Tunnel tunnel, TunnelRuntimeStatus runtimeStatus) {
+        TunnelDetailResponse.TunnelDetailResponseBuilder builder = TunnelDetailResponse.builder()
                 .name(tunnel.getName())
                 .tunnelId(tunnel.getTunnelId())
                 .tunnelCode(tunnel.getTunnelCode())
@@ -38,8 +40,16 @@ public final class TunnelAssembler {
                 .tunnelExpiration(tunnelExpiration(tunnel))
                 .created(tunnel.getCreatedAt())
                 .url(tunnel.getUrl())
-                .type(typeValue(tunnel))
-                .build();
+                .type(typeValue(tunnel));
+        if (runtimeStatus != null) {
+            builder.hostConnections(runtimeStatus.getHostConnections())
+                    .clientConnections(runtimeStatus.getClientConnections())
+                    .channelCount(runtimeStatus.getChannelCount())
+                    .uploadBytesPerSecond(runtimeStatus.getUploadBytesPerSecond())
+                    .downloadBytesPerSecond(runtimeStatus.getDownloadBytesPerSecond())
+                    .statusReportedAt(runtimeStatus.getReportedAt());
+        }
+        return builder.build();
     }
 
     public static TunnelListItemResponse toListItem(Tunnel tunnel) {

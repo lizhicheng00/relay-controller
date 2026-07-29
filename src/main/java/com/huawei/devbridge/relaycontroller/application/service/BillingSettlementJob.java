@@ -14,7 +14,7 @@ public class BillingSettlementJob {
     private final BillingSettlementService settlementService;
     private final RelayProperties relayProperties;
 
-    @Scheduled(cron = "${relay.billing.settlement-cron:0 */10 * * * *}", zone = "UTC")
+    @Scheduled(cron = "${relay.billing.settlement-cron:0 * * * * *}", zone = "UTC")
     public void settleUsage() {
         if (!relayProperties.getBilling().isSettlementEnabled()) {
             return;

@@ -49,13 +49,6 @@ public class BillingService {
     }
 
     @Transactional
-    public LimitSnapshot currentSnapshot(Long accountId) {
-        return snapshot(
-                requireAccount(billingRepository.lockAccountById(accountId)),
-                TimeUtils.nowSeconds());
-    }
-
-    @Transactional
     public BillingPeriod ensurePeriod(Long accountId, long timestamp) {
         BillingAccount account = requireAccount(billingRepository.lockAccountById(accountId));
         BillingPlan plan = requirePlan(account.getPlanCode());

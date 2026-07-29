@@ -11,7 +11,6 @@ tags:
   - name: Tunnel Port
   - name: Gateway Tunnel Port
   - name: Limits
-  - name: Gateway Tunnel Status
 paths:
   /open-api-inner/v1/relay-controller/tunnels:
     post:
@@ -179,29 +178,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LimitsResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/status:
-    post:
-      tags: [Gateway Tunnel Status]
-      summary: Report gateway tunnel status and fetch control decisions
-      description: Runtime telemetry is not billing data. Gateway must enforce returned disconnect decisions and limits.
-      operationId: reportTunnelStatus
-      parameters:
-        - $ref: '#/components/parameters/ClusterIdPath'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TunnelStatusReportRequest'
-      responses:
-        '200':
-          description: Per-tunnel control decisions and data-plane limits.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TunnelStatusReportResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
   /open-api-inner/v1/relay-controller/clusters/{clusterId}/metering:
@@ -506,6 +482,33 @@ components:
     TunnelDetailResponse:
       allOf:
         - $ref: '#/components/schemas/Tunnel'
+        - type: object
+          properties:
+            hostConnections:
+              type: integer
+              format: int32
+              minimum: 0
+            clientConnections:
+              type: integer
+              format: int32
+              minimum: 0
+            channelCount:
+              type: integer
+              format: int32
+              minimum: 0
+            uploadBytesPerSecond:
+              type: integer
+              format: int64
+              minimum: 0
+            downloadBytesPerSecond:
+              type: integer
+              format: int64
+              minimum: 0
+            statusReportedAt:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Latest Gateway runtime status time as Unix seconds.
     Tunnel:
       type: object
       properties:
@@ -647,118 +650,6 @@ components:
         maxPortsPerTunnel:
           type: integer
           format: int32
-        maxHostsPerTunnel:
-          type: integer
-          format: int32
-        maxTunnelBandwidthBytesPerSecond:
-          type: integer
-          format: int64
-        maxHttpRequestsPerMinutePerPort:
-          type: integer
-          format: int32
-        maxConnectionsPerPort:
-          type: integer
-          format: int32
-    TunnelStatusReportRequest:
-      type: object
-      required: [gatewayId, reportedAt, tunnels]
-      properties:
-        gatewayId:
-          type: string
-          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
-        reportedAt:
-          type: integer
-          format: int64
-          minimum: 0
-        tunnels:
-          type: array
-          maxItems: 500
-          items:
-            $ref: '#/components/schemas/TunnelStatusItemRequest'
-    TunnelStatusItemRequest:
-      type: object
-      required:
-        - tunnelId
-        - hostConnections
-        - clientConnections
-        - channelCount
-        - uploadBytesPerSecond
-        - downloadBytesPerSecond
-      properties:
-        tunnelId:
-          type: string
-          pattern: '^[a-z2-7]{8}$'
-        sessionId:
-          type: string
-          maxLength: 128
-          description: Required when hostConnections is greater than zero.
-        hostConnections:
-          type: integer
-          format: int32
-          minimum: 0
-        clientConnections:
-          type: integer
-          format: int32
-          minimum: 0
-        channelCount:
-          type: integer
-          format: int32
-          minimum: 0
-        uploadBytesPerSecond:
-          type: integer
-          format: int64
-          minimum: 0
-        downloadBytesPerSecond:
-          type: integer
-          format: int64
-          minimum: 0
-    TunnelStatusReportResponse:
-      type: object
-      required: [nextReportInSeconds, tunnels]
-      properties:
-        nextReportInSeconds:
-          type: integer
-          format: int32
-          minimum: 1
-          example: 10
-        tunnels:
-          type: array
-          items:
-            $ref: '#/components/schemas/TunnelStatusDecisionResponse'
-    TunnelStatusDecisionResponse:
-      type: object
-      required: [tunnelId, action, reason]
-      properties:
-        tunnelId:
-          type: string
-          pattern: '^[a-z2-7]{8}$'
-        action:
-          type: string
-          enum: [keep, disconnect]
-        reason:
-          type: string
-          enum:
-            - none
-            - tunnel_not_found
-            - cluster_mismatch
-            - tunnel_expired
-            - account_unavailable
-            - account_disabled
-            - quota_exceeded
-            - host_limit_exceeded
-        remainingBytes:
-          type: integer
-          format: int64
-        limits:
-          $ref: '#/components/schemas/DataPlaneLimitsResponse'
-    DataPlaneLimitsResponse:
-      type: object
-      required:
-        - maxHostsPerTunnel
-        - maxTunnelBandwidthBytesPerSecond
-        - maxHttpRequestsPerMinutePerPort
-        - maxConnectionsPerPort
-      properties:
         maxHostsPerTunnel:
           type: integer
           format: int32

@@ -80,9 +80,6 @@ relay:
     default-plan-code: trial
     enforcement-enabled: true
     settlement-enabled: true
-    settlement-cron: "0 */10 * * * *"
+    settlement-cron: "0 * * * * *"
     settlement-batch-size: 500
-    status-report-interval-seconds: 10
-    activity-refresh-interval-seconds: 300
     status-retention-seconds: 86400
-    status-max-clock-skew-seconds: 300

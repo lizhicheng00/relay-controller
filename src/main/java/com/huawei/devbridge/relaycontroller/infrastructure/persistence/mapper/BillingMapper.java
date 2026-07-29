@@ -46,7 +46,7 @@ public interface BillingMapper {
             @Param("periodStart") long periodStart,
             @Param("usageBytes") long usageBytes);
 
-    int increaseTenMinuteUsage(
+    int increaseMinuteUsage(
             @Param("accountId") Long accountId,
             @Param("tunnelId") String tunnelId,
             @Param("windowStart") long windowStart,

@@ -3,7 +3,6 @@ package com.huawei.devbridge.relaycontroller.infrastructure.persistence.reposito
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelRuntimeStatus;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRuntimeStatusRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.persistence.mapper.TunnelRuntimeStatusMapper;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -13,10 +12,8 @@ public class TunnelRuntimeStatusRepositoryImpl implements TunnelRuntimeStatusRep
     private final TunnelRuntimeStatusMapper mapper;
 
     @Override
-    public void upsertAll(List<TunnelRuntimeStatus> statuses) {
-        if (!statuses.isEmpty()) {
-            mapper.upsertAll(statuses);
-        }
+    public TunnelRuntimeStatus findByTunnelId(String tunnelId) {
+        return mapper.selectByTunnelId(tunnelId);
     }
 
     @Override

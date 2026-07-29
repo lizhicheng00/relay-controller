@@ -59,7 +59,7 @@ class BillingSettlementServiceTest {
 
         assertThat(result).isEqualTo(SettlementResult.SETTLED);
         verify(billingRepository).increasePeriodUsage(eq(7L), eq(1782864000L), eq(600L));
-        verify(billingRepository).increaseTenMinuteUsage(
+        verify(billingRepository).increaseMinuteUsage(
                 eq(7L),
                 eq("aaaadysa"),
                 eq(1785206400L),
@@ -118,7 +118,7 @@ class BillingSettlementServiceTest {
                 .extracting(exception -> ((BizException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.INTERNAL_ERROR);
         verify(billingRepository, never())
-                .increaseTenMinuteUsage(anyLong(), anyString(), anyLong(), anyLong());
+                .increaseMinuteUsage(anyLong(), anyString(), anyLong(), anyLong());
         verify(tunnelRepository, never()).increaseBandwidthUsed(anyString(), anyString(), anyLong(), anyLong());
     }
 }

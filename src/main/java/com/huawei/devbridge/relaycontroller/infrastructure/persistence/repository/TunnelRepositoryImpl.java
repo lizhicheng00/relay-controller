@@ -27,16 +27,6 @@ public class TunnelRepositoryImpl implements TunnelRepository {
     }
 
     @Override
-    public List<Tunnel> findByTunnelIdsAndRegion(List<String> tunnelIds, String region) {
-        if (tunnelIds.isEmpty()) {
-            return List.of();
-        }
-        return tunnelMapper.selectByTunnelIdsAndRegion(tunnelIds, region).stream()
-                .map(converter::toDomain)
-                .toList();
-    }
-
-    @Override
     public List<Tunnel> findByNamespaceAndRegion(String namespace, String region) {
         return tunnelMapper.selectByNamespaceAndRegion(namespace, region).stream()
                 .map(converter::toDomain)
@@ -90,13 +80,6 @@ public class TunnelRepositoryImpl implements TunnelRepository {
     @Override
     public void refreshExpiration(String tunnelId, String region, long activityAt) {
         tunnelMapper.refreshExpiration(tunnelId, region, activityAt);
-    }
-
-    @Override
-    public void refreshExpirationFromHeartbeat(
-            String tunnelId, String region, long activityAt, int minimumExtensionSeconds) {
-        tunnelMapper.refreshExpirationFromHeartbeat(
-                tunnelId, region, activityAt, minimumExtensionSeconds);
     }
 
     @Override

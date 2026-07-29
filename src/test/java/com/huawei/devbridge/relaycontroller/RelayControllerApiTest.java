@@ -16,7 +16,6 @@ import com.huawei.devbridge.relaycontroller.application.service.MeteringAppServi
 import com.huawei.devbridge.relaycontroller.application.service.LimitsAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelPortAppService;
-import com.huawei.devbridge.relaycontroller.application.service.TunnelStatusAppService;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.exception.GlobalExceptionHandler;
@@ -24,7 +23,6 @@ import com.huawei.devbridge.relaycontroller.interfaces.controller.MeteringContro
 import com.huawei.devbridge.relaycontroller.interfaces.controller.LimitsController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelPortController;
-import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelStatusController;
 import com.huawei.devbridge.relaycontroller.interfaces.config.TokenCacheControlAdvice;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelRequest;
@@ -33,18 +31,13 @@ import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortR
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
-import com.huawei.devbridge.relaycontroller.interfaces.response.DataPlaneLimitsResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.MeteringReportResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
-import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusDecisionResponse;
-import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelStatusReportResponse;
 import com.huawei.devbridge.relaycontroller.domain.model.JwtScope;
-import com.huawei.devbridge.relaycontroller.domain.model.TunnelControlAction;
-import com.huawei.devbridge.relaycontroller.domain.model.TunnelControlReason;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelProtocol;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,8 +67,6 @@ class RelayControllerApiTest {
     private TunnelPortAppService tunnelPortAppService;
     @Mock
     private LimitsAppService limitsAppService;
-    @Mock
-    private TunnelStatusAppService tunnelStatusAppService;
 
     @BeforeEach
     void setUp() {
@@ -83,8 +74,7 @@ class RelayControllerApiTest {
                         new TunnelController(tunnelAppService),
                         new MeteringController(meteringAppService),
                         new TunnelPortController(tunnelPortAppService),
-                        new LimitsController(limitsAppService),
-                        new TunnelStatusController(tunnelStatusAppService))
+                        new LimitsController(limitsAppService))
                 .setControllerAdvice(new GlobalExceptionHandler(), new TokenCacheControlAdvice())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter())
                 .defaultRequest(get("/").accept(MediaType.APPLICATION_JSON))
@@ -236,6 +226,12 @@ class RelayControllerApiTest {
                 .tunnelExpiration(1722592000L)
                 .url("aaaadysa.cluster-a.myhuaweicloud.com")
                 .type("bridge")
+                .hostConnections(1)
+                .clientConnections(2)
+                .channelCount(3)
+                .uploadBytesPerSecond(1024L)
+                .downloadBytesPerSecond(2048L)
+                .statusReportedAt(1720000000L)
                 .build());
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
@@ -245,6 +241,12 @@ class RelayControllerApiTest {
                 .andExpect(jsonPath("$.clusterId").value(CLUSTER_ID))
                 .andExpect(jsonPath("$.expirationHours").value(720))
                 .andExpect(jsonPath("$.tunnelExpiration").value(1722592000L))
+                .andExpect(jsonPath("$.hostConnections").value(1))
+                .andExpect(jsonPath("$.clientConnections").value(2))
+                .andExpect(jsonPath("$.channelCount").value(3))
+                .andExpect(jsonPath("$.uploadBytesPerSecond").value(1024L))
+                .andExpect(jsonPath("$.downloadBytesPerSecond").value(2048L))
+                .andExpect(jsonPath("$.statusReportedAt").value(1720000000L))
                 .andExpect(jsonPath("$.expiresAt").doesNotExist())
                 .andExpect(jsonPath("$.jwt").doesNotExist());
     }
@@ -323,51 +325,6 @@ class RelayControllerApiTest {
                 .andExpect(jsonPath("$.pendingBytes").doesNotExist())
                 .andExpect(jsonPath("$.maxTunnels").value(10))
                 .andExpect(jsonPath("$.maxConnectionsPerPort").value(100));
-    }
-
-    @Test
-    void reportTunnelStatusApi() throws Exception {
-        when(tunnelStatusAppService.report(eq(CLUSTER_ID), any()))
-                .thenReturn(TunnelStatusReportResponse.builder()
-                        .nextReportInSeconds(10)
-                        .tunnels(List.of(TunnelStatusDecisionResponse.builder()
-                                .tunnelId(TUNNEL_ID)
-                                .action(TunnelControlAction.KEEP)
-                                .reason(TunnelControlReason.NONE)
-                                .remainingBytes(4096L)
-                                .limits(DataPlaneLimitsResponse.builder()
-                                        .maxHostsPerTunnel(1)
-                                        .maxTunnelBandwidthBytesPerSecond(5242880L)
-                                        .maxHttpRequestsPerMinutePerPort(500)
-                                        .maxConnectionsPerPort(100)
-                                        .build())
-                                .build()))
-                        .build());
-
-        mockMvc.perform(post(BASE + "/clusters/{clusterId}/tunnels/status", CLUSTER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "gatewayId": "gateway-a",
-                                  "reportedAt": 1785225600,
-                                  "tunnels": [
-                                    {
-                                      "tunnelId": "aaaadysa",
-                                      "sessionId": "session-a",
-                                      "hostConnections": 1,
-                                      "clientConnections": 2,
-                                      "channelCount": 3,
-                                      "uploadBytesPerSecond": 1024,
-                                      "downloadBytesPerSecond": 2048
-                                    }
-                                  ]
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nextReportInSeconds").value(10))
-                .andExpect(jsonPath("$.tunnels[0].action").value("keep"))
-                .andExpect(jsonPath("$.tunnels[0].reason").value("none"))
-                .andExpect(jsonPath("$.tunnels[0].limits.maxHostsPerTunnel").value(1));
     }
 
     @Test
