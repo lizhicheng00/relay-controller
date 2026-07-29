@@ -2,7 +2,7 @@
 
 ## 1. Service Boundary
 
-Relay Controller is the control plane for one configured region. It owns tunnel metadata, tunnel port policies, JWT issuance, and metering records. Relay Gateway owns traffic forwarding and runtime connection state.
+Relay Controller is the control plane for one configured region. It owns tunnel metadata, tunnel port policies, JWT issuance, and billing settlement. Relay Gateway owns traffic forwarding, metering writes, and runtime connection state.
 
 All user-facing APIs are scoped by `X-Namespace`. A tunnel is usable only when its cluster belongs to the controller's configured region and the tunnel has not expired.
 
@@ -23,7 +23,7 @@ Business rules:
 - tunnel URL is `{tunnelId}.{clusterId}.{relay.domain}`.
 - default expiration is 72 hours and the maximum is 720 hours.
 - create and update requests use `expiration`; tunnel responses return the inactivity window as `expirationHours` and its current Unix deadline as `tunnelExpiration`.
-- tunnel expiration is extended by successful tunnel or port changes, positive legacy metering, and direct Gateway activity updates.
+- tunnel expiration is extended by successful tunnel or port changes and direct Gateway activity updates.
 - a namespace owns at most 10 active tunnels by default.
 - list returns only non-deleted, non-expired tunnels and includes `portCount`.
 - explicit delete physically removes tunnel metadata and its port policies.
@@ -67,16 +67,16 @@ Gateway reads a port policy using its `clusterId`. Relay Controller verifies tha
 
 Gateway writes the latest Host activity directly to the shared runtime-status table. Tunnel detail returns it as a `status` object containing Host connection count, client connection count measured as active SSH channels, current upload/download rates, and report time. Read operations and token issuance do not extend the tunnel lifetime.
 
-## 5. Metering And Aging
+## 5. Billing And Aging
 
-The phase-one compatibility endpoint accepts usage only for a local cluster and matching active tunnel. Phase-two Gateway billing instead appends idempotent incremental reports directly to the shared database, and Relay Controller settles each report once into one-minute and monthly totals.
+Gateway appends idempotent incremental usage directly to the shared database. Relay Controller settles each report once into one-minute and monthly totals; it does not expose a metering HTTP endpoint.
 
 Expired tunnels remain recoverable for the configured retention period. The hourly cleanup job hard-deletes aged tunnel metadata and related port policies in bounded batches.
 
 ## 6. Acceptance Criteria
 
 - Namespace and region boundaries are enforced before returning or mutating business data.
-- Concurrent tunnel creation cannot exceed the namespace quota inside one controller instance.
+- Concurrent tunnel creation cannot exceed the namespace quota across Controller replicas sharing the database.
 - Invalid request values return 4xx responses; unexpected failures return 5xx responses.
 - OpenAPI YAML is the source of controller mappings and Maven compilation generates the API interfaces.
 - Relay Controller itself does not depend on Redis. Gateway uses Redis for the distributed single-Host lock.

@@ -95,7 +95,7 @@ public class GlobalExceptionHandler {
 
     private static HttpStatus statusOf(ErrorCode errorCode) {
         return switch (errorCode) {
-            case PARAM_INVALID, TUNNEL_PORT_INVALID, METERING_REPORT_FAILED -> HttpStatus.BAD_REQUEST;
+            case PARAM_INVALID, TUNNEL_PORT_INVALID -> HttpStatus.BAD_REQUEST;
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case TUNNEL_ACCESS_DENIED, TUNNEL_PORT_ACCESS_DENIED, ACCOUNT_DISABLED -> HttpStatus.FORBIDDEN;
             case CLUSTER_NOT_FOUND, TUNNEL_NOT_FOUND, TUNNEL_PORT_NOT_FOUND -> HttpStatus.NOT_FOUND;

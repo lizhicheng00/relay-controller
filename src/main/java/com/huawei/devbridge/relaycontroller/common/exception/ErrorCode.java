@@ -25,8 +25,6 @@ public enum ErrorCode {
     JWT_GENERATE_FAILED("30001", "jwt generate failed"),
     JWT_KEY_INVALID("30002", "jwt key invalid"),
 
-    METERING_REPORT_FAILED("40001", "metering report failed"),
-
     RATE_LIMITED("42900", "rate limited"),
 
     INTERNAL_ERROR("50000", "internal error");

@@ -30,7 +30,6 @@ DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
 POST   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/token?scope=host|connect
 GET    /open-api-inner/v1/relay-controller/limits
 
-POST   /open-api-inner/v1/relay-controller/clusters/{clusterId}/metering
 POST   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
 GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
 GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
@@ -40,13 +39,13 @@ GET    /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelI
 ```
 
 Namespace-scoped APIs read `X-Namespace` directly and store it as the tunnel namespace.
-Each Relay Controller instance owns one configured region. Set `RELAY_REGION`; tunnel, port, and metering operations only accept clusters found under that local region. Set `RELAY_DOMAIN` to the tunnel URL suffix.
+Each Relay Controller instance owns one configured region. Set `RELAY_REGION`; tunnel and port operations only accept clusters found under that local region. Set `RELAY_DOMAIN` to the tunnel URL suffix.
 Tunnel `type` is restricted to `bridge` or `env`; blank create requests default to `bridge`.
 Tunnel `expiration` in create and update requests is the allowed inactivity duration in hours. Blank create requests default to 72 hours. Tunnel responses expose that window as `expirationHours` and the current Unix expiration time as `tunnelExpiration`; clients can derive a live countdown from `tunnelExpiration`.
-Successful tunnel or port changes refresh `tunnelExpiration`. Positive legacy metering reports also refresh it. Gateway directly maintains active Tunnel expiration with a five-minute write granularity. Reads and token issuance do not refresh expiration.
+Successful tunnel or port changes refresh `tunnelExpiration`. Gateway directly maintains active Tunnel expiration with a five-minute write granularity. Reads and token issuance do not refresh expiration.
 Tunnel `tunnelCode` is a 40-bit `long`; `tunnelId` is the fixed 8-character lowercase base32 encoding of that 40-bit value.
 Tunnel URL format is `{tunnelId}.{clusterId}.{relay.domain}`.
-Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, port, and metering operations reject expired tunnels; expired records are physically removed after the configured retention period.
+Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, and port operations reject expired tunnels; expired records are physically removed after the configured retention period.
 The seeded `trial` plan gives each namespace 5 GiB per UTC calendar month, at most 10 active tunnels, and at most 10 ports per tunnel. Tunnel and port creation serialize on database rows, so replicas sharing the database cannot exceed those metadata quotas through concurrent requests. Deleted and expired tunnels do not count against the tunnel quota.
 `GET /limits` returns the monthly quota balance, reset time, current tunnel count, and enforceable plan limits. Request context, internal plan identifiers, and values derivable from the balance are not repeated. Tunnel detail includes a `status` object with the latest Host connection count, SSH-channel connection count, rates, and report time written by Gateway.
 
@@ -56,7 +55,7 @@ The optional `forCookies=true` query marks `delivery=cookie`; it does not encryp
 Tunnel port APIs manage the explicit per-port allow list for a tunnel. Each port declares `protocol` as `http`, `https`, or `auto`. Unconfigured ports are denied by default. `allowAnonymous` only controls sending-side access to that port; listening-side gateway connection still requires token authentication.
 The gateway port policy API keeps `clusterId` in the path intentionally. Gateway callers use it as their cluster scope, and Relay Controller verifies the tunnel belongs to that cluster before returning the port policy.
 
-Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress. Cluster-scoped metering compatibility and policy calls are not put behind this low user limit.
+Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress. The cluster-scoped Gateway policy call is not put behind this low user limit.
 
 OpenAPI is maintained as YAML at `src/main/resources/static/openapi.yaml`. Maven uses this YAML during `generate-sources` to generate Spring API interfaces under `target/generated-sources/openapi`; controllers implement those generated interfaces and do not declare request mappings by hand.
 The same YAML is served directly as a static resource:
@@ -80,7 +79,7 @@ Because this consolidation happened before phase two was released, development d
 
 Gateway phase-two metering appends incremental usage directly to `tunnel_metering` every 30 seconds and at session end. The unique key `(tunnel_id, session_id, reported_at)` makes an exact retry idempotent. Every minute Relay Controller locks an unsettled batch with `SKIP LOCKED`, updates monthly and one-minute totals, and marks the same records settled in one transaction.
 
-The existing `/metering` endpoint remains compatible with phase one but is not part of monthly billing. A Gateway must use either that legacy flow or the phase-two direct-write flow, never both. See [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md) for the database contract and ownership boundaries.
+There is no metering HTTP endpoint. Gateway writes phase-two usage directly to the shared database according to [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md).
 
 Database columns use snake_case for compound words, for example `tunnel_id`, `tunnel_code`, `cluster_id`, `bandwidth_used`, and `allow_anonymous`. Java fields remain camelCase and rely on MyBatis Plus underscore-to-camel mapping. The list-only `portCount` projection is explicitly marked as non-persistent.
 

@@ -107,7 +107,3 @@ Status telemetry is operational state, not billing truth. While a Tunnel has an 
 `forCookies=true` adds `delivery=cookie` to the same signed JWT. It does not use private-key encryption. The component serving the user-facing domain sets the token cookie with `Secure`, `HttpOnly`, and an appropriate `SameSite` and domain policy.
 
 The JWT audience is `relay-gateway`. Gateway must validate `aud`, signature, expiration, Tunnel, cluster, scope, and delivery policy.
-
-## Compatibility
-
-Phase-one APIs and response bodies remain available. The old `/clusters/{clusterId}/metering` endpoint is not included in monthly settlement. Gateway must not report the same traffic through both mechanisms.

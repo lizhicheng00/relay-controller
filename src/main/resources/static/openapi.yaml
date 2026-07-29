@@ -7,7 +7,6 @@ servers:
   - url: https://localhost:8443
 tags:
   - name: Tunnel
-  - name: Metering
   - name: Tunnel Port
   - name: Gateway Tunnel Port
   - name: Limits
@@ -178,28 +177,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LimitsResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /open-api-inner/v1/relay-controller/clusters/{clusterId}/metering:
-    post:
-      tags: [Metering]
-      summary: Report tunnel traffic usage
-      operationId: reportMetering
-      parameters:
-        - $ref: '#/components/parameters/ClusterIdPath'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MeteringReportRequest'
-      responses:
-        '200':
-          description: Metering acceptance result.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeteringReportResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports:
@@ -438,22 +415,6 @@ components:
         type:
           type: string
           enum: [bridge, env]
-    MeteringReportRequest:
-      type: object
-      required: [tunnelCode, tunnelId, usage]
-      properties:
-        tunnelCode:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 1099511627775
-        tunnelId:
-          type: string
-          pattern: '^[a-z2-7]{8}$'
-        usage:
-          type: integer
-          format: int64
-          minimum: 0
     CreateTunnelPortRequest:
       type: object
       required: [port, protocol, allowAnonymous]
@@ -587,11 +548,6 @@ components:
           type: integer
           format: int64
           minimum: 0
-    MeteringReportResponse:
-      type: object
-      properties:
-        accepted:
-          type: boolean
     TunnelTokenResponse:
       type: object
       required: [tunnelId, scope, lifetime, expiration, token]

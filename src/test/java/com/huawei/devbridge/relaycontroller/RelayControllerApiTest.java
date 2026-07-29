@@ -12,27 +12,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.huawei.devbridge.relaycontroller.application.service.MeteringAppService;
 import com.huawei.devbridge.relaycontroller.application.service.LimitsAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelPortAppService;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.exception.GlobalExceptionHandler;
-import com.huawei.devbridge.relaycontroller.interfaces.controller.MeteringController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.LimitsController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelPortController;
 import com.huawei.devbridge.relaycontroller.interfaces.config.TokenCacheControlAdvice;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelRequest;
-import com.huawei.devbridge.relaycontroller.interfaces.request.MeteringReportRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse;
-import com.huawei.devbridge.relaycontroller.interfaces.response.MeteringReportResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
@@ -63,8 +59,6 @@ class RelayControllerApiTest {
     @Mock
     private TunnelAppService tunnelAppService;
     @Mock
-    private MeteringAppService meteringAppService;
-    @Mock
     private TunnelPortAppService tunnelPortAppService;
     @Mock
     private LimitsAppService limitsAppService;
@@ -73,7 +67,6 @@ class RelayControllerApiTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
                         new TunnelController(tunnelAppService),
-                        new MeteringController(meteringAppService),
                         new TunnelPortController(tunnelPortAppService),
                         new LimitsController(limitsAppService))
                 .setControllerAdvice(new GlobalExceptionHandler(), new TokenCacheControlAdvice())
@@ -382,40 +375,6 @@ class RelayControllerApiTest {
                         .header("X-Namespace", NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").value(true));
-    }
-
-    @Test
-    void reportMeteringApi() throws Exception {
-        when(meteringAppService.report(eq(CLUSTER_ID), any(MeteringReportRequest.class)))
-                .thenReturn(MeteringReportResponse.builder().accepted(true).build());
-
-        mockMvc.perform(post(BASE + "/clusters/{clusterId}/metering", CLUSTER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "tunnelCode": 123456,
-                                  "tunnelId": "aaaadysa",
-                                  "usage": 1024
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accepted").value(true));
-    }
-
-    @Test
-    void reportMeteringWithInvalidTunnelIdReturnsParamInvalid() throws Exception {
-        mockMvc.perform(post(BASE + "/clusters/{clusterId}/metering", CLUSTER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "tunnelCode": 123456,
-                                  "tunnelId": "not-valid",
-                                  "usage": 1024
-                                }
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("40000"))
-                .andExpect(jsonPath("$.error.details[0].target").value("tunnelId"));
     }
 
     @Test

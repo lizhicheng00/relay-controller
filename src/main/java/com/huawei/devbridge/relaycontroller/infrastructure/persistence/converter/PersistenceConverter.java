@@ -1,11 +1,9 @@
 package com.huawei.devbridge.relaycontroller.infrastructure.persistence.converter;
 
 import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
-import com.huawei.devbridge.relaycontroller.domain.model.Metering;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelPort;
 import com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.ClusterEntity;
-import com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.MeteringEntity;
 import com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity;
 import com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelPortEntity;
 import org.mapstruct.Mapper;
@@ -21,6 +19,4 @@ public interface PersistenceConverter {
     TunnelPort toDomain(TunnelPortEntity entity);
 
     TunnelPortEntity toEntity(TunnelPort tunnelPort);
-
-    MeteringEntity toEntity(Metering metering);
 }

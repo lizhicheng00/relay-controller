@@ -213,13 +213,11 @@
                             <importMappings>
                                 <importMapping>CreateTunnelRequest=com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelRequest</importMapping>
                                 <importMapping>UpdateTunnelRequest=com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest</importMapping>
-                                <importMapping>MeteringReportRequest=com.huawei.devbridge.relaycontroller.interfaces.request.MeteringReportRequest</importMapping>
                                 <importMapping>CreateTunnelPortRequest=com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest</importMapping>
                                 <importMapping>UpdateTunnelPortRequest=com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest</importMapping>
                                 <importMapping>CreateTunnelResponse=com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse</importMapping>
                                 <importMapping>TunnelDetailResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse</importMapping>
                                 <importMapping>TunnelListItemResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse</importMapping>
-                                <importMapping>MeteringReportResponse=com.huawei.devbridge.relaycontroller.interfaces.response.MeteringReportResponse</importMapping>
                                 <importMapping>TunnelPortResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse</importMapping>
                                 <importMapping>GatewayTunnelPortPolicyResponse=com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse</importMapping>
                                 <importMapping>TunnelTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse</importMapping>
@@ -229,13 +227,11 @@
                             <schemaMappings>
                                 <schemaMapping>CreateTunnelRequest=com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelRequest</schemaMapping>
                                 <schemaMapping>UpdateTunnelRequest=com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest</schemaMapping>
-                                <schemaMapping>MeteringReportRequest=com.huawei.devbridge.relaycontroller.interfaces.request.MeteringReportRequest</schemaMapping>
                                 <schemaMapping>CreateTunnelPortRequest=com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest</schemaMapping>
                                 <schemaMapping>UpdateTunnelPortRequest=com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest</schemaMapping>
                                 <schemaMapping>CreateTunnelResponse=com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse</schemaMapping>
                                 <schemaMapping>TunnelDetailResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse</schemaMapping>
                                 <schemaMapping>TunnelListItemResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse</schemaMapping>
-                                <schemaMapping>MeteringReportResponse=com.huawei.devbridge.relaycontroller.interfaces.response.MeteringReportResponse</schemaMapping>
                                 <schemaMapping>TunnelPortResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse</schemaMapping>
                                 <schemaMapping>GatewayTunnelPortPolicyResponse=com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse</schemaMapping>
                                 <schemaMapping>TunnelTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse</schemaMapping>
