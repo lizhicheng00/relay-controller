@@ -5,5 +5,5 @@ import com.huawei.devbridge.relaycontroller.domain.model.TunnelRuntimeStatus;
 public interface TunnelRuntimeStatusRepository {
     TunnelRuntimeStatus findByTunnelId(String tunnelId);
 
-    int deleteStale(long reportedBefore);
+    void deleteByTunnelId(String tunnelId);
 }

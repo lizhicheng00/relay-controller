@@ -40,11 +40,10 @@ public class TunnelCleanupJob {
         for (Tunnel tunnel : agedTunnels) {
             if (tunnelRepository.deleteAgedByTunnelId(tunnel.getTunnelId(), expirationCutoff)) {
                 tunnelPortRepository.deleteByTunnelCode(tunnel.getTunnelCode());
+                statusRepository.deleteByTunnelId(tunnel.getTunnelId());
                 deleted++;
             }
         }
-        long statusRetention = Math.max(0, relayProperties.getBilling().getStatusRetentionSeconds());
-        statusRepository.deleteStale(now - statusRetention);
         if (deleted > 0) {
             log.info("Aged tunnels deleted: region={}, count={}", relayProperties.getRegion(), deleted);
         }

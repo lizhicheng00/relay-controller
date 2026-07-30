@@ -6,5 +6,5 @@ import org.apache.ibatis.annotations.Param;
 public interface TunnelRuntimeStatusMapper {
     TunnelRuntimeStatus selectByTunnelId(@Param("tunnelId") String tunnelId);
 
-    int deleteStale(@Param("reportedBefore") long reportedBefore);
+    void deleteByTunnelId(@Param("tunnelId") String tunnelId);
 }

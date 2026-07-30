@@ -346,7 +346,7 @@ class TunnelAppServiceTest {
     }
 
     @Test
-    void deleteTunnelCleansTunnelPorts() {
+    void deleteTunnelCleansRelatedState() {
         TunnelAppService service = newService(new RelayProperties());
         Tunnel tunnel = Tunnel.builder()
                 .tunnelId("aaaadysa")
@@ -362,6 +362,7 @@ class TunnelAppServiceTest {
 
         assertThat(deleted).isTrue();
         verify(tunnelPortRepository).deleteByTunnelCode(123456L);
+        verify(tunnelRuntimeStatusRepository).deleteByTunnelId("aaaadysa");
         verify(tunnelRepository).deleteByTunnelId("aaaadysa");
     }
 
@@ -383,6 +384,7 @@ class TunnelAppServiceTest {
 
         assertThat(deleted).isTrue();
         verify(tunnelPortRepository).deleteByTunnelCode(123456L);
+        verify(tunnelRuntimeStatusRepository).deleteByTunnelId("aaaadysa");
         verify(tunnelRepository).deleteByTunnelId("aaaadysa");
     }
 

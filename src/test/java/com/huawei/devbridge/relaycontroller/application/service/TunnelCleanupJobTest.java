@@ -46,7 +46,7 @@ class TunnelCleanupJobTest {
         assertThat(deleted).isEqualTo(1);
         verify(tunnelRepository).deleteAgedByTunnelId("aaaadysa", EXPIRATION_CUTOFF);
         verify(tunnelPortRepository).deleteByTunnelCode(123456L);
-        verify(statusRepository).deleteStale(NOW - 86400L);
+        verify(statusRepository).deleteByTunnelId("aaaadysa");
     }
 
     @Test
@@ -66,5 +66,6 @@ class TunnelCleanupJobTest {
 
         assertThat(deleted).isZero();
         verify(tunnelPortRepository, never()).deleteByTunnelCode(123456L);
+        verify(statusRepository, never()).deleteByTunnelId("aaaadysa");
     }
 }

@@ -83,7 +83,7 @@ GET    /open-api-inner/v1/relay-controller/limits
 
 Flyway `V1` creates the phase-one tables. The consolidated `V3` adds the final phase-two plans, accounts, UTC monthly periods, one-minute usage and billing windows, runtime status, and the Tunnel account binding. Compound database names use snake_case while Java fields use camelCase.
 
-Tunnel expiration is refreshed by meaningful configuration changes and direct Gateway activity updates. Tunnel and related Port rows are physically deleted by explicit deletion; the scheduled cleanup also removes aged Tunnel rows after retention.
+Tunnel expiration is refreshed by meaningful configuration changes and direct Gateway activity updates. Explicit deletion removes the Tunnel, its Port rows, and runtime status in one transaction; scheduled cleanup does the same for aged Tunnels.
 
 ## 6. Runtime Configuration
 

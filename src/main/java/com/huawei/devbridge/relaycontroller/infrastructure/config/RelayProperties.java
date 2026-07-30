@@ -45,7 +45,6 @@ public class RelayProperties {
         private boolean settlementEnabled = true;
         private String settlementCron = "0 * * * * *";
         private int settlementBatchSize = 500;
-        private int statusRetentionSeconds = 86400;
     }
 
     @Data

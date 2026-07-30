@@ -82,4 +82,3 @@ relay:
     settlement-enabled: true
     settlement-cron: "0 * * * * *"
     settlement-batch-size: 500
-    status-retention-seconds: 86400

@@ -134,6 +134,7 @@ public class TunnelAppService {
     public Boolean deleteTunnel(String rawNamespace, String tunnelId) {
         Tunnel tunnel = findOwnedTunnelForUpdate(rawNamespace, tunnelId);
         tunnelPortRepository.deleteByTunnelCode(tunnel.getTunnelCode());
+        tunnelRuntimeStatusRepository.deleteByTunnelId(tunnelId);
         tunnelRepository.deleteByTunnelId(tunnelId);
         log.info("Tunnel deleted: tunnelId={}, tunnelCode={}, namespace={}",
                 tunnel.getTunnelId(), tunnel.getTunnelCode(), tunnel.getNamespace());
@@ -153,6 +154,7 @@ public class TunnelAppService {
             }
             tunnelDomainService.assertOwnedBy(locked, namespace);
             tunnelPortRepository.deleteByTunnelCode(locked.getTunnelCode());
+            tunnelRuntimeStatusRepository.deleteByTunnelId(locked.getTunnelId());
             tunnelRepository.deleteByTunnelId(locked.getTunnelId());
             deleted++;
         }

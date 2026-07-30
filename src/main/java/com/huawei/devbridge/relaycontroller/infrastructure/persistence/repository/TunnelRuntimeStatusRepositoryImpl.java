@@ -17,7 +17,7 @@ public class TunnelRuntimeStatusRepositoryImpl implements TunnelRuntimeStatusRep
     }
 
     @Override
-    public int deleteStale(long reportedBefore) {
-        return mapper.deleteStale(reportedBefore);
+    public void deleteByTunnelId(String tunnelId) {
+        mapper.deleteByTunnelId(tunnelId);
     }
 }
