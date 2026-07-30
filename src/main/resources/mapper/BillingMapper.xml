@@ -62,14 +62,12 @@
                m.tunnel_id,
                m.usage_bytes,
                m.reported_at
-        FROM tunnel_metering m
+        FROM tunnel_metering m FORCE INDEX (idx_metering_settlement)
         WHERE m.settled = 0
-          AND EXISTS (
-              SELECT 1
-              FROM cluster c
-              WHERE c.cluster_id = m.cluster_id
-                AND c.region = #{region}
-          )
+          AND m.cluster_id IN
+        <foreach collection="clusterIds" item="clusterId" open="(" separator="," close=")">
+            #{clusterId}
+        </foreach>
         ORDER BY m.created_at ASC, m._id ASC
         LIMIT #{limit}
         FOR UPDATE SKIP LOCKED

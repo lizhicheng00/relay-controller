@@ -49,17 +49,10 @@ public class BillingService {
     }
 
     @Transactional
-    public BillingPeriod ensurePeriod(Long accountId, long timestamp) {
+    public void ensurePeriod(Long accountId, long timestamp) {
         BillingAccount account = requireAccount(billingRepository.lockAccountById(accountId));
         BillingPlan plan = requirePlan(account.getPlanCode());
-        PeriodRange range = periodRange(timestamp);
-        billingRepository.createPeriodIfAbsent(
-                accountId, range.start(), range.end(), plan.getMonthlyQuotaBytes());
-        BillingPeriod period = billingRepository.findPeriod(accountId, range.start());
-        if (period == null) {
-            throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period unavailable");
-        }
-        return period;
+        getOrCreatePeriod(account.getId(), plan, timestamp);
     }
 
     @Transactional
@@ -80,17 +73,22 @@ public class BillingService {
 
     private LimitSnapshot snapshot(BillingAccount account, long now) {
         BillingPlan plan = requirePlan(account.getPlanCode());
-        PeriodRange range = periodRange(now);
-        billingRepository.createPeriodIfAbsent(
-                account.getId(), range.start(), range.end(), plan.getMonthlyQuotaBytes());
-        BillingPeriod period = billingRepository.findPeriod(account.getId(), range.start());
-        if (period == null) {
-            throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period unavailable");
-        }
+        BillingPeriod period = getOrCreatePeriod(account.getId(), plan, now);
         long used = period.getBilledBytes();
         long remaining = Math.max(0, period.getQuotaBytes() - Math.min(period.getQuotaBytes(), used));
         return new LimitSnapshot(
                 account, plan, period, used, remaining, used >= period.getQuotaBytes());
+    }
+
+    private BillingPeriod getOrCreatePeriod(Long accountId, BillingPlan plan, long timestamp) {
+        PeriodRange range = periodRange(timestamp);
+        billingRepository.createPeriodIfAbsent(
+                accountId, range.start(), range.end(), plan.getMonthlyQuotaBytes());
+        BillingPeriod period = billingRepository.findPeriod(accountId, range.start());
+        if (period == null) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period unavailable");
+        }
+        return period;
     }
 
     private static BillingAccount requireAccount(BillingAccount account) {
@@ -114,6 +112,10 @@ public class BillingService {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "billing plan unavailable");
         }
         return plan;
+    }
+
+    static long periodStart(long timestamp) {
+        return periodRange(timestamp).start();
     }
 
     private static PeriodRange periodRange(long timestamp) {

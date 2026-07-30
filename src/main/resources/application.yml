@@ -22,6 +22,10 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
     validate-on-migrate: true
+  task:
+    scheduling:
+      pool:
+        size: 2
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
   type-aliases-package: com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity

@@ -6,7 +6,7 @@ import java.util.List;
 public interface TunnelRepository {
     Tunnel findByTunnelIdAndRegion(String tunnelId, String region);
 
-    Tunnel findByTunnelIdAndRegionForUpdate(String tunnelId, String region);
+    Tunnel findByTunnelIdAndClustersForUpdate(String tunnelId, List<String> clusterIds);
 
     List<Tunnel> findByNamespaceAndRegion(String namespace, String region);
 

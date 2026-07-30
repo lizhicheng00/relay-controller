@@ -6,6 +6,7 @@ import com.huawei.devbridge.relaycontroller.common.validation.IdentifierValidato
 import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
 import com.huawei.devbridge.relaycontroller.domain.repository.ClusterRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,5 +25,9 @@ public class LocalClusterService {
             throw new BizException(ErrorCode.CLUSTER_NOT_FOUND);
         }
         return cluster;
+    }
+
+    public List<String> localClusterIds() {
+        return clusterRepository.findIdsByRegion(relayProperties.getRegion());
     }
 }

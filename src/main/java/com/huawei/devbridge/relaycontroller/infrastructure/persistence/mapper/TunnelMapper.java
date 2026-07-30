@@ -10,9 +10,9 @@ public interface TunnelMapper extends BaseMapper<TunnelEntity> {
             @Param("tunnelId") String tunnelId,
             @Param("region") String region);
 
-    TunnelEntity selectByTunnelIdAndRegionForUpdate(
+    TunnelEntity selectByTunnelIdAndClustersForUpdate(
             @Param("tunnelId") String tunnelId,
-            @Param("region") String region);
+            @Param("clusterIds") List<String> clusterIds);
 
     List<TunnelEntity> selectByNamespaceAndRegion(
             @Param("namespace") String namespace,

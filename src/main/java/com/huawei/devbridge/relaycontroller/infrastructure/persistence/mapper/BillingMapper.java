@@ -31,7 +31,7 @@ public interface BillingMapper {
             @Param("periodStart") long periodStart);
 
     List<MeteringRecord> selectUnsettledMeteringForUpdate(
-            @Param("region") String region,
+            @Param("clusterIds") List<String> clusterIds,
             @Param("limit") int limit);
 
     int increasePeriodUsage(

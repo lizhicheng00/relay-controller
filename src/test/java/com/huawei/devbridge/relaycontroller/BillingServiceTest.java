@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.huawei.devbridge.relaycontroller.application.service.BillingService;
@@ -16,6 +17,7 @@ import com.huawei.devbridge.relaycontroller.domain.model.LimitSnapshot;
 import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
 import com.huawei.devbridge.relaycontroller.domain.service.NamespaceService;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -86,6 +88,35 @@ class BillingServiceTest {
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ACCOUNT_DISABLED);
+    }
+
+    @Test
+    void createsPeriodUsingUtcMonthBoundaries() {
+        BillingService service = service();
+        long julyStart = Instant.parse("2026-07-01T00:00:00Z").getEpochSecond();
+        long augustStart = Instant.parse("2026-08-01T00:00:00Z").getEpochSecond();
+        BillingAccount account = BillingAccount.builder()
+                .id(7L)
+                .planCode("trial")
+                .status("active")
+                .build();
+        BillingPlan plan = BillingPlan.builder()
+                .planCode("trial")
+                .monthlyQuotaBytes(1000L)
+                .build();
+        BillingPeriod period = BillingPeriod.builder()
+                .periodStart(julyStart)
+                .periodEnd(augustStart)
+                .quotaBytes(1000L)
+                .billedBytes(0L)
+                .build();
+        when(billingRepository.lockAccountById(7L)).thenReturn(account);
+        when(billingRepository.findPlanByCode("trial")).thenReturn(plan);
+        when(billingRepository.findPeriod(7L, julyStart)).thenReturn(period);
+
+        service.ensurePeriod(7L, Instant.parse("2026-07-31T23:59:59Z").getEpochSecond());
+
+        verify(billingRepository).createPeriodIfAbsent(7L, julyStart, augustStart, 1000L);
     }
 
     private BillingService service() {

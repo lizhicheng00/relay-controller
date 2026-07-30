@@ -13,14 +13,16 @@
         LIMIT 1
     </select>
 
-    <select id="selectByTunnelIdAndRegionForUpdate"
+    <select id="selectByTunnelIdAndClustersForUpdate"
             resultType="com.huawei.devbridge.relaycontroller.infrastructure.persistence.entity.TunnelEntity">
-        SELECT t.*
-        FROM tunnel t
-        INNER JOIN cluster c ON c.cluster_id = t.cluster_id
-        WHERE t.tunnel_id = #{tunnelId}
-          AND c.region = #{region}
-          AND t.deleted = 0
+        SELECT *
+        FROM tunnel
+        WHERE tunnel_id = #{tunnelId}
+          AND cluster_id IN
+        <foreach collection="clusterIds" item="clusterId" open="(" separator="," close=")">
+            #{clusterId}
+        </foreach>
+          AND deleted = 0
         LIMIT 1
         FOR UPDATE
     </select>

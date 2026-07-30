@@ -147,8 +147,7 @@ public class TunnelAppService {
         List<Tunnel> tunnels = tunnelRepository.findByNamespaceAndRegion(namespace, relayProperties.getRegion());
         int deleted = 0;
         for (Tunnel tunnel : tunnels) {
-            Tunnel locked = tunnelRepository.findByTunnelIdAndRegionForUpdate(
-                    tunnel.getTunnelId(), relayProperties.getRegion());
+            Tunnel locked = lockLocalTunnel(tunnel.getTunnelId());
             if (locked == null) {
                 continue;
             }
@@ -218,9 +217,16 @@ public class TunnelAppService {
 
     private Tunnel findOwnedTunnelForUpdate(String rawNamespace, String tunnelId) {
         String namespace = namespaceService.requireNamespace(rawNamespace);
-        Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegionForUpdate(tunnelId, relayProperties.getRegion());
+        Tunnel tunnel = lockLocalTunnel(tunnelId);
         tunnelDomainService.assertOwnedBy(tunnel, namespace);
         return tunnel;
+    }
+
+    private Tunnel lockLocalTunnel(String tunnelId) {
+        List<String> clusterIds = localClusterService.localClusterIds();
+        return clusterIds.isEmpty()
+                ? null
+                : tunnelRepository.findByTunnelIdAndClustersForUpdate(tunnelId, clusterIds);
     }
 
     private TunnelExpiration resolveExpiration(Integer expirationHours, long now) {

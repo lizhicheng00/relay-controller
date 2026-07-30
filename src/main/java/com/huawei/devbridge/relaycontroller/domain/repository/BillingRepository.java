@@ -21,7 +21,7 @@ public interface BillingRepository {
 
     BillingPeriod findPeriod(Long accountId, long periodStart);
 
-    List<MeteringRecord> lockUnsettledMetering(String region, int limit);
+    List<MeteringRecord> lockUnsettledMetering(List<String> clusterIds, int limit);
 
     boolean increasePeriodUsage(Long accountId, long periodStart, long usageBytes);
 

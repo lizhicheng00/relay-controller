@@ -22,8 +22,8 @@ public class TunnelRepositoryImpl implements TunnelRepository {
     }
 
     @Override
-    public Tunnel findByTunnelIdAndRegionForUpdate(String tunnelId, String region) {
-        return converter.toDomain(tunnelMapper.selectByTunnelIdAndRegionForUpdate(tunnelId, region));
+    public Tunnel findByTunnelIdAndClustersForUpdate(String tunnelId, List<String> clusterIds) {
+        return converter.toDomain(tunnelMapper.selectByTunnelIdAndClustersForUpdate(tunnelId, clusterIds));
     }
 
     @Override

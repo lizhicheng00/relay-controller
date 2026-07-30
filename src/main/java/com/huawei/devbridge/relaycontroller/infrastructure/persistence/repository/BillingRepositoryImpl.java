@@ -51,8 +51,8 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public List<MeteringRecord> lockUnsettledMetering(String region, int limit) {
-        return billingMapper.selectUnsettledMeteringForUpdate(region, limit);
+    public List<MeteringRecord> lockUnsettledMetering(List<String> clusterIds, int limit) {
+        return billingMapper.selectUnsettledMeteringForUpdate(clusterIds, limit);
     }
 
     @Override

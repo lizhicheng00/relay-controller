@@ -3,16 +3,13 @@ package com.huawei.devbridge.relaycontroller.application.service;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
-import com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod;
 import com.huawei.devbridge.relaycontroller.domain.model.MeteringRecord;
 import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,34 +21,67 @@ public class BillingSettlementService {
     private final BillingRepository billingRepository;
     private final BillingService billingService;
     private final TunnelRepository tunnelRepository;
+    private final LocalClusterService localClusterService;
     private final RelayProperties relayProperties;
 
     @Transactional
     public int settleBatch(int limit) {
+        List<String> clusterIds = localClusterService.localClusterIds();
+        if (clusterIds.isEmpty()) {
+            return 0;
+        }
         List<MeteringRecord> records =
-                billingRepository.lockUnsettledMetering(relayProperties.getRegion(), Math.max(1, limit));
+                billingRepository.lockUnsettledMetering(clusterIds, Math.max(1, limit));
         if (records.isEmpty()) {
             return 0;
         }
 
-        Map<SettlementKey, Long> usageByMinute = new TreeMap<>(Comparator
-                .comparing(SettlementKey::accountId)
-                .thenComparing(SettlementKey::tunnelId)
-                .thenComparing(SettlementKey::windowStart));
+        Map<MinuteKey, Long> usageByMinute = new TreeMap<>(Comparator
+                .comparing(MinuteKey::accountId)
+                .thenComparing(MinuteKey::tunnelId)
+                .thenComparing(MinuteKey::windowStart));
+        Map<PeriodKey, Long> usageByPeriod = new TreeMap<>(Comparator
+                .comparing(PeriodKey::accountId)
+                .thenComparing(PeriodKey::periodStart));
+        Map<String, Long> usageByTunnel = new TreeMap<>();
         for (MeteringRecord record : records) {
-            SettlementKey key = new SettlementKey(
-                    record.getAccountId(),
-                    record.getTunnelId(),
-                    minuteStart(record.getReportedAt()));
-            usageByMinute.merge(key, record.getUsageBytes(), Math::addExact);
+            long usageBytes = record.getUsageBytes();
+            usageByMinute.merge(
+                    new MinuteKey(
+                            record.getAccountId(),
+                            record.getTunnelId(),
+                            minuteStart(record.getReportedAt())),
+                    usageBytes,
+                    Math::addExact);
+            usageByPeriod.merge(
+                    new PeriodKey(
+                            record.getAccountId(),
+                            BillingService.periodStart(record.getReportedAt())),
+                    usageBytes,
+                    Math::addExact);
+            usageByTunnel.merge(record.getTunnelId(), usageBytes, Math::addExact);
+        }
+
+        for (Map.Entry<PeriodKey, Long> entry : usageByPeriod.entrySet()) {
+            PeriodKey period = entry.getKey();
+            billingService.ensurePeriod(period.accountId(), period.periodStart());
+            if (!billingRepository.increasePeriodUsage(
+                    period.accountId(), period.periodStart(), entry.getValue())) {
+                throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period update failed");
+            }
+        }
+        for (Map.Entry<MinuteKey, Long> entry : usageByMinute.entrySet()) {
+            MinuteKey key = entry.getKey();
+            billingRepository.increaseMinuteUsage(
+                    key.accountId(), key.tunnelId(), key.windowStart(), entry.getValue());
         }
 
         long settledAt = TimeUtils.nowSeconds();
-        Set<AccountPeriod> affectedPeriods = new HashSet<>();
-        for (Map.Entry<SettlementKey, Long> entry : usageByMinute.entrySet()) {
-            affectedPeriods.add(settle(entry.getKey(), entry.getValue(), settledAt));
+        for (Map.Entry<String, Long> entry : usageByTunnel.entrySet()) {
+            tunnelRepository.increaseBandwidthUsed(
+                    entry.getKey(), relayProperties.getRegion(), entry.getValue(), settledAt);
         }
-        for (AccountPeriod period : affectedPeriods) {
+        for (PeriodKey period : usageByPeriod.keySet()) {
             billingRepository.blockQuotaIfExhausted(period.accountId(), period.periodStart());
         }
         if (billingRepository.markMeteringSettled(records) != records.size()) {
@@ -60,25 +90,13 @@ public class BillingSettlementService {
         return records.size();
     }
 
-    private AccountPeriod settle(SettlementKey key, long usageBytes, long settledAt) {
-        BillingPeriod period = billingService.ensurePeriod(key.accountId(), key.windowStart());
-        if (!billingRepository.increasePeriodUsage(key.accountId(), period.getPeriodStart(), usageBytes)) {
-            throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period update failed");
-        }
-        billingRepository.increaseMinuteUsage(
-                key.accountId(), key.tunnelId(), key.windowStart(), usageBytes);
-        tunnelRepository.increaseBandwidthUsed(
-                key.tunnelId(), relayProperties.getRegion(), usageBytes, settledAt);
-        return new AccountPeriod(key.accountId(), period.getPeriodStart());
-    }
-
     private static long minuteStart(long timestamp) {
         return timestamp - timestamp % 60;
     }
 
-    private record SettlementKey(Long accountId, String tunnelId, long windowStart) {
+    private record MinuteKey(Long accountId, String tunnelId, long windowStart) {
     }
 
-    private record AccountPeriod(Long accountId, long periodStart) {
+    private record PeriodKey(Long accountId, long periodStart) {
     }
 }

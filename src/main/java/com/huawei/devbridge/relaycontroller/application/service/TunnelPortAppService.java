@@ -82,7 +82,7 @@ public class TunnelPortAppService {
 
     @Transactional
     public TunnelPortResponse update(String rawNamespace, String tunnelId, Long port, UpdateTunnelPortRequest request) {
-        Tunnel tunnel = ownedTunnel(rawNamespace, tunnelId);
+        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, tunnelId);
         TunnelPort tunnelPort = findTunnelPort(tunnel.getTunnelCode(), port);
         TunnelProtocol protocol = request.getProtocol() == null ? tunnelPort.getProtocol() : request.getProtocol();
         Boolean allowAnonymous = request.getAllowAnonymous() == null
@@ -101,7 +101,7 @@ public class TunnelPortAppService {
 
     @Transactional
     public Boolean delete(String rawNamespace, String tunnelId, Long port) {
-        Tunnel tunnel = ownedTunnel(rawNamespace, tunnelId);
+        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, tunnelId);
         findTunnelPort(tunnel.getTunnelCode(), port);
         tunnelPortRepository.deleteByTunnelCodeAndPort(tunnel.getTunnelCode(), port);
         refreshExpiration(tunnel);
@@ -127,7 +127,10 @@ public class TunnelPortAppService {
 
     private Tunnel ownedTunnelForUpdate(String rawNamespace, String tunnelId) {
         String namespace = namespaceService.requireNamespace(rawNamespace);
-        Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegionForUpdate(tunnelId, relayProperties.getRegion());
+        List<String> clusterIds = localClusterService.localClusterIds();
+        Tunnel tunnel = clusterIds.isEmpty()
+                ? null
+                : tunnelRepository.findByTunnelIdAndClustersForUpdate(tunnelId, clusterIds);
         tunnelDomainService.assertOwnedAndNotExpired(tunnel, namespace);
         return tunnel;
     }

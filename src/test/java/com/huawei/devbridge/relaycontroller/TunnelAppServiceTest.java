@@ -2,6 +2,7 @@ package com.huawei.devbridge.relaycontroller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -224,7 +225,7 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 1800))
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
         long before = TimeUtils.nowSeconds();
         Boolean updated = service.updateTunnel("ns-user-001", "aaaadysa", request);
@@ -251,7 +252,7 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 60))
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
         long before = TimeUtils.nowSeconds();
         service.updateTunnel("ns-user-001", "aaaadysa", request);
@@ -259,6 +260,21 @@ class TunnelAppServiceTest {
 
         assertThat(tunnel.getExpiration())
                 .isBetween(Math.toIntExact(before + 7200L), Math.toIntExact(after + 7200L));
+    }
+
+    @Test
+    void updateTunnelReturnsNotFoundWhenRegionHasNoClusters() {
+        TunnelAppService service = newService(new RelayProperties());
+        when(clusterRepository.findIdsByRegion("region-a")).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.updateTunnel(
+                "ns-user-001", "aaaadysa", new UpdateTunnelRequest()))
+                .isInstanceOf(BizException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TUNNEL_NOT_FOUND);
+
+        verify(tunnelRepository, never())
+                .findByTunnelIdAndClustersForUpdate(anyString(), anyList());
     }
 
     @Test
@@ -336,7 +352,7 @@ class TunnelAppServiceTest {
                 .type(TunnelType.BRIDGE)
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
         Boolean updated = service.updateTunnel("ns-user-001", "aaaadysa", request);
 
@@ -356,7 +372,7 @@ class TunnelAppServiceTest {
                 .deleted(0)
                 .build();
 
-        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(tunnel);
+        when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
         Boolean deleted = service.deleteTunnel("ns-user-001", "aaaadysa");
 
@@ -378,7 +394,7 @@ class TunnelAppServiceTest {
                 .build();
 
         when(tunnelRepository.findByNamespaceAndRegion("ns-user-001", "region-a")).thenReturn(List.of(first));
-        when(tunnelRepository.findByTunnelIdAndRegionForUpdate("aaaadysa", "region-a")).thenReturn(first);
+        when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(first);
 
         Boolean deleted = service.deleteTunnels("ns-user-001");
 
@@ -425,6 +441,9 @@ class TunnelAppServiceTest {
         org.mockito.Mockito.lenient()
                 .when(billingService.lockAccountForQuota("ns-user-001"))
                 .thenReturn(accountPlan());
+        org.mockito.Mockito.lenient()
+                .when(clusterRepository.findIdsByRegion("region-a"))
+                .thenReturn(List.of("cluster-a"));
         return new TunnelAppService(
                 tunnelRepository,
                 new LocalClusterService(clusterRepository, properties),
