@@ -35,6 +35,7 @@ CREATE TABLE billing_account (
     namespace VARCHAR(128) NOT NULL COMMENT 'account namespace',
     plan_code VARCHAR(32) NOT NULL DEFAULT 'trial' COMMENT 'billing plan identifier',
     status VARCHAR(16) NOT NULL DEFAULT 'active' COMMENT 'active/disabled',
+    quota_blocked_until BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'traffic blocked before this unix second',
     PRIMARY KEY (_id),
     UNIQUE KEY uk_billing_account_namespace (namespace),
     KEY idx_billing_account_plan_code (plan_code)
