@@ -98,8 +98,7 @@ CREATE TABLE tunnel_runtime_status (
     upload_bytes_per_second BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'current upload rate',
     download_bytes_per_second BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'current download rate',
     reported_at BIGINT UNSIGNED NOT NULL COMMENT 'gateway report unix seconds',
-    PRIMARY KEY (tunnel_id),
-    KEY idx_runtime_reported_at (reported_at)
+    PRIMARY KEY (tunnel_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Latest gateway tunnel runtime status';
 
 DROP TABLE IF EXISTS metering;
