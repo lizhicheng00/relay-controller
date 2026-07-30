@@ -96,7 +96,7 @@ When a period reaches its quota, Controller advances `billing_account.quota_bloc
 
 Existing JWTs remain valid cryptographically until expiration. Gateway must disconnect active traffic when the account becomes blocked.
 
-One Controller instance maintains UTC hourly `reported_at` partitions and keeps two future hours ready. Partitions older than seven days are dropped directly. Gateway must not replay metering older than seven days, and the Controller database account needs `ALTER` permission on `tunnel_metering`. The raw table remains a short operational audit buffer; `billing_usage_1m` and `billing_period` are the durable billing results.
+Controller maintains UTC hourly `reported_at` partitions and keeps two future hours ready. A database lock ensures that only one Controller replica performs each maintenance run. Partitions older than seven days are dropped directly. Gateway must not replay metering older than seven days, and the Controller database account needs `ALTER` permission on `tunnel_metering`. The raw table remains a short operational audit buffer; `billing_usage_1m` and `billing_period` are the durable billing results.
 
 ## Tunnel Runtime Status
 
