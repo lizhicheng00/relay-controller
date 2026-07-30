@@ -39,6 +39,10 @@ public interface BillingMapper {
             @Param("periodStart") long periodStart,
             @Param("usageBytes") long usageBytes);
 
+    void blockQuotaIfExhausted(
+            @Param("accountId") Long accountId,
+            @Param("periodStart") long periodStart);
+
     int increaseMinuteUsage(
             @Param("accountId") Long accountId,
             @Param("tunnelId") String tunnelId,

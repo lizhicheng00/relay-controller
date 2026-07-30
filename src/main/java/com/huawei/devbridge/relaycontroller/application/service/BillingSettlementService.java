@@ -9,8 +9,10 @@ import com.huawei.devbridge.relaycontroller.domain.repository.BillingRepository;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,8 +47,12 @@ public class BillingSettlementService {
         }
 
         long settledAt = TimeUtils.nowSeconds();
+        Set<AccountPeriod> affectedPeriods = new HashSet<>();
         for (Map.Entry<SettlementKey, Long> entry : usageByMinute.entrySet()) {
-            settle(entry.getKey(), entry.getValue(), settledAt);
+            affectedPeriods.add(settle(entry.getKey(), entry.getValue(), settledAt));
+        }
+        for (AccountPeriod period : affectedPeriods) {
+            billingRepository.blockQuotaIfExhausted(period.accountId(), period.periodStart());
         }
         List<Long> recordIds = records.stream().map(MeteringRecord::getId).toList();
         if (billingRepository.markMeteringSettled(recordIds) != recordIds.size()) {
@@ -55,7 +61,7 @@ public class BillingSettlementService {
         return records.size();
     }
 
-    private void settle(SettlementKey key, long usageBytes, long settledAt) {
+    private AccountPeriod settle(SettlementKey key, long usageBytes, long settledAt) {
         BillingPeriod period = billingService.ensurePeriod(key.accountId(), key.windowStart());
         if (!billingRepository.increasePeriodUsage(key.accountId(), period.getPeriodStart(), usageBytes)) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period update failed");
@@ -64,6 +70,7 @@ public class BillingSettlementService {
                 key.accountId(), key.tunnelId(), key.windowStart(), usageBytes);
         tunnelRepository.increaseBandwidthUsed(
                 key.tunnelId(), relayProperties.getRegion(), usageBytes, settledAt);
+        return new AccountPeriod(key.accountId(), period.getPeriodStart());
     }
 
     private static long minuteStart(long timestamp) {
@@ -71,5 +78,8 @@ public class BillingSettlementService {
     }
 
     private record SettlementKey(Long accountId, String tunnelId, long windowStart) {
+    }
+
+    private record AccountPeriod(Long accountId, long periodStart) {
     }
 }

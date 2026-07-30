@@ -82,6 +82,17 @@
           AND period_start = #{periodStart}
     </update>
 
+    <update id="blockQuotaIfExhausted">
+        UPDATE billing_account a
+        INNER JOIN billing_period bp
+          ON bp.account_id = a._id
+         AND bp.period_start = #{periodStart}
+        SET a.quota_blocked_until = GREATEST(a.quota_blocked_until, bp.period_end)
+        WHERE a._id = #{accountId}
+          AND bp.billed_bytes >= bp.quota_bytes
+          AND a.quota_blocked_until &lt; bp.period_end
+    </update>
+
     <insert id="increaseMinuteUsage">
         INSERT INTO billing_usage_1m (account_id, tunnel_id, window_start, usage_bytes)
         VALUES (#{accountId}, #{tunnelId}, #{windowStart}, #{usageBytes})

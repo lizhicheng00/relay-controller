@@ -61,6 +61,11 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
+    public void blockQuotaIfExhausted(Long accountId, long periodStart) {
+        billingMapper.blockQuotaIfExhausted(accountId, periodStart);
+    }
+
+    @Override
     public void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes) {
         billingMapper.increaseMinuteUsage(accountId, tunnelId, windowStart, usageBytes);
     }

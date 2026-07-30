@@ -14,6 +14,7 @@ public class BillingAccount {
     private String namespace;
     private String planCode;
     private String status;
+    private Long quotaBlockedUntil;
 
     public boolean isActive() {
         return "active".equalsIgnoreCase(status);

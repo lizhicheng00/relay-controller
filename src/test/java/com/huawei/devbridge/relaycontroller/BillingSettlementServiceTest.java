@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +49,7 @@ class BillingSettlementServiceTest {
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
+        verify(billingRepository).blockQuotaIfExhausted(7L, 1782864000L);
         verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206400L, 1000L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
@@ -63,6 +65,25 @@ class BillingSettlementServiceTest {
 
         verify(billingRepository, never()).increasePeriodUsage(anyLong(), anyLong(), anyLong());
         verify(billingRepository, never()).markMeteringSettled(anyList());
+    }
+
+    @Test
+    void updatesQuotaStateOncePerAccountPeriod() {
+        BillingSettlementService service = service();
+        List<MeteringRecord> records = List.of(
+                record(11L, "aaaadysa", 400L, 1785206410L),
+                record(12L, "aaaadyta", 600L, 1785206470L));
+        when(billingRepository.lockUnsettledMetering("region-a", 500)).thenReturn(records);
+        when(billingService.ensurePeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
+                .periodStart(1782864000L)
+                .build());
+        when(billingRepository.increasePeriodUsage(eq(7L), eq(1782864000L), anyLong()))
+                .thenReturn(true);
+        when(billingRepository.markMeteringSettled(List.of(11L, 12L))).thenReturn(2);
+
+        assertThat(service.settleBatch(500)).isEqualTo(2);
+
+        verify(billingRepository, times(1)).blockQuotaIfExhausted(7L, 1782864000L);
     }
 
     @Test
@@ -98,6 +119,7 @@ class BillingSettlementServiceTest {
                 .extracting(exception -> ((BizException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.INTERNAL_ERROR);
         verify(billingRepository, never()).increaseMinuteUsage(anyLong(), eq("aaaadysa"), anyLong(), anyLong());
+        verify(billingRepository, never()).blockQuotaIfExhausted(anyLong(), anyLong());
         verify(billingRepository, never()).markMeteringSettled(anyList());
     }
 
@@ -107,10 +129,14 @@ class BillingSettlementServiceTest {
     }
 
     private static MeteringRecord record(long id, long usageBytes, long reportedAt) {
+        return record(id, "aaaadysa", usageBytes, reportedAt);
+    }
+
+    private static MeteringRecord record(long id, String tunnelId, long usageBytes, long reportedAt) {
         return MeteringRecord.builder()
                 .id(id)
                 .accountId(7L)
-                .tunnelId("aaaadysa")
+                .tunnelId(tunnelId)
                 .usageBytes(usageBytes)
                 .reportedAt(reportedAt)
                 .build();
