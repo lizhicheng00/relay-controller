@@ -45,7 +45,7 @@ class BillingSettlementServiceTest {
                 .periodStart(1782864000L)
                 .build());
         when(billingRepository.increasePeriodUsage(7L, 1782864000L, 1000L)).thenReturn(true);
-        when(billingRepository.markMeteringSettled(List.of(11L, 12L))).thenReturn(2);
+        when(billingRepository.markMeteringSettled(records)).thenReturn(2);
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
@@ -53,7 +53,7 @@ class BillingSettlementServiceTest {
         verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206400L, 1000L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
-        verify(billingRepository).markMeteringSettled(List.of(11L, 12L));
+        verify(billingRepository).markMeteringSettled(records);
     }
 
     @Test
@@ -79,7 +79,7 @@ class BillingSettlementServiceTest {
                 .build());
         when(billingRepository.increasePeriodUsage(eq(7L), eq(1782864000L), anyLong()))
                 .thenReturn(true);
-        when(billingRepository.markMeteringSettled(List.of(11L, 12L))).thenReturn(2);
+        when(billingRepository.markMeteringSettled(records)).thenReturn(2);
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
@@ -97,7 +97,7 @@ class BillingSettlementServiceTest {
                 .periodStart(1782864000L)
                 .build());
         when(billingRepository.increasePeriodUsage(7L, 1782864000L, 1000L)).thenReturn(true);
-        when(billingRepository.markMeteringSettled(List.of(11L, 12L))).thenReturn(1);
+        when(billingRepository.markMeteringSettled(records)).thenReturn(1);
 
         assertThatThrownBy(() -> service.settleBatch(500))
                 .isInstanceOf(BizException.class)

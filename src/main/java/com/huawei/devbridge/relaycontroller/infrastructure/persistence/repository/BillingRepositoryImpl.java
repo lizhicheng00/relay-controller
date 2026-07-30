@@ -71,7 +71,7 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public int markMeteringSettled(List<Long> meteringIds) {
-        return billingMapper.markMeteringSettled(meteringIds);
+    public int markMeteringSettled(List<MeteringRecord> records) {
+        return billingMapper.markMeteringSettled(records);
     }
 }

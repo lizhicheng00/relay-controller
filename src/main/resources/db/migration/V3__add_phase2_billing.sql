@@ -76,11 +76,14 @@ CREATE TABLE tunnel_metering (
     reported_at BIGINT UNSIGNED NOT NULL COMMENT 'gateway report unix seconds',
     created_at BIGINT UNSIGNED NOT NULL COMMENT 'database write unix seconds',
     settled TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 pending, 1 settled',
-    PRIMARY KEY (_id),
+    PRIMARY KEY (_id, reported_at),
     UNIQUE KEY uk_metering_report (tunnel_id, session_id, reported_at),
     KEY idx_metering_settlement (settled, created_at, _id),
     KEY idx_metering_account_reported (account_id, reported_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Gateway append-only traffic metering';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Gateway append-only traffic metering'
+PARTITION BY RANGE (reported_at) (
+    PARTITION p_future VALUES LESS THAN MAXVALUE
+);
 
 CREATE TABLE billing_usage_1m (
     account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id',

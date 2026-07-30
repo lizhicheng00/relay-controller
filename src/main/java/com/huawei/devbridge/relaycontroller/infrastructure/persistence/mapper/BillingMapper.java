@@ -49,5 +49,5 @@ public interface BillingMapper {
             @Param("windowStart") long windowStart,
             @Param("usageBytes") long usageBytes);
 
-    int markMeteringSettled(@Param("meteringIds") List<Long> meteringIds);
+    int markMeteringSettled(@Param("records") List<MeteringRecord> records);
 }

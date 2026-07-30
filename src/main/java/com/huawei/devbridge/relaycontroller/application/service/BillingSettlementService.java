@@ -54,8 +54,7 @@ public class BillingSettlementService {
         for (AccountPeriod period : affectedPeriods) {
             billingRepository.blockQuotaIfExhausted(period.accountId(), period.periodStart());
         }
-        List<Long> recordIds = records.stream().map(MeteringRecord::getId).toList();
-        if (billingRepository.markMeteringSettled(recordIds) != recordIds.size()) {
+        if (billingRepository.markMeteringSettled(records) != records.size()) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "metering settlement marker update failed");
         }
         return records.size();

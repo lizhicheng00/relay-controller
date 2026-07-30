@@ -104,9 +104,9 @@
         UPDATE tunnel_metering
         SET settled = 1
         WHERE settled = 0
-          AND _id IN
-        <foreach collection="meteringIds" item="meteringId" open="(" separator="," close=")">
-            #{meteringId}
+          AND (_id, reported_at) IN
+        <foreach collection="records" item="record" open="(" separator="," close=")">
+            (#{record.id}, #{record.reportedAt})
         </foreach>
     </update>
 </mapper>

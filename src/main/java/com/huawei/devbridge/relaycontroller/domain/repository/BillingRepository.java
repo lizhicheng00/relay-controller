@@ -29,5 +29,5 @@ public interface BillingRepository {
 
     void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes);
 
-    int markMeteringSettled(List<Long> meteringIds);
+    int markMeteringSettled(List<MeteringRecord> records);
 }
