@@ -73,4 +73,33 @@ class JwtTokenServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.JWT_GENERATE_FAILED);
     }
+
+    @Test
+    void issueAuthTokenUsesIndependentLifetime() {
+        RelayProperties properties = new RelayProperties();
+        properties.getJwt().getToken().setTtlSeconds(86400);
+        properties.getJwt().getAuthToken().setTtlSeconds(3600);
+        JwtTokenServiceImpl service = new JwtTokenServiceImpl(jwtSigner, properties);
+        when(jwtSigner.signAuthToken(eq("ns-1"), anyLong(), anyLong()))
+                .thenReturn("auth-token");
+
+        JwtToken token = service.issueAuthToken("ns-1");
+
+        assertThat(token.token()).isEqualTo("auth-token");
+        assertThat(token.lifetime()).isEqualTo(3600L);
+        verify(jwtSigner).signAuthToken(
+                "ns-1", token.expiration() - token.lifetime(), token.expiration());
+    }
+
+    @Test
+    void issueAuthTokenRejectsNonPositiveConfiguredLifetime() {
+        RelayProperties properties = new RelayProperties();
+        properties.getJwt().getAuthToken().setTtlSeconds(0);
+        JwtTokenServiceImpl service = new JwtTokenServiceImpl(jwtSigner, properties);
+
+        assertThatThrownBy(() -> service.issueAuthToken("ns-1"))
+                .isInstanceOf(BizException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.JWT_GENERATE_FAILED);
+    }
 }

@@ -80,6 +80,9 @@ relay:
     private-key: ${RELAY_JWT_PRIVATE_KEY:}
     token:
       ttl-seconds: 86400
+    auth-token:
+      audience: relay-controller
+      ttl-seconds: 3600
   billing:
     default-plan-code: trial
     enforcement-enabled: true

@@ -36,6 +36,13 @@ public class RelayProperties {
         private String keyId = "1";
         private String privateKey;
         private TokenTtl token = new TokenTtl(86400);
+        private AuthToken authToken = new AuthToken();
+    }
+
+    @Data
+    public static class AuthToken {
+        private String audience = "relay-controller";
+        private long ttlSeconds = 3600;
     }
 
     @Data

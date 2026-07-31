@@ -21,36 +21,51 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class JwtSigner {
+    private static final String AUTH_SCOPE = "devbridge";
+
     private final RelayProperties relayProperties;
     private final JwtKeyProvider jwtKeyProvider;
 
     public String signToken(
             Tunnel tunnel, JwtScope scope, long issuedAt, long expiration, boolean forCookies) {
+        JWTClaimsSet claims = claims(relayProperties.getJwt().getAudience(), issuedAt, expiration)
+                .claim("tunnelId", tunnel.getTunnelId())
+                .claim("clusterId", tunnel.getClusterId())
+                .claim("scp", scope.value())
+                .claim("delivery", forCookies ? "cookie" : "api")
+                .build();
+        return sign(claims);
+    }
+
+    public String signAuthToken(String namespace, long issuedAt, long expiration) {
+        JWTClaimsSet claims = claims(
+                        relayProperties.getJwt().getAuthToken().getAudience(), issuedAt, expiration)
+                .claim("namespace", namespace)
+                .claim("scp", AUTH_SCOPE)
+                .build();
+        return sign(claims);
+    }
+
+    private JWTClaimsSet.Builder claims(String audience, long issuedAt, long expiration) {
+        return new JWTClaimsSet.Builder()
+                .issuer(relayProperties.getJwt().getIssuer())
+                .audience(audience)
+                .expirationTime(Date.from(Instant.ofEpochSecond(expiration)))
+                .notBeforeTime(Date.from(Instant.ofEpochSecond(issuedAt)))
+                .jwtID(UUID.randomUUID().toString());
+    }
+
+    private String sign(JWTClaimsSet claims) {
         try {
-            JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                    .issuer(relayProperties.getJwt().getIssuer())
-                    .audience(relayProperties.getJwt().getAudience())
-                    .expirationTime(Date.from(Instant.ofEpochSecond(expiration)))
-                    .notBeforeTime(Date.from(Instant.ofEpochSecond(issuedAt)))
-                    .jwtID(UUID.randomUUID().toString())
-                    .claim("tunnelId", tunnel.getTunnelId())
-                    .claim("clusterId", tunnel.getClusterId())
-                    .claim("scp", scope.value())
-                    .claim("delivery", forCookies ? "cookie" : "api")
+            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
+                    .type(JOSEObjectType.JWT)
+                    .keyID(relayProperties.getJwt().getKeyId())
                     .build();
-            return sign(claims);
+            SignedJWT jwt = new SignedJWT(header, claims);
+            jwt.sign(new RSASSASigner((RSAPrivateKey) jwtKeyProvider.getPrivateKey()));
+            return jwt.serialize();
         } catch (Exception exception) {
             throw new BizException(ErrorCode.JWT_GENERATE_FAILED);
         }
-    }
-
-    private String sign(JWTClaimsSet claims) throws Exception {
-        JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
-                .type(JOSEObjectType.JWT)
-                .keyID(relayProperties.getJwt().getKeyId())
-                .build();
-        SignedJWT jwt = new SignedJWT(header, claims);
-        jwt.sign(new RSASSASigner((RSAPrivateKey) jwtKeyProvider.getPrivateKey()));
-        return jwt.serialize();
     }
 }

@@ -19,13 +19,35 @@ public class JwtTokenServiceImpl implements JwtTokenService {
 
     @Override
     public JwtToken issueToken(Tunnel tunnel, JwtScope scope, boolean forCookies) {
-        long issuedAt = TimeUtils.nowSeconds();
         long lifetime = relayProperties.getJwt().getToken().getTtlSeconds();
+        return issue(lifetime,
+                (issuedAt, expiration) -> jwtSigner.signToken(
+                        tunnel, scope, issuedAt, expiration, forCookies));
+    }
+
+    @Override
+    public JwtToken issueAuthToken(String namespace) {
+        long lifetime = relayProperties.getJwt().getAuthToken().getTtlSeconds();
+        return issue(lifetime,
+                (issuedAt, expiration) -> jwtSigner.signAuthToken(namespace, issuedAt, expiration));
+    }
+
+    private JwtToken issue(long lifetime, TokenFactory tokenFactory) {
         if (lifetime <= 0) {
             throw new BizException(ErrorCode.JWT_GENERATE_FAILED);
         }
-        long expiration = issuedAt + lifetime;
-        String token = jwtSigner.signToken(tunnel, scope, issuedAt, expiration, forCookies);
-        return new JwtToken(token, lifetime, expiration);
+        long issuedAt = TimeUtils.nowSeconds();
+        long expiration;
+        try {
+            expiration = Math.addExact(issuedAt, lifetime);
+        } catch (ArithmeticException exception) {
+            throw new BizException(ErrorCode.JWT_GENERATE_FAILED);
+        }
+        return new JwtToken(tokenFactory.create(issuedAt, expiration), lifetime, expiration);
+    }
+
+    @FunctionalInterface
+    private interface TokenFactory {
+        String create(long issuedAt, long expiration);
     }
 }

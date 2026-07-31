@@ -13,12 +13,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.huawei.devbridge.relaycontroller.application.service.LimitsAppService;
+import com.huawei.devbridge.relaycontroller.application.service.AuthAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelAppService;
 import com.huawei.devbridge.relaycontroller.application.service.TunnelPortAppService;
 import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.exception.GlobalExceptionHandler;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.LimitsController;
+import com.huawei.devbridge.relaycontroller.interfaces.controller.AuthController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelController;
 import com.huawei.devbridge.relaycontroller.interfaces.controller.TunnelPortController;
 import com.huawei.devbridge.relaycontroller.interfaces.config.TokenCacheControlAdvice;
@@ -27,6 +29,7 @@ import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelReque
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
+import com.huawei.devbridge.relaycontroller.interfaces.response.AuthTokenResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
@@ -59,6 +62,8 @@ class RelayControllerApiTest {
     @Mock
     private TunnelAppService tunnelAppService;
     @Mock
+    private AuthAppService authAppService;
+    @Mock
     private TunnelPortAppService tunnelPortAppService;
     @Mock
     private LimitsAppService limitsAppService;
@@ -66,6 +71,7 @@ class RelayControllerApiTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
+                        new AuthController(authAppService),
                         new TunnelController(tunnelAppService),
                         new TunnelPortController(tunnelPortAppService),
                         new LimitsController(limitsAppService))
@@ -73,6 +79,35 @@ class RelayControllerApiTest {
                 .setMessageConverters(new MappingJackson2HttpMessageConverter())
                 .defaultRequest(get("/").accept(MediaType.APPLICATION_JSON))
                 .build();
+    }
+
+    @Test
+    void issueAuthTokenApi() throws Exception {
+        when(authAppService.issueToken(NAMESPACE)).thenReturn(AuthTokenResponse.builder()
+                .namespace(NAMESPACE)
+                .scope("devbridge")
+                .lifetime(3600L)
+                .expiration(1785500000L)
+                .token("auth-token")
+                .build());
+
+        mockMvc.perform(post(BASE + "/auth/token")
+                        .header("X-Namespace", NAMESPACE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.namespace").value(NAMESPACE))
+                .andExpect(jsonPath("$.scope").value("devbridge"))
+                .andExpect(jsonPath("$.lifetime").value(3600L))
+                .andExpect(jsonPath("$.expiration").value(1785500000L))
+                .andExpect(jsonPath("$.token").value("auth-token"))
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    void issueAuthTokenWithoutNamespaceReturnsUnauthorized() throws Exception {
+        mockMvc.perform(post(BASE + "/auth/token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("40100"))
+                .andExpect(jsonPath("$.error.target").value("X-Namespace"));
     }
 
     @Test

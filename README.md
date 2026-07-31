@@ -21,6 +21,7 @@ User story and implementation design: [docs/relay-controller-user-story.md](docs
 ## Implemented APIs
 
 ```text
+POST   /open-api-inner/v1/relay-controller/auth/token
 POST   /open-api-inner/v1/relay-controller/tunnels
 GET    /open-api-inner/v1/relay-controller/tunnels?clusterId=
 DELETE /open-api-inner/v1/relay-controller/tunnels
@@ -38,7 +39,7 @@ DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 GET    /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}
 ```
 
-Namespace-scoped APIs read `X-Namespace` directly and store it as the tunnel namespace.
+Namespace-scoped APIs currently receive identity from `X-Namespace`; Tunnel creation stores it as the tunnel namespace.
 Each Relay Controller instance owns one configured region. Set `RELAY_REGION`; tunnel and port operations only accept clusters found under that local region. Set `RELAY_DOMAIN` to the tunnel URL suffix.
 Tunnel `type` is restricted to `bridge` or `env`; blank create requests default to `bridge`.
 Tunnel `expiration` in create and update requests is the allowed inactivity duration in hours. Blank create requests default to 72 hours. Tunnel responses expose that window as `expirationHours` and the current Unix expiration time as `tunnelExpiration`; clients can derive a live countdown from `tunnelExpiration`.
@@ -52,10 +53,12 @@ The seeded `trial` plan gives each namespace 5 GiB per UTC calendar month, at mo
 Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, `scp`, and `delivery`.
 The optional `forCookies=true` query marks `delivery=cookie`; it does not encrypt the JWT or set a cross-domain cookie. The redirect or Gateway layer must set the returned signed token as a `Secure`, `HttpOnly`, appropriately scoped cookie.
 
+Relay Service can issue a namespace access token with `POST /auth/token` and `X-Namespace`. It uses the same RSA signing key but is isolated from Tunnel tokens by `aud=relay-controller` and `scp=devbridge`. Its response follows the Tunnel token shape with `namespace`, `scope`, `lifetime`, `expiration`, and `token`; the configured lifetime is `relay.jwt.auth-token.ttl-seconds`. Existing APIs continue to use `X-Namespace` until JWT request authentication is introduced separately.
+
 Tunnel port APIs manage the explicit per-port allow list for a tunnel. Each port declares `protocol` as `http`, `https`, or `auto`. Unconfigured ports are denied by default. `allowAnonymous` only controls sending-side access to that port; listening-side gateway connection still requires token authentication.
 The gateway port policy API keeps `clusterId` in the path intentionally. Gateway callers use it as their cluster scope, and Relay Controller verifies the tunnel belongs to that cluster before returning the port policy.
 
-Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress. The cluster-scoped Gateway policy call is not put behind this low user limit.
+Namespace-scoped Auth, Tunnel, and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress. The cluster-scoped Gateway policy call is not put behind this low user limit.
 
 OpenAPI is maintained as YAML at `src/main/resources/static/openapi.yaml`. Maven uses this YAML during `generate-sources` to generate Spring API interfaces under `target/generated-sources/openapi`; controllers implement those generated interfaces and do not declare request mappings by hand.
 The same YAML is served directly as a static resource:
