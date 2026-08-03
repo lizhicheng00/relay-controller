@@ -103,12 +103,11 @@ public class TunnelAppService {
                 tunnel, tunnelRuntimeStatusRepository.findByTunnelId(tunnelId));
     }
 
-    public TunnelTokenResponse issueToken(
-            String rawNamespace, String tunnelId, String scopeValue, Boolean forCookies) {
+    public TunnelTokenResponse issueToken(String rawNamespace, String tunnelId, String scopeValue) {
         JwtScope scope = parseScope(scopeValue);
         Tunnel tunnel = findOwnedActiveTunnel(rawNamespace, tunnelId);
         billingService.assertTrafficAllowed(tunnel.getNamespace());
-        JwtToken issuedToken = jwtTokenService.issueToken(tunnel, scope, Boolean.TRUE.equals(forCookies));
+        JwtToken issuedToken = jwtTokenService.issueToken(tunnel, scope);
         return TunnelTokenResponse.builder()
                 .tunnelId(tunnel.getTunnelId())
                 .scope(scope)

@@ -18,11 +18,11 @@ public class JwtTokenServiceImpl implements JwtTokenService {
     private final RelayProperties relayProperties;
 
     @Override
-    public JwtToken issueToken(Tunnel tunnel, JwtScope scope, boolean forCookies) {
+    public JwtToken issueToken(Tunnel tunnel, JwtScope scope) {
         long lifetime = relayProperties.getJwt().getToken().getTtlSeconds();
         return issue(lifetime,
                 (issuedAt, expiration) -> jwtSigner.signToken(
-                        tunnel, scope, issuedAt, expiration, forCookies));
+                        tunnel, scope, issuedAt, expiration));
     }
 
     @Override

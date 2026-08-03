@@ -32,17 +32,17 @@ class JwtTokenServiceTest {
         properties.getJwt().getToken().setTtlSeconds(86400);
         JwtTokenServiceImpl service = new JwtTokenServiceImpl(jwtSigner, properties);
         Tunnel tunnel = Tunnel.builder().tunnelId("aaaadysa").build();
-        when(jwtSigner.signToken(eq(tunnel), eq(JwtScope.HOST), anyLong(), anyLong(), eq(false)))
+        when(jwtSigner.signToken(eq(tunnel), eq(JwtScope.HOST), anyLong(), anyLong()))
                 .thenReturn("host-token");
 
-        JwtToken token = service.issueToken(tunnel, JwtScope.HOST, false);
+        JwtToken token = service.issueToken(tunnel, JwtScope.HOST);
 
         assertThat(token.token()).isEqualTo("host-token");
         assertThat(token.lifetime()).isEqualTo(86400L);
         assertThat(token.expiration() - token.lifetime()).isCloseTo(TimeUtils.nowSeconds(),
                 org.assertj.core.data.Offset.offset(1L));
         verify(jwtSigner).signToken(tunnel, JwtScope.HOST,
-                token.expiration() - token.lifetime(), token.expiration(), false);
+                token.expiration() - token.lifetime(), token.expiration());
     }
 
     @Test
@@ -52,10 +52,10 @@ class JwtTokenServiceTest {
         JwtTokenServiceImpl service = new JwtTokenServiceImpl(jwtSigner, properties);
         int tunnelExpiration = Math.toIntExact(TimeUtils.nowSeconds() + 60);
         Tunnel tunnel = Tunnel.builder().tunnelId("aaaadysa").expiration(tunnelExpiration).build();
-        when(jwtSigner.signToken(eq(tunnel), eq(JwtScope.CONNECT), anyLong(), anyLong(), eq(false)))
+        when(jwtSigner.signToken(eq(tunnel), eq(JwtScope.CONNECT), anyLong(), anyLong()))
                 .thenReturn("connect-token");
 
-        JwtToken token = service.issueToken(tunnel, JwtScope.CONNECT, false);
+        JwtToken token = service.issueToken(tunnel, JwtScope.CONNECT);
 
         assertThat(token.token()).isEqualTo("connect-token");
         assertThat(token.lifetime()).isEqualTo(86400L);
@@ -68,7 +68,7 @@ class JwtTokenServiceTest {
         properties.getJwt().getToken().setTtlSeconds(0);
         JwtTokenServiceImpl service = new JwtTokenServiceImpl(jwtSigner, properties);
 
-        assertThatThrownBy(() -> service.issueToken(Tunnel.builder().build(), JwtScope.HOST, false))
+        assertThatThrownBy(() -> service.issueToken(Tunnel.builder().build(), JwtScope.HOST))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.JWT_GENERATE_FAILED);

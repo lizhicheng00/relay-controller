@@ -45,7 +45,7 @@ The repository returns only active local-region rows and computes `portCount`. E
 1. Verify namespace ownership, local region, and expiration.
 2. Validate `scope` as `host` or `connect`.
 3. Set expiration from the fixed configured token TTL.
-4. Add `aud=relay-gateway`, a delivery claim, and a random `jti`, then sign a new RS256 JWT.
+4. Add `aud=relay-gateway` and a random `jti`, then sign a new RS256 JWT.
 5. Return `tunnelId`, `scope`, `lifetime`, `expiration`, and `token`.
 
 No cache is read or written. This makes each call independent and removes Redis from the runtime architecture.

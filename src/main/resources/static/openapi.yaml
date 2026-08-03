@@ -165,13 +165,6 @@ paths:
           schema:
             type: string
             enum: [host, connect]
-        - name: forCookies
-          in: query
-          required: false
-          description: Marks the signed token for secure cookie delivery by the redirect or Gateway layer.
-          schema:
-            type: boolean
-            default: false
       responses:
         '200':
           description: Newly issued tunnel token.

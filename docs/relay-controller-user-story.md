@@ -49,7 +49,7 @@ The response contains:
 }
 ```
 
-Every call signs a new JWT. Tokens are not cached. `lifetime` is the fixed configured token TTL and does not follow the tunnel expiration. JWT claims include `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, `scp`, and `delivery`. Token issuance checks the current monthly balance.
+Every call signs a new JWT. Tokens are not cached. `lifetime` is the fixed configured token TTL and does not follow the tunnel expiration. JWT claims include `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`. Token issuance checks the current monthly balance.
 
 ## 4. Tunnel Port
 

@@ -26,13 +26,11 @@ public class JwtSigner {
     private final RelayProperties relayProperties;
     private final JwtKeyProvider jwtKeyProvider;
 
-    public String signToken(
-            Tunnel tunnel, JwtScope scope, long issuedAt, long expiration, boolean forCookies) {
+    public String signToken(Tunnel tunnel, JwtScope scope, long issuedAt, long expiration) {
         JWTClaimsSet claims = claims(relayProperties.getJwt().getAudience(), issuedAt, expiration)
                 .claim("tunnelId", tunnel.getTunnelId())
                 .claim("clusterId", tunnel.getClusterId())
                 .claim("scp", scope.value())
-                .claim("delivery", forCookies ? "cookie" : "api")
                 .build();
         return sign(claims);
     }

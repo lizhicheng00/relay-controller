@@ -5,7 +5,7 @@ import com.huawei.devbridge.relaycontroller.domain.model.JwtToken;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 
 public interface JwtTokenService {
-    JwtToken issueToken(Tunnel tunnel, JwtScope scope, boolean forCookies);
+    JwtToken issueToken(Tunnel tunnel, JwtScope scope);
 
     JwtToken issueAuthToken(String namespace);
 }

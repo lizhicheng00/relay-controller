@@ -413,10 +413,10 @@ class TunnelAppServiceTest {
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 3600))
                 .build();
         when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
-        when(jwtTokenService.issueToken(tunnel, JwtScope.HOST, false))
+        when(jwtTokenService.issueToken(tunnel, JwtScope.HOST))
                 .thenReturn(new JwtToken("host-token", 3600L, 200000L));
 
-        TunnelTokenResponse response = service.issueToken("ns-user-001", "aaaadysa", "host", false);
+        TunnelTokenResponse response = service.issueToken("ns-user-001", "aaaadysa", "host");
 
         assertThat(response.getTunnelId()).isEqualTo("aaaadysa");
         assertThat(response.getScope()).isEqualTo(JwtScope.HOST);
@@ -431,7 +431,7 @@ class TunnelAppServiceTest {
     void issueTokenRejectsUnsupportedScope() {
         TunnelAppService service = newService(new RelayProperties());
 
-        assertThatThrownBy(() -> service.issueToken("ns-user-001", "aaaadysa", "admin", false))
+        assertThatThrownBy(() -> service.issueToken("ns-user-001", "aaaadysa", "admin"))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PARAM_INVALID);

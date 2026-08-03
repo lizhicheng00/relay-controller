@@ -104,8 +104,6 @@ Gateway writes the latest runtime state directly to `tunnel_runtime_status`, usi
 
 Status telemetry is operational state, not billing truth. While a Tunnel has an active Host session, Gateway must also conditionally move `tunnel.expiration` forward using its configured `expiration_hours`, with a five-minute write granularity. Gateway owns quota, one-Host, bandwidth, HTTP, and connection enforcement; there is no Controller status callback or control-decision response.
 
-## Cookie Token
+## Tunnel Token
 
-`forCookies=true` adds `delivery=cookie` to the same signed JWT. It does not use private-key encryption. The component serving the user-facing domain sets the token cookie with `Secure`, `HttpOnly`, and an appropriate `SameSite` and domain policy.
-
-The JWT audience is `relay-gateway`. Gateway must validate `aud`, signature, expiration, Tunnel, cluster, scope, and delivery policy.
+The JWT audience is `relay-gateway`. Gateway must validate `aud`, signature, expiration, Tunnel, cluster, and scope.

@@ -282,7 +282,7 @@ class RelayControllerApiTest {
 
     @Test
     void issueTunnelTokenApi() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "host", false))
+        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "host"))
                 .thenReturn(TunnelTokenResponse.builder()
                         .tunnelId(TUNNEL_ID)
                         .scope(JwtScope.HOST)
@@ -300,27 +300,6 @@ class RelayControllerApiTest {
                 .andExpect(jsonPath("$.lifetime").value(3600))
                 .andExpect(jsonPath("$.expiration").value(1720086400L))
                 .andExpect(jsonPath("$.token").value("host-token"))
-                .andExpect(header().string("Cache-Control", "no-store"));
-    }
-
-    @Test
-    void issueCookieTunnelTokenApi() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "connect", true))
-                .thenReturn(TunnelTokenResponse.builder()
-                        .tunnelId(TUNNEL_ID)
-                        .scope(JwtScope.CONNECT)
-                        .lifetime(3600L)
-                        .expiration(1720086400L)
-                        .token("cookie-token")
-                        .build());
-
-        mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE)
-                        .param("scope", "connect")
-                        .param("forCookies", "true"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.scope").value("connect"))
-                .andExpect(jsonPath("$.token").value("cookie-token"))
                 .andExpect(header().string("Cache-Control", "no-store"));
     }
 
@@ -356,7 +335,7 @@ class RelayControllerApiTest {
 
     @Test
     void issueTunnelTokenWithInvalidScopeReturnsBadRequest() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "admin", false))
+        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "admin"))
                 .thenThrow(new BizException(ErrorCode.PARAM_INVALID, "scope must be host or connect"));
 
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)
