@@ -56,34 +56,6 @@ class JwtSignerTest {
     }
 
     @Test
-    void signsNamespaceAuthClaimsForRelayController() throws Exception {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
-        KeyPair keyPair = generator.generateKeyPair();
-        JwtKeyProvider keyProvider = mock(JwtKeyProvider.class);
-        when(keyProvider.getPrivateKey()).thenReturn(keyPair.getPrivate());
-        RelayProperties properties = new RelayProperties();
-        properties.getJwt().setIssuer("devbridge");
-        properties.getJwt().getAuthToken().setAudience("relay-controller");
-        JwtSigner signer = new JwtSigner(properties, keyProvider);
-        long issuedAt = Instant.now().getEpochSecond();
-        long expiration = issuedAt + 3600;
-
-        SignedJWT jwt = SignedJWT.parse(signer.signAuthToken("ns-1", issuedAt, expiration));
-
-        assertThat(jwt.verify(new RSASSAVerifier((RSAPublicKey) keyPair.getPublic()))).isTrue();
-        assertThat(jwt.getJWTClaimsSet().getClaims().keySet())
-                .isEqualTo(Set.of("iss", "aud", "exp", "nbf", "jti", "namespace", "scp"));
-        assertThat(jwt.getJWTClaimsSet().getIssuer()).isEqualTo("devbridge");
-        assertThat(jwt.getJWTClaimsSet().getAudience()).containsExactly("relay-controller");
-        assertThat(jwt.getJWTClaimsSet().getStringClaim("namespace")).isEqualTo("ns-1");
-        assertThat(jwt.getJWTClaimsSet().getStringClaim("scp")).isEqualTo("devbridge");
-        assertThat(jwt.getJWTClaimsSet().getJWTID()).isNotBlank();
-        assertThat(jwt.getJWTClaimsSet().getNotBeforeTime().toInstant().getEpochSecond()).isEqualTo(issuedAt);
-        assertThat(jwt.getJWTClaimsSet().getExpirationTime().toInstant().getEpochSecond()).isEqualTo(expiration);
-    }
-
-    @Test
     void eachCallCreatesANewToken() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);

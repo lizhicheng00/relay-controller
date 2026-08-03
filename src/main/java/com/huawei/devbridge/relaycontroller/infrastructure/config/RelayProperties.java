@@ -13,6 +13,7 @@ public class RelayProperties {
     private int defaultExpirationHours = 72;
     private Tunnel tunnel = new Tunnel();
     private RateLimit rateLimit = new RateLimit();
+    private Security security = new Security();
     private Jwt jwt = new Jwt();
     private Billing billing = new Billing();
 
@@ -30,19 +31,24 @@ public class RelayProperties {
     }
 
     @Data
+    public static class Security {
+        private ApiKey apiKey = new ApiKey();
+    }
+
+    @Data
+    public static class ApiKey {
+        private boolean enabled = true;
+        private String primary;
+        private String standby;
+    }
+
+    @Data
     public static class Jwt {
         private String issuer = "devbridge";
         private String audience = "relay-gateway";
         private String keyId = "1";
         private String privateKey;
         private TokenTtl token = new TokenTtl(86400);
-        private AuthToken authToken = new AuthToken();
-    }
-
-    @Data
-    public static class AuthToken {
-        private String audience = "relay-controller";
-        private long ttlSeconds = 3600;
     }
 
     @Data

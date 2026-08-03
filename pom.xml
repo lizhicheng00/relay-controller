@@ -232,7 +232,6 @@
                                 <importMapping>TunnelPortResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse</importMapping>
                                 <importMapping>GatewayTunnelPortPolicyResponse=com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse</importMapping>
                                 <importMapping>TunnelTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse</importMapping>
-                                <importMapping>AuthTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.AuthTokenResponse</importMapping>
                                 <importMapping>LimitsResponse=com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse</importMapping>
                                 <importMapping>ErrorResponse=com.huawei.devbridge.relaycontroller.common.model.ErrorResponse</importMapping>
                             </importMappings>
@@ -247,7 +246,6 @@
                                 <schemaMapping>TunnelPortResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse</schemaMapping>
                                 <schemaMapping>GatewayTunnelPortPolicyResponse=com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse</schemaMapping>
                                 <schemaMapping>TunnelTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse</schemaMapping>
-                                <schemaMapping>AuthTokenResponse=com.huawei.devbridge.relaycontroller.interfaces.response.AuthTokenResponse</schemaMapping>
                                 <schemaMapping>LimitsResponse=com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse</schemaMapping>
                                 <schemaMapping>ErrorResponse=com.huawei.devbridge.relaycontroller.common.model.ErrorResponse</schemaMapping>
                             </schemaMappings>

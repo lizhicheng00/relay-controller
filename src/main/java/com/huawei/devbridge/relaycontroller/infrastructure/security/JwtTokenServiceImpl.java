@@ -25,13 +25,6 @@ public class JwtTokenServiceImpl implements JwtTokenService {
                         tunnel, scope, issuedAt, expiration));
     }
 
-    @Override
-    public JwtToken issueAuthToken(String namespace) {
-        long lifetime = relayProperties.getJwt().getAuthToken().getTtlSeconds();
-        return issue(lifetime,
-                (issuedAt, expiration) -> jwtSigner.signAuthToken(namespace, issuedAt, expiration));
-    }
-
     private JwtToken issue(long lifetime, TokenFactory tokenFactory) {
         if (lifetime <= 0) {
             throw new BizException(ErrorCode.JWT_GENERATE_FAILED);

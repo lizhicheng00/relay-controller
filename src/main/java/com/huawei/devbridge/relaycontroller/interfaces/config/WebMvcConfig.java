@@ -17,7 +17,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(rateLimitInterceptor)
                 .addPathPatterns(
-                        API_BASE + "/auth/**",
                         API_BASE + "/tunnels",
                         API_BASE + "/tunnels/**",
                         API_BASE + "/limits");

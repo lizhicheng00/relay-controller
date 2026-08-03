@@ -5,36 +5,14 @@ info:
   description: Control plane APIs for DevBridge relay tunnels. Relay Controller does not forward traffic.
 servers:
   - url: https://localhost:8443
+security:
+  - ApiKeyAuth: []
 tags:
-  - name: Auth
   - name: Tunnel
   - name: Tunnel Port
   - name: Gateway Tunnel Port
   - name: Limits
 paths:
-  /open-api-inner/v1/relay-controller/auth/token:
-    post:
-      tags: [Auth]
-      summary: Issue a namespace access token
-      description: Issues a signed Relay Controller access token for the trusted Relay Service.
-      operationId: issueAuthToken
-      parameters:
-        - $ref: '#/components/parameters/NamespaceHeader'
-      responses:
-        '200':
-          description: Newly issued namespace access token.
-          headers:
-            Cache-Control:
-              description: Prevents storage of the issued token response.
-              schema:
-                type: string
-                example: no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthTokenResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
   /open-api-inner/v1/relay-controller/tunnels:
     post:
       tags: [Tunnel]
@@ -297,6 +275,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}:
     get:
+      security: []
       tags: [Gateway Tunnel Port]
       summary: Get gateway tunnel port policy
       operationId: getGatewayTunnelPortPolicy
@@ -314,6 +293,11 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
   responses:
     ErrorResponse:
       description: Request failed.
@@ -575,26 +559,6 @@ components:
         scope:
           type: string
           enum: [host, connect]
-        lifetime:
-          type: integer
-          format: int64
-          description: Token lifetime in seconds.
-        expiration:
-          type: integer
-          format: int64
-          description: Token expiration as Unix seconds.
-        token:
-          type: string
-    AuthTokenResponse:
-      type: object
-      required: [namespace, scope, lifetime, expiration, token]
-      properties:
-        namespace:
-          type: string
-          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
-        scope:
-          type: string
-          enum: [devbridge]
         lifetime:
           type: integer
           format: int64

@@ -1,6 +1,5 @@
 package com.huawei.devbridge.relaycontroller.interfaces.config;
 
-import com.huawei.devbridge.relaycontroller.interfaces.response.AuthTokenResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelTokenResponse;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.CacheControl;
@@ -18,8 +17,7 @@ public class TokenCacheControlAdvice implements ResponseBodyAdvice<Object> {
     public boolean supports(
             MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
         Class<?> responseType = returnType.getParameterType();
-        return TunnelTokenResponse.class.isAssignableFrom(responseType)
-                || AuthTokenResponse.class.isAssignableFrom(responseType);
+        return TunnelTokenResponse.class.isAssignableFrom(responseType);
     }
 
     @Override

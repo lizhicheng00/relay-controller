@@ -21,8 +21,6 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class JwtSigner {
-    private static final String AUTH_SCOPE = "devbridge";
-
     private final RelayProperties relayProperties;
     private final JwtKeyProvider jwtKeyProvider;
 
@@ -31,15 +29,6 @@ public class JwtSigner {
                 .claim("tunnelId", tunnel.getTunnelId())
                 .claim("clusterId", tunnel.getClusterId())
                 .claim("scp", scope.value())
-                .build();
-        return sign(claims);
-    }
-
-    public String signAuthToken(String namespace, long issuedAt, long expiration) {
-        JWTClaimsSet claims = claims(
-                        relayProperties.getJwt().getAuthToken().getAudience(), issuedAt, expiration)
-                .claim("namespace", namespace)
-                .claim("scp", AUTH_SCOPE)
                 .build();
         return sign(claims);
     }
