@@ -41,7 +41,7 @@ Namespace-scoped APIs currently receive identity from `X-Namespace`; Tunnel crea
 Each Relay Controller instance owns one configured region. Set `RELAY_REGION`; tunnel and port operations only accept clusters found under that local region. Set `RELAY_DOMAIN` to the tunnel URL suffix.
 Tunnel `type` is restricted to `bridge` or `env`; blank create requests default to `bridge`.
 Tunnel `expiration` in create and update requests is the allowed inactivity duration in hours. Blank create requests default to 72 hours. Tunnel responses expose that window as `expirationHours` and the current Unix expiration time as `tunnelExpiration`; clients can derive a live countdown from `tunnelExpiration`.
-Successful tunnel or port changes refresh `tunnelExpiration`. Gateway directly maintains active Tunnel expiration with a five-minute write granularity. Reads and token issuance do not refresh expiration.
+Successful tunnel or port changes refresh `tunnelExpiration`. Positive metering settled by Controller also refreshes it from the latest `reportedAt`. Reads, token issuance, open connections without traffic, and zero-usage reports do not refresh expiration.
 Tunnel `tunnelCode` is a 40-bit `long`; `tunnelId` is the fixed 8-character lowercase base32 encoding of that 40-bit value.
 Tunnel URL format is `{tunnelId}.{clusterId}.{relay.domain}`.
 Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, and port operations reject expired tunnels; expired records are physically removed after the configured retention period.

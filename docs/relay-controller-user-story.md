@@ -23,7 +23,7 @@ Business rules:
 - tunnel URL is `{tunnelId}.{clusterId}.{relay.domain}`.
 - default expiration is 72 hours and the maximum is 720 hours.
 - create and update requests use `expiration`; tunnel responses return the inactivity window as `expirationHours` and its current Unix deadline as `tunnelExpiration`.
-- tunnel expiration is extended by successful tunnel or port changes and direct Gateway activity updates.
+- tunnel expiration is extended by successful tunnel or port changes and positive metering, using the latest reported activity time.
 - a namespace owns at most 10 active tunnels by default.
 - list returns only non-deleted, non-expired tunnels and includes `portCount`.
 - explicit delete physically removes tunnel metadata and its port policies.

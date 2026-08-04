@@ -56,7 +56,7 @@ Create and update use the `TunnelProtocol` enum from request through persistence
 
 ### Tunnel Activity
 
-Successful tunnel and port changes refresh `tunnelExpiration`. Gateway directly refreshes active Tunnel expiration with a five-minute write granularity. Reads and token issuance do not refresh it.
+Successful tunnel and port changes refresh `tunnelExpiration`. Positive metering settlement refreshes it from the latest `reportedAt`. Reads, token issuance, open connections without traffic, and zero-usage reports do not refresh it.
 
 ## 4. API Summary
 
@@ -82,7 +82,7 @@ GET    /open-api-inner/v1/relay-controller/limits
 
 Flyway `V1` creates the phase-one tables. The consolidated `V3` adds the final phase-two plans, accounts, UTC monthly periods, one-minute usage and billing windows, runtime status, and the Tunnel account binding. Compound database names use snake_case while Java fields use camelCase.
 
-Tunnel expiration is refreshed by meaningful configuration changes and direct Gateway activity updates. Explicit deletion removes the Tunnel, its Port rows, and runtime status in one transaction; scheduled cleanup does the same for aged Tunnels.
+Tunnel expiration is refreshed by meaningful configuration changes and positive metering settlement. Explicit deletion removes the Tunnel, its Port rows, and runtime status in one transaction; scheduled cleanup does the same for aged Tunnels.
 
 ## 6. Runtime Configuration
 

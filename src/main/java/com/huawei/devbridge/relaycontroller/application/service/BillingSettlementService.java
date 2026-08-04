@@ -43,9 +43,12 @@ public class BillingSettlementService {
         Map<PeriodKey, Long> usageByPeriod = new TreeMap<>(Comparator
                 .comparing(PeriodKey::accountId)
                 .thenComparing(PeriodKey::periodStart));
-        Map<String, Long> usageByTunnel = new TreeMap<>();
+        Map<String, TunnelUsage> usageByTunnel = new TreeMap<>();
         for (MeteringRecord record : records) {
             long usageBytes = record.getUsageBytes();
+            if (usageBytes <= 0) {
+                continue;
+            }
             usageByMinute.merge(
                     new MinuteKey(
                             record.getAccountId(),
@@ -59,7 +62,10 @@ public class BillingSettlementService {
                             BillingService.periodStart(record.getReportedAt())),
                     usageBytes,
                     Math::addExact);
-            usageByTunnel.merge(record.getTunnelId(), usageBytes, Math::addExact);
+            usageByTunnel.merge(
+                    record.getTunnelId(),
+                    new TunnelUsage(usageBytes, record.getReportedAt()),
+                    TunnelUsage::merge);
         }
 
         for (Map.Entry<PeriodKey, Long> entry : usageByPeriod.entrySet()) {
@@ -77,9 +83,12 @@ public class BillingSettlementService {
         }
 
         long settledAt = TimeUtils.nowSeconds();
-        for (Map.Entry<String, Long> entry : usageByTunnel.entrySet()) {
+        for (Map.Entry<String, TunnelUsage> entry : usageByTunnel.entrySet()) {
+            TunnelUsage usage = entry.getValue();
             tunnelRepository.increaseBandwidthUsed(
-                    entry.getKey(), relayProperties.getRegion(), entry.getValue(), settledAt);
+                    entry.getKey(), relayProperties.getRegion(), usage.bytes(), settledAt);
+            tunnelRepository.refreshExpiration(
+                    entry.getKey(), relayProperties.getRegion(), usage.lastReportedAt());
         }
         for (PeriodKey period : usageByPeriod.keySet()) {
             billingRepository.blockQuotaIfExhausted(period.accountId(), period.periodStart());
@@ -98,5 +107,13 @@ public class BillingSettlementService {
     }
 
     private record PeriodKey(Long accountId, long periodStart) {
+    }
+
+    private record TunnelUsage(long bytes, long lastReportedAt) {
+        private TunnelUsage merge(TunnelUsage other) {
+            return new TunnelUsage(
+                    Math.addExact(bytes, other.bytes),
+                    Math.max(lastReportedAt, other.lastReportedAt));
+        }
     }
 }

@@ -54,6 +54,7 @@ class BillingSettlementServiceTest {
         verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206400L, 1000L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
+        verify(tunnelRepository).refreshExpiration("aaaadysa", "region-a", 1785206440L);
         verify(billingRepository).markMeteringSettled(records);
     }
 
@@ -95,6 +96,8 @@ class BillingSettlementServiceTest {
         verify(billingService).ensurePeriod(7L, 1782864000L);
         verify(billingRepository).increasePeriodUsage(7L, 1782864000L, 1000L);
         verify(billingRepository, times(1)).blockQuotaIfExhausted(7L, 1782864000L);
+        verify(tunnelRepository).refreshExpiration("aaaadysa", "region-a", 1785206410L);
+        verify(tunnelRepository).refreshExpiration("aaaadyta", "region-a", 1785206470L);
     }
 
     @Test
@@ -113,6 +116,7 @@ class BillingSettlementServiceTest {
         verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206460L, 600L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
+        verify(tunnelRepository).refreshExpiration("aaaadysa", "region-a", 1785206470L);
     }
 
     @Test
@@ -132,6 +136,26 @@ class BillingSettlementServiceTest {
 
         verify(billingRepository).blockQuotaIfExhausted(7L, julyStart);
         verify(billingRepository).blockQuotaIfExhausted(7L, augustStart);
+        verify(tunnelRepository).refreshExpiration(
+                "aaaadysa", "region-a", Instant.parse("2026-08-01T00:00:10Z").getEpochSecond());
+    }
+
+    @Test
+    void settlesZeroUsageWithoutBillingOrRefreshingExpiration() {
+        BillingSettlementService service = service();
+        List<MeteringRecord> records = List.of(record(11L, 0L, 1785206410L));
+        when(billingRepository.lockUnsettledMetering(List.of("cluster-a"), 500)).thenReturn(records);
+        when(billingRepository.markMeteringSettled(records)).thenReturn(1);
+
+        assertThat(service.settleBatch(500)).isEqualTo(1);
+
+        verify(billingService, never()).ensurePeriod(anyLong(), anyLong());
+        verify(billingRepository, never()).increasePeriodUsage(anyLong(), anyLong(), anyLong());
+        verify(billingRepository, never()).increaseMinuteUsage(anyLong(), eq("aaaadysa"), anyLong(), anyLong());
+        verify(billingRepository, never()).blockQuotaIfExhausted(anyLong(), anyLong());
+        verify(tunnelRepository, never()).increaseBandwidthUsed(eq("aaaadysa"), eq("region-a"), anyLong(), anyLong());
+        verify(tunnelRepository, never()).refreshExpiration(eq("aaaadysa"), eq("region-a"), anyLong());
+        verify(billingRepository).markMeteringSettled(records);
     }
 
     @Test
