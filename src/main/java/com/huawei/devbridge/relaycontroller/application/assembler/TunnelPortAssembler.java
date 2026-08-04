@@ -2,7 +2,6 @@ package com.huawei.devbridge.relaycontroller.application.assembler;
 
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelPort;
-import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
 
 public final class TunnelPortAssembler {
@@ -13,17 +12,6 @@ public final class TunnelPortAssembler {
         return TunnelPortResponse.builder()
                 .tunnelId(tunnel.getTunnelId())
                 .tunnelCode(tunnelPort.getTunnelCode())
-                .port(tunnelPort.getPort())
-                .protocol(tunnelPort.getProtocol())
-                .allowAnonymous(tunnelPort.getAllowAnonymous())
-                .build();
-    }
-
-    public static GatewayTunnelPortPolicyResponse toGatewayPolicy(Tunnel tunnel, TunnelPort tunnelPort) {
-        return GatewayTunnelPortPolicyResponse.builder()
-                .tunnelId(tunnel.getTunnelId())
-                .tunnelCode(tunnelPort.getTunnelCode())
-                .clusterId(tunnel.getClusterId())
                 .port(tunnelPort.getPort())
                 .protocol(tunnelPort.getProtocol())
                 .allowAnonymous(tunnelPort.getAllowAnonymous())

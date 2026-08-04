@@ -97,7 +97,7 @@ public class GlobalExceptionHandler {
         return switch (errorCode) {
             case PARAM_INVALID, TUNNEL_PORT_INVALID -> HttpStatus.BAD_REQUEST;
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
-            case TUNNEL_ACCESS_DENIED, TUNNEL_PORT_ACCESS_DENIED, ACCOUNT_DISABLED -> HttpStatus.FORBIDDEN;
+            case TUNNEL_ACCESS_DENIED, ACCOUNT_DISABLED -> HttpStatus.FORBIDDEN;
             case CLUSTER_NOT_FOUND, TUNNEL_NOT_FOUND, TUNNEL_PORT_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case TUNNEL_EXPIRED -> HttpStatus.GONE;
             case TUNNEL_ID_CONFLICT, TUNNEL_PORT_ALREADY_EXISTS -> HttpStatus.CONFLICT;

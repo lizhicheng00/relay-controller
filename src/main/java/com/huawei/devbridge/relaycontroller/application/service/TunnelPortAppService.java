@@ -16,7 +16,6 @@ import com.huawei.devbridge.relaycontroller.domain.service.TunnelPortDomainServi
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest;
-import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -108,14 +107,6 @@ public class TunnelPortAppService {
         log.info("Tunnel port deleted: tunnelId={}, tunnelCode={}, port={}",
                 tunnel.getTunnelId(), tunnel.getTunnelCode(), port);
         return true;
-    }
-
-    public GatewayTunnelPortPolicyResponse getGatewayPortPolicy(String clusterId, String tunnelId, Long port) {
-        localClusterService.requireLocalCluster(clusterId);
-        Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegion(tunnelId, relayProperties.getRegion());
-        tunnelDomainService.assertInClusterAndNotExpired(tunnel, clusterId, ErrorCode.TUNNEL_PORT_ACCESS_DENIED);
-        TunnelPort tunnelPort = findTunnelPort(tunnel.getTunnelCode(), port);
-        return TunnelPortAssembler.toGatewayPolicy(tunnel, tunnelPort);
     }
 
     private Tunnel ownedTunnel(String rawNamespace, String tunnelId) {

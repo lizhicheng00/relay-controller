@@ -16,7 +16,6 @@ public enum ErrorCode {
     TUNNEL_PORT_INVALID("11001", "tunnel port invalid"),
     TUNNEL_PORT_ALREADY_EXISTS("11002", "tunnel port already exists"),
     TUNNEL_PORT_NOT_FOUND("11003", "tunnel port not found"),
-    TUNNEL_PORT_ACCESS_DENIED("11004", "tunnel port access denied"),
     TUNNEL_PORT_QUOTA_EXCEEDED("11005", "tunnel port quota exceeded"),
 
     ACCOUNT_DISABLED("12001", "account disabled"),

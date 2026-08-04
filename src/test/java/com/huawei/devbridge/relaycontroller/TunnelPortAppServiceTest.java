@@ -15,7 +15,6 @@ import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.domain.model.AccountPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingAccount;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
-import com.huawei.devbridge.relaycontroller.domain.model.Cluster;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelPort;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelProtocol;
@@ -27,7 +26,6 @@ import com.huawei.devbridge.relaycontroller.domain.service.TunnelDomainService;
 import com.huawei.devbridge.relaycontroller.domain.service.TunnelPortDomainService;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest;
-import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import java.util.List;
@@ -258,46 +256,6 @@ class TunnelPortAppServiceTest {
                 .isEqualTo(ErrorCode.TUNNEL_PORT_NOT_FOUND);
     }
 
-    @Test
-    void gatewayPolicyChecksClusterAndReturnsPolicy() {
-        TunnelPortAppService service = newService();
-
-        localCluster("cluster-a");
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
-        when(tunnelPortRepository.findByTunnelCodeAndPort(123456L, 8080L))
-                .thenReturn(TunnelPort.builder().tunnelCode(123456L).port(8080L)
-                        .protocol(TunnelProtocol.AUTO).allowAnonymous(true).build());
-
-        GatewayTunnelPortPolicyResponse response = service.getGatewayPortPolicy("cluster-a", "aaaadysa", 8080L);
-
-        assertThat(response.getClusterId()).isEqualTo("cluster-a");
-        assertThat(response.getAllowAnonymous()).isTrue();
-        assertThat(response.getProtocol()).isEqualTo(TunnelProtocol.AUTO);
-    }
-
-    @Test
-    void gatewayPolicyRejectsClusterMismatch() {
-        TunnelPortAppService service = newService();
-
-        localCluster("cluster-b");
-        when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
-
-        assertThatThrownBy(() -> service.getGatewayPortPolicy("cluster-b", "aaaadysa", 8080L))
-                .isInstanceOf(BizException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.TUNNEL_PORT_ACCESS_DENIED);
-    }
-
-    @Test
-    void gatewayPolicyRejectsClusterOutsideLocalRegion() {
-        TunnelPortAppService service = newService();
-
-        assertThatThrownBy(() -> service.getGatewayPortPolicy("cluster-b", "aaaadysa", 8080L))
-                .isInstanceOf(BizException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.CLUSTER_NOT_FOUND);
-    }
-
     private TunnelPortAppService newService() {
         RelayProperties properties = new RelayProperties();
         org.mockito.Mockito.lenient()
@@ -323,11 +281,6 @@ class TunnelPortAppServiceTest {
                 .clusterId(clusterId)
                 .deleted(0)
                 .build();
-    }
-
-    private void localCluster(String clusterId) {
-        when(clusterRepository.findByClusterIdAndRegion(clusterId, "region-a"))
-                .thenReturn(Cluster.builder().clusterId(clusterId).region("region-a").build());
     }
 
     private static AccountPlan accountPlan() {

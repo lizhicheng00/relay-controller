@@ -35,7 +35,6 @@ GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
 GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
-GET    /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}
 ```
 
 Namespace-scoped APIs currently receive identity from `X-Namespace`; Tunnel creation stores it as the tunnel namespace.
@@ -51,12 +50,10 @@ The seeded `trial` plan gives each namespace 5 GiB per UTC calendar month, at mo
 
 Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`.
 
-Relay Service calls namespace APIs over mTLS and supplies `X-Namespace` from its authenticated user context. Relay Controller does not issue a namespace auth token in phase two. The cluster-scoped Gateway port-policy API also remains internal and protected by mTLS.
+Relay Service calls namespace APIs over mTLS and supplies `X-Namespace` from its authenticated user context. Relay Controller does not issue a namespace auth token in phase two. Gateway shares the database and does not call Relay Controller APIs.
 
 Tunnel port APIs manage the explicit per-port allow list for a tunnel. Each port declares `protocol` as `http`, `https`, or `auto`. Unconfigured ports are denied by default. `allowAnonymous` only controls sending-side access to that port; listening-side gateway connection still requires token authentication.
-The gateway port policy API keeps `clusterId` in the path intentionally. Gateway callers use it as their cluster scope, and Relay Controller verifies the tunnel belongs to that cluster before returning the port policy.
-
-Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress. The cluster-scoped Gateway policy call is not put behind this low user limit.
+Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress.
 
 OpenAPI is maintained as YAML at `src/main/resources/static/openapi.yaml`. Maven uses this YAML during `generate-sources` to generate Spring API interfaces under `target/generated-sources/openapi`; controllers implement those generated interfaces and do not declare request mappings by hand.
 The same YAML is served directly as a static resource:
@@ -159,6 +156,6 @@ All environments reject startup without `RELAY_JWT_PRIVATE_KEY`. The decrypted v
 
 ## Security boundary
 
-mTLS authenticates the calling regional service, while `X-Namespace` remains supplied by Relay Service from its authenticated user context. These APIs must stay internal; Relay Controller does not independently authenticate the namespace in phase two. Cluster-scoped Gateway calls must also remain internal.
+mTLS authenticates Relay Service, while `X-Namespace` remains supplied from its authenticated user context. These APIs must stay internal; Relay Controller does not independently authenticate the namespace in phase two. Gateway accesses the shared database under its own service identity.
 
 Gateway, not Relay Controller, enforces the data-plane limits: one Host per tunnel through a distributed Redis lock, 5 MiB/s per tunnel, 500 HTTP requests per minute per port, and 100 concurrent connections per port. Gateway reads shared account state for quota admission and disconnects active traffic after quota or policy changes.

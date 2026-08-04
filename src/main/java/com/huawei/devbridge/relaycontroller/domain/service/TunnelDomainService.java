@@ -4,7 +4,6 @@ import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
-import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -33,17 +32,5 @@ public class TunnelDomainService {
         if (tunnel.getExpiration() != null && tunnel.getExpiration() <= TimeUtils.nowSeconds()) {
             throw new BizException(ErrorCode.TUNNEL_EXPIRED);
         }
-    }
-
-    public void assertInCluster(Tunnel tunnel, String clusterId, ErrorCode mismatchErrorCode) {
-        assertActive(tunnel);
-        if (!Objects.equals(clusterId, tunnel.getClusterId())) {
-            throw new BizException(mismatchErrorCode);
-        }
-    }
-
-    public void assertInClusterAndNotExpired(Tunnel tunnel, String clusterId, ErrorCode mismatchErrorCode) {
-        assertInCluster(tunnel, clusterId, mismatchErrorCode);
-        assertNotExpired(tunnel);
     }
 }

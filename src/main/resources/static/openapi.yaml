@@ -8,7 +8,6 @@ servers:
 tags:
   - name: Tunnel
   - name: Tunnel Port
-  - name: Gateway Tunnel Port
   - name: Limits
 paths:
   /open-api-inner/v1/relay-controller/tunnels:
@@ -271,24 +270,6 @@ paths:
                 type: boolean
         default:
           $ref: '#/components/responses/ErrorResponse'
-  /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}:
-    get:
-      tags: [Gateway Tunnel Port]
-      summary: Get gateway tunnel port policy
-      operationId: getGatewayTunnelPortPolicy
-      parameters:
-        - $ref: '#/components/parameters/ClusterIdPath'
-        - $ref: '#/components/parameters/TunnelIdPath'
-        - $ref: '#/components/parameters/PortPath'
-      responses:
-        '200':
-          description: Gateway tunnel port policy.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GatewayTunnelPortPolicyResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
 components:
   responses:
     ErrorResponse:
@@ -313,13 +294,6 @@ components:
         type: string
         pattern: '^[a-z2-7]{8}$'
         description: Lowercase base32 encoded 40-bit tunnel code.
-    ClusterIdPath:
-      name: clusterId
-      in: path
-      required: true
-      schema:
-        type: string
-        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
     PortPath:
       name: port
       in: path
@@ -615,25 +589,6 @@ components:
         tunnelCode:
           type: integer
           format: int64
-        port:
-          type: integer
-          format: int64
-        protocol:
-          type: string
-          enum: [http, https, auto]
-        allowAnonymous:
-          type: boolean
-    GatewayTunnelPortPolicyResponse:
-      type: object
-      properties:
-        tunnelId:
-          type: string
-          pattern: '^[a-z2-7]{8}$'
-        tunnelCode:
-          type: integer
-          format: int64
-        clusterId:
-          type: string
         port:
           type: integer
           format: int64

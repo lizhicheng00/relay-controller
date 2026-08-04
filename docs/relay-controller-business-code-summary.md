@@ -52,7 +52,7 @@ No cache is read or written. This makes each call independent and removes Redis 
 
 ### Port Policy
 
-Create and update use the `TunnelProtocol` enum from request through persistence. This prevents unsupported protocol strings from entering the domain or database. Gateway policy lookup additionally verifies the caller's cluster against the tunnel. Successful port mutations refresh the tunnel inactivity window.
+Create and update use the `TunnelProtocol` enum from request through persistence. This prevents unsupported protocol strings from entering the domain or database. Successful port mutations refresh the tunnel inactivity window. Gateway reads the shared tunnel and port tables directly.
 
 ### Tunnel Activity
 
@@ -75,7 +75,6 @@ GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 
-GET    /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}
 GET    /open-api-inner/v1/relay-controller/limits
 ```
 

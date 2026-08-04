@@ -27,7 +27,6 @@ import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelReque
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.response.CreateTunnelResponse;
-import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelDetailResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelListItemResponse;
@@ -462,25 +461,6 @@ class RelayControllerApiTest {
                         .header("X-Namespace", NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").value(true));
-    }
-
-    @Test
-    void getGatewayTunnelPortPolicyApi() throws Exception {
-        when(tunnelPortAppService.getGatewayPortPolicy(CLUSTER_ID, TUNNEL_ID, 8080L))
-                .thenReturn(GatewayTunnelPortPolicyResponse.builder()
-                        .tunnelId(TUNNEL_ID)
-                        .tunnelCode(123456L)
-                        .clusterId(CLUSTER_ID)
-                        .port(8080L)
-                        .protocol(TunnelProtocol.AUTO)
-                        .allowAnonymous(false)
-                        .build());
-
-        mockMvc.perform(get(BASE + "/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}", CLUSTER_ID, TUNNEL_ID, 8080))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.clusterId").value(CLUSTER_ID))
-                .andExpect(jsonPath("$.protocol").value("auto"))
-                .andExpect(jsonPath("$.allowAnonymous").value(false));
     }
 
     private CreateTunnelResponse createTunnelResponse() {

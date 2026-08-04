@@ -1,11 +1,9 @@
 package com.huawei.devbridge.relaycontroller.interfaces.controller;
 
 import com.huawei.devbridge.relaycontroller.application.service.TunnelPortAppService;
-import com.huawei.devbridge.relaycontroller.generated.api.GatewayTunnelPortApi;
 import com.huawei.devbridge.relaycontroller.generated.api.TunnelPortApi;
 import com.huawei.devbridge.relaycontroller.interfaces.request.CreateTunnelPortRequest;
 import com.huawei.devbridge.relaycontroller.interfaces.request.UpdateTunnelPortRequest;
-import com.huawei.devbridge.relaycontroller.interfaces.response.GatewayTunnelPortPolicyResponse;
 import com.huawei.devbridge.relaycontroller.interfaces.response.TunnelPortResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-public class TunnelPortController implements TunnelPortApi, GatewayTunnelPortApi {
+public class TunnelPortController implements TunnelPortApi {
     private final TunnelPortAppService tunnelPortAppService;
 
     @Override
@@ -29,11 +27,6 @@ public class TunnelPortController implements TunnelPortApi, GatewayTunnelPortApi
     @Override
     public TunnelPortResponse getTunnelPort(String xNamespace, String tunnelId, Long port) {
         return tunnelPortAppService.detail(xNamespace, tunnelId, port);
-    }
-
-    @Override
-    public GatewayTunnelPortPolicyResponse getGatewayTunnelPortPolicy(String clusterId, String tunnelId, Long port) {
-        return tunnelPortAppService.getGatewayPortPolicy(clusterId, tunnelId, port);
     }
 
     @Override
