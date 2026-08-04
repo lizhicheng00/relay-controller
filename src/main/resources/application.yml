@@ -73,11 +73,6 @@ relay:
   rate-limit:
     enabled: true
     requests-per-minute: ${RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE}
-  security:
-    api-key:
-      enabled: true
-      primary: ${RELAY_API_KEY_PRIMARY:}
-      standby: ${RELAY_API_KEY_STANDBY:}
   jwt:
     issuer: devbridge
     audience: relay-gateway

@@ -5,8 +5,6 @@ info:
   description: Control plane APIs for DevBridge relay tunnels. Relay Controller does not forward traffic.
 servers:
   - url: https://localhost:8443
-security:
-  - ApiKeyAuth: []
 tags:
   - name: Tunnel
   - name: Tunnel Port
@@ -275,7 +273,6 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /open-api-inner/v1/relay-controller/clusters/{clusterId}/tunnels/{tunnelId}/ports/{port}:
     get:
-      security: []
       tags: [Gateway Tunnel Port]
       summary: Get gateway tunnel port policy
       operationId: getGatewayTunnelPortPolicy
@@ -293,11 +290,6 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
 components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
   responses:
     ErrorResponse:
       description: Request failed.

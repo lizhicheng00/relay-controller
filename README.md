@@ -51,7 +51,7 @@ The seeded `trial` plan gives each namespace 5 GiB per UTC calendar month, at mo
 
 Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`.
 
-Relay Service calls namespace APIs with `X-API-Key` and `X-Namespace`. The regional API Key authenticates Relay Service, while Relay Service supplies the namespace established by its user authentication. mTLS remains required. The cluster-scoped Gateway port-policy API stays on mTLS authentication and does not use the Relay Service API Key.
+Relay Service calls namespace APIs over mTLS and supplies `X-Namespace` from its authenticated user context. Relay Controller does not issue a namespace auth token in phase two. The cluster-scoped Gateway port-policy API also remains internal and protected by mTLS.
 
 Tunnel port APIs manage the explicit per-port allow list for a tunnel. Each port declares `protocol` as `http`, `https`, or `auto`. Unconfigured ports are denied by default. `allowAnonymous` only controls sending-side access to that port; listening-side gateway connection still requires token authentication.
 The gateway port policy API keeps `clusterId` in the path intentionally. Gateway callers use it as their cluster scope, and Relay Controller verifies the tunnel belongs to that cluster before returning the port policy.
@@ -104,15 +104,13 @@ mvn spring-boot:run
 For IntelliJ IDEA, paste this semicolon-separated template into **Run/Debug Configuration > Environment variables** and fill in each value:
 
 ```text
-SPRING_PROFILES_ACTIVE=;SERVER_PORT=;DATASOURCE_URL=;DATASOURCE_USERNAME=;DATASOURCE_PASSWORD=;RELAY_API_KEY_PRIMARY=;RELAY_API_KEY_STANDBY=;RELAY_JWT_PRIVATE_KEY=;SERVER_SSL_KEY_STORE_BASE64=;SERVER_SSL_KEY_STORE_PASSWORD=;SERVER_SSL_TRUST_STORE_BASE64=;SERVER_SSL_TRUST_STORE_PASSWORD=
+SPRING_PROFILES_ACTIVE=;SERVER_PORT=;DATASOURCE_URL=;DATASOURCE_USERNAME=;DATASOURCE_PASSWORD=;RELAY_JWT_PRIVATE_KEY=;SERVER_SSL_KEY_STORE_BASE64=;SERVER_SSL_KEY_STORE_PASSWORD=;SERVER_SSL_TRUST_STORE_BASE64=;SERVER_SSL_TRUST_STORE_PASSWORD=
 ```
 
 Keep these values out of committed YAML:
 
 ```text
 DATASOURCE_PASSWORD
-RELAY_API_KEY_PRIMARY
-RELAY_API_KEY_STANDBY
 RELAY_JWT_PRIVATE_KEY
 SERVER_SSL_KEY_STORE_BASE64
 SERVER_SSL_KEY_STORE_PASSWORD
@@ -147,7 +145,6 @@ export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 export RELAY_DOMAIN='myhuaweicloud.com'
 export RELAY_REGION='cn-north-4'
 export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'
-export RELAY_API_KEY_PRIMARY='<at-least-32-character-random-key>'
 export RELAY_JWT_PRIVATE_KEY='<PKCS#8 PEM or Base64>'
 mvn spring-boot:run
 ```
@@ -162,6 +159,6 @@ All environments reject startup without `RELAY_JWT_PRIVATE_KEY`. The decrypted v
 
 ## Security boundary
 
-mTLS authenticates the calling regional service. Namespace APIs additionally require a region-specific Relay Service API Key; configure the same key on Controller replicas and rotate it with the optional standby key. `X-Namespace` remains supplied by the authenticated Relay Service, so these APIs must stay internal and Relay Service must derive the header from its authenticated user. API Keys are SCC-decrypted at startup, retained only as SHA-256 digests, never accepted in URLs, and never logged. Cluster-scoped Gateway calls must also remain internal.
+mTLS authenticates the calling regional service, while `X-Namespace` remains supplied by Relay Service from its authenticated user context. These APIs must stay internal; Relay Controller does not independently authenticate the namespace in phase two. Cluster-scoped Gateway calls must also remain internal.
 
 Gateway, not Relay Controller, enforces the data-plane limits: one Host per tunnel through a distributed Redis lock, 5 MiB/s per tunnel, 500 HTTP requests per minute per port, and 100 concurrent connections per port. Gateway reads shared account state for quota admission and disconnects active traffic after quota or policy changes.

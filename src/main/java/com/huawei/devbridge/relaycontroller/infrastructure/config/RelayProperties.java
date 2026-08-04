@@ -13,7 +13,6 @@ public class RelayProperties {
     private int defaultExpirationHours = 72;
     private Tunnel tunnel = new Tunnel();
     private RateLimit rateLimit = new RateLimit();
-    private Security security = new Security();
     private Jwt jwt = new Jwt();
     private Billing billing = new Billing();
 
@@ -28,18 +27,6 @@ public class RelayProperties {
     public static class RateLimit {
         private boolean enabled = true;
         private int requestsPerMinute;
-    }
-
-    @Data
-    public static class Security {
-        private ApiKey apiKey = new ApiKey();
-    }
-
-    @Data
-    public static class ApiKey {
-        private boolean enabled = true;
-        private String primary;
-        private String standby;
     }
 
     @Data
