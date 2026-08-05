@@ -60,7 +60,8 @@
         SELECT m._id,
                m.account_id,
                m.tunnel_id,
-               m.usage_bytes,
+               m.upload_bytes,
+               m.download_bytes,
                m.reported_at
         FROM tunnel_metering m FORCE INDEX (idx_metering_settlement)
         WHERE m.settled = 0

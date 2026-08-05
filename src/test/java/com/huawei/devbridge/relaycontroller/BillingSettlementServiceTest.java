@@ -200,11 +200,13 @@ class BillingSettlementServiceTest {
     }
 
     private static MeteringRecord record(long id, String tunnelId, long usageBytes, long reportedAt) {
+        long uploadBytes = usageBytes / 2;
         return MeteringRecord.builder()
                 .id(id)
                 .accountId(7L)
                 .tunnelId(tunnelId)
-                .usageBytes(usageBytes)
+                .uploadBytes(uploadBytes)
+                .downloadBytes(usageBytes - uploadBytes)
                 .reportedAt(reportedAt)
                 .build();
     }

@@ -46,10 +46,11 @@ Gateway appends one incremental usage row every 30 seconds and once more when th
 
 ```text
 unique key = tunnelId + sessionId + reportedAt
-usageBytes = bytes since the previous successful report
+uploadBytes = uploaded bytes since the previous successful report
+downloadBytes = downloaded bytes since the previous successful report
 ```
 
-An exact retry must keep the same `reportedAt` and `usageBytes`. Gateway allows at most one report per session in the same second and coalesces a session-end flush with a periodic report when necessary.
+An exact retry must keep the same `reportedAt`, `uploadBytes`, and `downloadBytes`. Gateway allows at most one report per session in the same second and coalesces a session-end flush with a periodic report when necessary.
 
 ```sql
 INSERT IGNORE INTO tunnel_metering (
@@ -57,7 +58,8 @@ INSERT IGNORE INTO tunnel_metering (
     cluster_id,
     tunnel_id,
     session_id,
-    usage_bytes,
+    upload_bytes,
+    download_bytes,
     reported_at,
     created_at,
     settled
@@ -69,6 +71,7 @@ SELECT
     ?,
     ?,
     ?,
+    ?,
     UNIX_TIMESTAMP(),
     0
 FROM tunnel t
@@ -77,9 +80,9 @@ WHERE t.tunnel_id = ?
   AND t.deleted = 0;
 ```
 
-The placeholders after `tunnel_id` are `session_id`, `usage_bytes`, and `reported_at`. Selecting account and cluster ownership from `tunnel` prevents caller-supplied ownership mismatches. Gateway retains the local byte count until this insert succeeds; a duplicate-key result is successful only for an exact retry.
+The placeholders after `tunnel_id` are `session_id`, `upload_bytes`, `download_bytes`, and `reported_at`. Selecting account and cluster ownership from `tunnel` prevents caller-supplied ownership mismatches. Gateway retains both local byte counts until this insert succeeds; a duplicate-key result is successful only for an exact retry.
 
-Every minute Controller selects bounded local-Region batches where `settled = 0` using `FOR UPDATE SKIP LOCKED` until the current backlog is drained. Each batch produces account-period totals, Tunnel-minute usage, and Tunnel totals, then updates `billing_period`, `billing_usage_1m`, and Tunnel usage before marking the selected records settled. Each batch shares one transaction: either every aggregate and marker commits, or all records remain available for retry. `SKIP LOCKED` lets multiple Controller replicas work without charging the same row twice.
+Every minute Controller selects bounded local-Region batches where `settled = 0` using `FOR UPDATE SKIP LOCKED` until the current backlog is drained. It adds upload and download bytes for billing. Each batch produces account-period totals, Tunnel-minute usage, and Tunnel totals, then updates `billing_period`, `billing_usage_1m`, and Tunnel usage before marking the selected records settled. Each batch shares one transaction: either every aggregate and marker commits, or all records remain available for retry. `SKIP LOCKED` lets multiple Controller replicas work without charging the same row twice.
 
 ## Quota Decisions
 

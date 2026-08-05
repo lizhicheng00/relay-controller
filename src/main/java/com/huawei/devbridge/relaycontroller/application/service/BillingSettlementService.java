@@ -45,7 +45,7 @@ public class BillingSettlementService {
                 .thenComparing(PeriodKey::periodStart));
         Map<String, TunnelUsage> usageByTunnel = new TreeMap<>();
         for (MeteringRecord record : records) {
-            long usageBytes = record.getUsageBytes();
+            long usageBytes = record.totalBytes();
             if (usageBytes <= 0) {
                 continue;
             }
