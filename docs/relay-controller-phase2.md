@@ -100,7 +100,7 @@ Controller maintains UTC hourly `reported_at` partitions and keeps two future ho
 
 ## Tunnel Runtime Status
 
-Gateway writes the latest runtime state directly to `tunnel_runtime_status`, using `tunnel_id` as the key. The write must verify that the Tunnel belongs to the reporting cluster and update values only when the incoming `reported_at` is not older than the stored value. `client_connection_count` is the active SSH channel count; a separate channel field is intentionally not stored. Controller exposes a compact Tunnel `status` object containing Host and client connection counts, current rates, and `reportedAt`.
+Gateway writes the latest runtime state directly to `tunnel_runtime_status`, using `tunnel_id` as the key. The write must verify that the Tunnel belongs to the reporting cluster and update values only when the incoming `reported_at` is not older than the stored value. `client_connection_count` is the active SSH channel count; a separate channel field is intentionally not stored. Controller exposes a compact Tunnel `status` object containing Host and client connection counts, current rates, cumulative upload/download bytes, and `reportedAt`.
 
 Status telemetry is operational state, not billing truth. Controller refreshes `tunnel.expiration` while settling positive metering, using the latest `reported_at` and the configured `expiration_hours`. An open Host session without traffic and a zero-usage report are not activity. Gateway owns quota, one-Host, bandwidth, HTTP, and connection enforcement; there is no Controller status callback or control-decision response.
 

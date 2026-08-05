@@ -8,6 +8,8 @@
                client_connection_count,
                upload_bytes_per_second,
                download_bytes_per_second,
+               total_upload_bytes,
+               total_download_bytes,
                reported_at
         FROM tunnel_runtime_status
         WHERE tunnel_id = #{tunnelId}

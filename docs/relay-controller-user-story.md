@@ -65,7 +65,7 @@ There is no public delete-all port endpoint. Deleting a tunnel and the aging job
 
 Gateway reads a port policy using its `clusterId`. Relay Controller verifies that the cluster is local and that the tunnel belongs to it before returning the policy.
 
-Gateway writes the latest Host activity directly to the shared runtime-status table. Tunnel detail returns it as a `status` object containing Host connection count, client connection count measured as active SSH channels, current upload/download rates, and report time. Read operations and token issuance do not extend the tunnel lifetime.
+Gateway writes the latest Host activity directly to the shared runtime-status table. Tunnel detail returns it as a `status` object containing Host connection count, client connection count measured as active SSH channels, current upload/download rates, cumulative upload/download bytes, and report time. Read operations and token issuance do not extend the tunnel lifetime.
 
 ## 5. Billing And Aging
 

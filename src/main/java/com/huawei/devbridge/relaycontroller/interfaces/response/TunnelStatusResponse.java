@@ -10,5 +10,7 @@ public class TunnelStatusResponse {
     private Integer clientConnectionCount;
     private Long uploadBytesPerSecond;
     private Long downloadBytesPerSecond;
+    private Long totalUploadBytes;
+    private Long totalDownloadBytes;
     private Long reportedAt;
 }

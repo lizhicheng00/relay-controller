@@ -48,6 +48,8 @@ public final class TunnelAssembler {
                     .clientConnectionCount(runtimeStatus.getClientConnectionCount())
                     .uploadBytesPerSecond(runtimeStatus.getUploadBytesPerSecond())
                     .downloadBytesPerSecond(runtimeStatus.getDownloadBytesPerSecond())
+                    .totalUploadBytes(runtimeStatus.getTotalUploadBytes())
+                    .totalDownloadBytes(runtimeStatus.getTotalDownloadBytes())
                     .reportedAt(runtimeStatus.getReportedAt())
                     .build());
         }

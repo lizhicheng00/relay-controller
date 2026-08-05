@@ -421,6 +421,8 @@ components:
         - clientConnectionCount
         - uploadBytesPerSecond
         - downloadBytesPerSecond
+        - totalUploadBytes
+        - totalDownloadBytes
         - reportedAt
       properties:
         hostConnectionCount:
@@ -440,6 +442,16 @@ components:
           type: integer
           format: int64
           minimum: 0
+        totalUploadBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Latest Gateway-reported cumulative upload bytes.
+        totalDownloadBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Latest Gateway-reported cumulative download bytes.
         reportedAt:
           type: integer
           format: int64

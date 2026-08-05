@@ -224,6 +224,8 @@ class RelayControllerApiTest {
                         .clientConnectionCount(3)
                         .uploadBytesPerSecond(1024L)
                         .downloadBytesPerSecond(2048L)
+                        .totalUploadBytes(1048576L)
+                        .totalDownloadBytes(2097152L)
                         .reportedAt(1720000000L)
                         .build())
                 .build());
@@ -239,6 +241,8 @@ class RelayControllerApiTest {
                 .andExpect(jsonPath("$.status.clientConnectionCount").value(3))
                 .andExpect(jsonPath("$.status.uploadBytesPerSecond").value(1024L))
                 .andExpect(jsonPath("$.status.downloadBytesPerSecond").value(2048L))
+                .andExpect(jsonPath("$.status.totalUploadBytes").value(1048576L))
+                .andExpect(jsonPath("$.status.totalDownloadBytes").value(2097152L))
                 .andExpect(jsonPath("$.status.reportedAt").value(1720000000L))
                 .andExpect(jsonPath("$.expiresAt").doesNotExist())
                 .andExpect(jsonPath("$.jwt").doesNotExist());

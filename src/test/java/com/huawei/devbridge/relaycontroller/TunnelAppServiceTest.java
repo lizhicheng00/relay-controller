@@ -325,6 +325,8 @@ class TunnelAppServiceTest {
                 .clientConnectionCount(3)
                 .uploadBytesPerSecond(1024L)
                 .downloadBytesPerSecond(2048L)
+                .totalUploadBytes(1048576L)
+                .totalDownloadBytes(2097152L)
                 .reportedAt(1720000000L)
                 .build();
         when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
@@ -336,6 +338,8 @@ class TunnelAppServiceTest {
         assertThat(response.getStatus().getClientConnectionCount()).isEqualTo(3);
         assertThat(response.getStatus().getUploadBytesPerSecond()).isEqualTo(1024L);
         assertThat(response.getStatus().getDownloadBytesPerSecond()).isEqualTo(2048L);
+        assertThat(response.getStatus().getTotalUploadBytes()).isEqualTo(1048576L);
+        assertThat(response.getStatus().getTotalDownloadBytes()).isEqualTo(2097152L);
         assertThat(response.getStatus().getReportedAt()).isEqualTo(1720000000L);
     }
 
