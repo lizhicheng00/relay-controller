@@ -72,7 +72,7 @@ DEFAULT CHARACTER SET utf8mb4
 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the final phase-two schema: trial plans, namespace accounts, UTC monthly periods, append-only metering, one-minute billing aggregates, runtime status, and the Tunnel account binding.
+Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the phase-two billing and runtime schema. `V4` adds cumulative upload/download bytes to Tunnel runtime status.
 Because this consolidation happened before phase two was released, development databases that already applied the former V3-V5 sequence must be rebuilt or explicitly realigned; deployed migration history must not be rewritten after release.
 
 Gateway phase-two metering appends incremental usage directly to `tunnel_metering` every 30 seconds and at session end. The unique key `(tunnel_id, session_id, reported_at)` makes an exact retry idempotent. Every minute Relay Controller locks an unsettled batch with `SKIP LOCKED`, updates monthly and one-minute totals, and marks the same records settled in one transaction.
