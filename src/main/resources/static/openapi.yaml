@@ -164,7 +164,7 @@ paths:
         - $ref: '#/components/parameters/NamespaceHeader'
       responses:
         '200':
-          description: Current plan limits and UTC monthly traffic balance.
+          description: Current plan limits and monthly traffic balance, reset at 00:00 Asia/Shanghai.
           content:
             application/json:
               schema:
@@ -564,7 +564,7 @@ components:
         resetAt:
           type: integer
           format: int64
-          description: Next UTC monthly quota reset time as Unix seconds.
+          description: Next monthly quota reset as Unix seconds; the boundary is 00:00 Asia/Shanghai.
         quotaBytes:
           type: integer
           format: int64

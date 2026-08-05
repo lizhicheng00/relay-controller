@@ -45,12 +45,12 @@ class BillingSettlementServiceTest {
                 record(11L, 400L, 1785206410L),
                 record(12L, 600L, 1785206440L));
         when(billingRepository.lockUnsettledMetering(List.of("cluster-a"), 500)).thenReturn(records);
-        when(billingRepository.increasePeriodUsage(7L, 1782864000L, 1000L)).thenReturn(true);
+        when(billingRepository.increasePeriodUsage(7L, 1782835200L, 1000L)).thenReturn(true);
         when(billingRepository.markMeteringSettled(records)).thenReturn(2);
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
-        verify(billingRepository).blockQuotaIfExhausted(7L, 1782864000L);
+        verify(billingRepository).blockQuotaIfExhausted(7L, 1782835200L);
         verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206400L, 1000L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
@@ -87,15 +87,15 @@ class BillingSettlementServiceTest {
                 record(11L, "aaaadysa", 400L, 1785206410L),
                 record(12L, "aaaadyta", 600L, 1785206470L));
         when(billingRepository.lockUnsettledMetering(List.of("cluster-a"), 500)).thenReturn(records);
-        when(billingRepository.increasePeriodUsage(eq(7L), eq(1782864000L), anyLong()))
+        when(billingRepository.increasePeriodUsage(eq(7L), eq(1782835200L), anyLong()))
                 .thenReturn(true);
         when(billingRepository.markMeteringSettled(records)).thenReturn(2);
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
-        verify(billingService).ensurePeriod(7L, 1782864000L);
-        verify(billingRepository).increasePeriodUsage(7L, 1782864000L, 1000L);
-        verify(billingRepository, times(1)).blockQuotaIfExhausted(7L, 1782864000L);
+        verify(billingService).ensurePeriod(7L, 1782835200L);
+        verify(billingRepository).increasePeriodUsage(7L, 1782835200L, 1000L);
+        verify(billingRepository, times(1)).blockQuotaIfExhausted(7L, 1782835200L);
         verify(tunnelRepository).refreshExpiration("aaaadysa", "region-a", 1785206410L);
         verify(tunnelRepository).refreshExpiration("aaaadyta", "region-a", 1785206470L);
     }
@@ -107,7 +107,7 @@ class BillingSettlementServiceTest {
                 record(11L, 400L, 1785206410L),
                 record(12L, 600L, 1785206470L));
         when(billingRepository.lockUnsettledMetering(List.of("cluster-a"), 500)).thenReturn(records);
-        when(billingRepository.increasePeriodUsage(7L, 1782864000L, 1000L)).thenReturn(true);
+        when(billingRepository.increasePeriodUsage(7L, 1782835200L, 1000L)).thenReturn(true);
         when(billingRepository.markMeteringSettled(records)).thenReturn(2);
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
@@ -120,13 +120,13 @@ class BillingSettlementServiceTest {
     }
 
     @Test
-    void separatesUsageAcrossUtcBillingPeriods() {
-        long julyStart = Instant.parse("2026-07-01T00:00:00Z").getEpochSecond();
-        long augustStart = Instant.parse("2026-08-01T00:00:00Z").getEpochSecond();
+    void separatesUsageAcrossAsiaShanghaiBillingPeriods() {
+        long julyStart = Instant.parse("2026-06-30T16:00:00Z").getEpochSecond();
+        long augustStart = Instant.parse("2026-07-31T16:00:00Z").getEpochSecond();
         BillingSettlementService service = service();
         List<MeteringRecord> records = List.of(
-                record(11L, 400L, Instant.parse("2026-07-31T23:59:50Z").getEpochSecond()),
-                record(12L, 600L, Instant.parse("2026-08-01T00:00:10Z").getEpochSecond()));
+                record(11L, 400L, Instant.parse("2026-07-31T15:59:50Z").getEpochSecond()),
+                record(12L, 600L, Instant.parse("2026-07-31T16:00:10Z").getEpochSecond()));
         when(billingRepository.lockUnsettledMetering(List.of("cluster-a"), 500)).thenReturn(records);
         when(billingRepository.increasePeriodUsage(7L, julyStart, 400L)).thenReturn(true);
         when(billingRepository.increasePeriodUsage(7L, augustStart, 600L)).thenReturn(true);
@@ -137,7 +137,7 @@ class BillingSettlementServiceTest {
         verify(billingRepository).blockQuotaIfExhausted(7L, julyStart);
         verify(billingRepository).blockQuotaIfExhausted(7L, augustStart);
         verify(tunnelRepository).refreshExpiration(
-                "aaaadysa", "region-a", Instant.parse("2026-08-01T00:00:10Z").getEpochSecond());
+                "aaaadysa", "region-a", Instant.parse("2026-07-31T16:00:10Z").getEpochSecond());
     }
 
     @Test
@@ -165,7 +165,7 @@ class BillingSettlementServiceTest {
                 record(11L, 400L, 1785206410L),
                 record(12L, 600L, 1785206440L));
         when(billingRepository.lockUnsettledMetering(List.of("cluster-a"), 500)).thenReturn(records);
-        when(billingRepository.increasePeriodUsage(7L, 1782864000L, 1000L)).thenReturn(true);
+        when(billingRepository.increasePeriodUsage(7L, 1782835200L, 1000L)).thenReturn(true);
         when(billingRepository.markMeteringSettled(records)).thenReturn(1);
 
         assertThatThrownBy(() -> service.settleBatch(500))

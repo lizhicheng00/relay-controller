@@ -33,8 +33,8 @@ class BillingServiceTest {
         BillingService service = service();
         stubAccountAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
-                .periodStart(1782864000L)
-                .periodEnd(1785542400L)
+                .periodStart(1782835200L)
+                .periodEnd(1785513600L)
                 .quotaBytes(1000L)
                 .billedBytes(400L)
                 .build());
@@ -50,8 +50,8 @@ class BillingServiceTest {
         BillingService service = service();
         stubAccountAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
-                .periodStart(1782864000L)
-                .periodEnd(1785542400L)
+                .periodStart(1782835200L)
+                .periodEnd(1785513600L)
                 .quotaBytes(1000L)
                 .billedBytes(1000L)
                 .build());
@@ -91,10 +91,10 @@ class BillingServiceTest {
     }
 
     @Test
-    void createsPeriodUsingUtcMonthBoundaries() {
+    void createsPeriodUsingAsiaShanghaiMonthBoundaries() {
         BillingService service = service();
-        long julyStart = Instant.parse("2026-07-01T00:00:00Z").getEpochSecond();
-        long augustStart = Instant.parse("2026-08-01T00:00:00Z").getEpochSecond();
+        long julyStart = Instant.parse("2026-06-30T16:00:00Z").getEpochSecond();
+        long augustStart = Instant.parse("2026-07-31T16:00:00Z").getEpochSecond();
         BillingAccount account = BillingAccount.builder()
                 .id(7L)
                 .planCode("trial")
@@ -114,7 +114,7 @@ class BillingServiceTest {
         when(billingRepository.findPlanByCode("trial")).thenReturn(plan);
         when(billingRepository.findPeriod(7L, julyStart)).thenReturn(period);
 
-        service.ensurePeriod(7L, Instant.parse("2026-07-31T23:59:59Z").getEpochSecond());
+        service.ensurePeriod(7L, Instant.parse("2026-07-31T15:59:59Z").getEpochSecond());
 
         verify(billingRepository).createPeriodIfAbsent(7L, julyStart, augustStart, 1000L);
     }

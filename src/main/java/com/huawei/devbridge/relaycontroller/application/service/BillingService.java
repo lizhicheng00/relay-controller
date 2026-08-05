@@ -13,7 +13,7 @@ import com.huawei.devbridge.relaycontroller.domain.service.NamespaceService;
 import com.huawei.devbridge.relaycontroller.infrastructure.config.RelayProperties;
 import java.time.Instant;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class BillingService {
+    private static final ZoneId BILLING_ZONE = ZoneId.of("Asia/Shanghai");
+
     private final BillingRepository billingRepository;
     private final NamespaceService namespaceService;
     private final RelayProperties relayProperties;
@@ -119,9 +121,9 @@ public class BillingService {
     }
 
     private static PeriodRange periodRange(long timestamp) {
-        YearMonth month = YearMonth.from(Instant.ofEpochSecond(timestamp).atZone(ZoneOffset.UTC));
-        long start = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
-        long end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        YearMonth month = YearMonth.from(Instant.ofEpochSecond(timestamp).atZone(BILLING_ZONE));
+        long start = month.atDay(1).atStartOfDay(BILLING_ZONE).toEpochSecond();
+        long end = month.plusMonths(1).atDay(1).atStartOfDay(BILLING_ZONE).toEpochSecond();
         return new PeriodRange(start, end);
     }
 

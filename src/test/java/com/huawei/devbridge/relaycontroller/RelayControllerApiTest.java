@@ -274,7 +274,7 @@ class RelayControllerApiTest {
     @Test
     void getLimitsApi() throws Exception {
         when(limitsAppService.getLimits(NAMESPACE)).thenReturn(LimitsResponse.builder()
-                .resetAt(1785542400L)
+                .resetAt(1785513600L)
                 .quotaBytes(5368709120L)
                 .remainingBytes(5368707584L)
                 .activeTunnels(2L)
@@ -288,7 +288,7 @@ class RelayControllerApiTest {
 
         mockMvc.perform(get(BASE + "/limits").header("X-Namespace", NAMESPACE))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.resetAt").value(1785542400L))
+                .andExpect(jsonPath("$.resetAt").value(1785513600L))
                 .andExpect(jsonPath("$.quotaBytes").value(5368709120L))
                 .andExpect(jsonPath("$.remainingBytes").value(5368707584L))
                 .andExpect(jsonPath("$.namespace").doesNotExist())

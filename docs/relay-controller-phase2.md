@@ -38,7 +38,7 @@ The `trial` row in `billing_plan` is the single source of truth:
 | HTTP requests per port | 500/min |
 | Concurrent connections per port | 100 |
 
-Monthly periods use UTC and are immutable rows. A new `billing_period` is created for each month; no scheduled reset mutates the previous month.
+Monthly periods are immutable rows and reset at 00:00 `Asia/Shanghai` on the first day of each month. Their boundaries are stored and exchanged as Unix seconds, so behavior does not depend on the Controller, Gateway, or database system timezone. A new `billing_period` is created for each month; no scheduled reset mutates the previous month.
 
 ## Gateway Usage Contract
 
@@ -95,7 +95,7 @@ remainingBytes = max(0, quotaBytes - usedBytes)
 
 Balance and Gateway enforcement use settled monthly state. This intentionally accepts up to one settlement interval of delay in exchange for one consistent quota source.
 
-When a period reaches its quota, Controller advances `billing_account.quota_blocked_until` to that period's end in the same settlement transaction. The timestamp never moves backward, so late historical metering cannot clear a current block; it expires naturally at the next UTC month. Gateway only needs the Tunnel's account status and this timestamp when accepting a connection.
+When a period reaches its quota, Controller advances `billing_account.quota_blocked_until` to that period's end in the same settlement transaction. The timestamp never moves backward, so late historical metering cannot clear a current block; it expires naturally at the next `Asia/Shanghai` month boundary. Gateway only needs the Tunnel's account status and this Unix timestamp when accepting a connection.
 
 Existing JWTs remain valid cryptographically until expiration. Gateway must disconnect active traffic when the account becomes blocked.
 
