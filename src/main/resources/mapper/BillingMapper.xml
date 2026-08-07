@@ -92,13 +92,6 @@
           AND a.quota_blocked_until &lt; bp.period_end
     </update>
 
-    <insert id="increaseMinuteUsage">
-        INSERT INTO billing_usage_1m (account_id, tunnel_id, window_start, usage_bytes)
-        VALUES (#{accountId}, #{tunnelId}, #{windowStart}, #{usageBytes})
-        ON DUPLICATE KEY UPDATE
-            usage_bytes = usage_bytes + VALUES(usage_bytes)
-    </insert>
-
     <update id="markMeteringSettled">
         UPDATE tunnel_metering
         SET settled = 1

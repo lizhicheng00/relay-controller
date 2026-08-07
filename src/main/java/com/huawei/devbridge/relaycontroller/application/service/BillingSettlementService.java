@@ -36,10 +36,6 @@ public class BillingSettlementService {
             return 0;
         }
 
-        Map<MinuteKey, Long> usageByMinute = new TreeMap<>(Comparator
-                .comparing(MinuteKey::accountId)
-                .thenComparing(MinuteKey::tunnelId)
-                .thenComparing(MinuteKey::windowStart));
         Map<PeriodKey, Long> usageByPeriod = new TreeMap<>(Comparator
                 .comparing(PeriodKey::accountId)
                 .thenComparing(PeriodKey::periodStart));
@@ -49,13 +45,6 @@ public class BillingSettlementService {
             if (usageBytes <= 0) {
                 continue;
             }
-            usageByMinute.merge(
-                    new MinuteKey(
-                            record.getAccountId(),
-                            record.getTunnelId(),
-                            minuteStart(record.getReportedAt())),
-                    usageBytes,
-                    Math::addExact);
             usageByPeriod.merge(
                     new PeriodKey(
                             record.getAccountId(),
@@ -76,12 +65,6 @@ public class BillingSettlementService {
                 throw new BizException(ErrorCode.INTERNAL_ERROR, "billing period update failed");
             }
         }
-        for (Map.Entry<MinuteKey, Long> entry : usageByMinute.entrySet()) {
-            MinuteKey key = entry.getKey();
-            billingRepository.increaseMinuteUsage(
-                    key.accountId(), key.tunnelId(), key.windowStart(), entry.getValue());
-        }
-
         long settledAt = TimeUtils.nowSeconds();
         for (Map.Entry<String, TunnelUsage> entry : usageByTunnel.entrySet()) {
             TunnelUsage usage = entry.getValue();
@@ -97,13 +80,6 @@ public class BillingSettlementService {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "metering settlement marker update failed");
         }
         return records.size();
-    }
-
-    private static long minuteStart(long timestamp) {
-        return timestamp - timestamp % 60;
-    }
-
-    private record MinuteKey(Long accountId, String tunnelId, long windowStart) {
     }
 
     private record PeriodKey(Long accountId, long periodStart) {

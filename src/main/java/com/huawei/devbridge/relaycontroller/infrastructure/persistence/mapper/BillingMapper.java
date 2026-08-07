@@ -43,11 +43,5 @@ public interface BillingMapper {
             @Param("accountId") Long accountId,
             @Param("periodStart") long periodStart);
 
-    int increaseMinuteUsage(
-            @Param("accountId") Long accountId,
-            @Param("tunnelId") String tunnelId,
-            @Param("windowStart") long windowStart,
-            @Param("usageBytes") long usageBytes);
-
     int markMeteringSettled(@Param("records") List<MeteringRecord> records);
 }

@@ -39,7 +39,7 @@ class BillingSettlementServiceTest {
     private LocalClusterService localClusterService;
 
     @Test
-    void aggregatesRecordsByTunnelAndMinute() {
+    void aggregatesRecordsByTunnelAndPeriod() {
         BillingSettlementService service = service();
         List<MeteringRecord> records = List.of(
                 record(11L, 400L, 1785206410L),
@@ -51,7 +51,6 @@ class BillingSettlementServiceTest {
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
         verify(billingRepository).blockQuotaIfExhausted(7L, 1782835200L);
-        verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206400L, 1000L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
         verify(tunnelRepository).refreshExpiration("aaaadysa", "region-a", 1785206440L);
@@ -101,7 +100,7 @@ class BillingSettlementServiceTest {
     }
 
     @Test
-    void aggregatesTunnelAndPeriodUsageAcrossMinutes() {
+    void aggregatesTunnelAndPeriodUsageAcrossReports() {
         BillingSettlementService service = service();
         List<MeteringRecord> records = List.of(
                 record(11L, 400L, 1785206410L),
@@ -112,8 +111,6 @@ class BillingSettlementServiceTest {
 
         assertThat(service.settleBatch(500)).isEqualTo(2);
 
-        verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206400L, 400L);
-        verify(billingRepository).increaseMinuteUsage(7L, "aaaadysa", 1785206460L, 600L);
         verify(tunnelRepository).increaseBandwidthUsed(
                 eq("aaaadysa"), eq("region-a"), eq(1000L), anyLong());
         verify(tunnelRepository).refreshExpiration("aaaadysa", "region-a", 1785206470L);
@@ -151,7 +148,6 @@ class BillingSettlementServiceTest {
 
         verify(billingService, never()).ensurePeriod(anyLong(), anyLong());
         verify(billingRepository, never()).increasePeriodUsage(anyLong(), anyLong(), anyLong());
-        verify(billingRepository, never()).increaseMinuteUsage(anyLong(), eq("aaaadysa"), anyLong(), anyLong());
         verify(billingRepository, never()).blockQuotaIfExhausted(anyLong(), anyLong());
         verify(tunnelRepository, never()).increaseBandwidthUsed(eq("aaaadysa"), eq("region-a"), anyLong(), anyLong());
         verify(tunnelRepository, never()).refreshExpiration(eq("aaaadysa"), eq("region-a"), anyLong());
@@ -184,7 +180,6 @@ class BillingSettlementServiceTest {
                 .isInstanceOf(BizException.class)
                 .extracting(exception -> ((BizException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.INTERNAL_ERROR);
-        verify(billingRepository, never()).increaseMinuteUsage(anyLong(), eq("aaaadysa"), anyLong(), anyLong());
         verify(billingRepository, never()).blockQuotaIfExhausted(anyLong(), anyLong());
         verify(billingRepository, never()).markMeteringSettled(anyList());
     }

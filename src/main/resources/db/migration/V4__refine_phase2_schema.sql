@@ -16,3 +16,5 @@ ALTER TABLE billing_period
     MODIFY COLUMN period_end BIGINT UNSIGNED NOT NULL
         COMMENT 'exclusive Asia/Shanghai period end as unix seconds',
     COMMENT = 'Monthly billing period with Asia/Shanghai boundaries';
+
+DROP TABLE billing_usage_1m;

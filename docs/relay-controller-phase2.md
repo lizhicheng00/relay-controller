@@ -7,7 +7,7 @@ Relay Controller owns:
 - namespace account and trial plan;
 - monthly quota state;
 - Tunnel and Port metadata quotas;
-- one-minute usage settlement;
+- idempotent metering settlement;
 - `GET /limits`;
 - Tunnel detail runtime status;
 - quota checks during token issuance.
@@ -82,7 +82,7 @@ WHERE t.tunnel_id = ?
 
 The placeholders after `tunnel_id` are `session_id`, `upload_bytes`, `download_bytes`, and `reported_at`. Selecting account and cluster ownership from `tunnel` prevents caller-supplied ownership mismatches. Gateway retains both local byte counts until this insert succeeds; a duplicate-key result is successful only for an exact retry.
 
-Every minute Controller selects bounded local-Region batches where `settled = 0` using `FOR UPDATE SKIP LOCKED` until the current backlog is drained. It adds upload and download bytes for billing. Each batch produces account-period totals, Tunnel-minute usage, and Tunnel totals, then updates `billing_period`, `billing_usage_1m`, and Tunnel usage before marking the selected records settled. Each batch shares one transaction: either every aggregate and marker commits, or all records remain available for retry. `SKIP LOCKED` lets multiple Controller replicas work without charging the same row twice.
+Every minute Controller selects bounded local-Region batches where `settled = 0` using `FOR UPDATE SKIP LOCKED` until the current backlog is drained. It adds upload and download bytes for billing. Each batch updates `billing_period` and Tunnel usage before marking the selected records settled. Each batch shares one transaction: either every aggregate and marker commits, or all records remain available for retry. `SKIP LOCKED` lets multiple Controller replicas work without charging the same row twice.
 
 ## Quota Decisions
 
@@ -99,7 +99,7 @@ When a period reaches its quota, Controller advances `billing_account.quota_bloc
 
 Existing JWTs remain valid cryptographically until expiration. Gateway must disconnect active traffic when the account becomes blocked.
 
-Controller maintains UTC hourly `reported_at` partitions and keeps two future hours ready. A database lock ensures that only one Controller replica performs each maintenance run. Partitions older than seven days are dropped directly. Gateway must not replay metering older than seven days, and the Controller database account needs `ALTER` permission on `tunnel_metering`. The raw table remains a short operational audit buffer; `billing_usage_1m` and `billing_period` are the durable billing results.
+Controller maintains UTC hourly `reported_at` partitions and keeps two future hours ready. A database lock ensures that only one Controller replica performs each maintenance run. Partitions older than seven days are dropped directly. Gateway must not replay metering older than seven days, and the Controller database account needs `ALTER` permission on `tunnel_metering`. The raw table remains a short operational audit buffer; `billing_period` is the durable monthly billing result.
 
 ## Tunnel Runtime Status
 

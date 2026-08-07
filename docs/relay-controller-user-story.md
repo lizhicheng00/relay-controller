@@ -69,7 +69,7 @@ Gateway writes the latest Host activity directly to the shared runtime-status ta
 
 ## 5. Billing And Aging
 
-Gateway appends idempotent incremental usage directly to the shared database. Relay Controller settles each report once into one-minute and monthly totals; it does not expose a metering HTTP endpoint.
+Gateway appends idempotent incremental usage directly to the shared database. Relay Controller settles each report once into monthly and Tunnel totals; it does not expose a metering HTTP endpoint.
 
 Expired tunnels remain recoverable for the configured retention period. The hourly cleanup job hard-deletes aged tunnel metadata, port policies, and runtime status in bounded batches.
 

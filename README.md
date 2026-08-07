@@ -75,7 +75,7 @@ COLLATE utf8mb4_0900_ai_ci;
 Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the phase-two billing and runtime schema. `V4` adds cumulative upload/download bytes to Tunnel runtime status and splits raw metering into upload/download bytes.
 Because this consolidation happened before phase two was released, development databases that already applied the former V3-V5 sequence must be rebuilt or explicitly realigned; deployed migration history must not be rewritten after release.
 
-Gateway phase-two metering appends incremental upload/download usage directly to `tunnel_metering` every 30 seconds and at session end. The unique key `(tunnel_id, session_id, reported_at)` makes an exact retry idempotent. Every minute Relay Controller locks an unsettled batch with `SKIP LOCKED`, bills the sum of both directions, updates monthly and one-minute totals, and marks the same records settled in one transaction.
+Gateway phase-two metering appends incremental upload/download usage directly to `tunnel_metering` every 30 seconds and at session end. The unique key `(tunnel_id, session_id, reported_at)` makes an exact retry idempotent. Every minute Relay Controller locks an unsettled batch with `SKIP LOCKED`, bills the sum of both directions, updates monthly and Tunnel totals, and marks the same records settled in one transaction.
 
 There is no metering HTTP endpoint. Gateway writes phase-two usage directly to the shared database according to [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md).
 

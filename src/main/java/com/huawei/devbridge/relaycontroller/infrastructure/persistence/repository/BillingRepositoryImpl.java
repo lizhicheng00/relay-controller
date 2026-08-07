@@ -66,11 +66,6 @@ public class BillingRepositoryImpl implements BillingRepository {
     }
 
     @Override
-    public void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes) {
-        billingMapper.increaseMinuteUsage(accountId, tunnelId, windowStart, usageBytes);
-    }
-
-    @Override
     public int markMeteringSettled(List<MeteringRecord> records) {
         return billingMapper.markMeteringSettled(records);
     }

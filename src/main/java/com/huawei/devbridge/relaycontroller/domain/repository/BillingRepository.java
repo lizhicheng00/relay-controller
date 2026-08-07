@@ -27,7 +27,5 @@ public interface BillingRepository {
 
     void blockQuotaIfExhausted(Long accountId, long periodStart);
 
-    void increaseMinuteUsage(Long accountId, String tunnelId, long windowStart, long usageBytes);
-
     int markMeteringSettled(List<MeteringRecord> records);
 }
