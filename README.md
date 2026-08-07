@@ -37,7 +37,7 @@ PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
 ```
 
-Namespace-scoped APIs currently receive identity from `X-Namespace`; Tunnel creation stores it as the tunnel namespace.
+All APIs require `X-Namespace` for resource isolation and `X-Account-Namespace` for shared quota and billing. Tunnel creation stores the resource namespace and resolves `account_id` from the account namespace.
 Each Relay Controller instance owns one configured region. Set `RELAY_REGION`; tunnel and port operations only accept clusters found under that local region. Set `RELAY_DOMAIN` to the tunnel URL suffix.
 Tunnel `type` is restricted to `bridge` or `env`; blank create requests default to `bridge`.
 Tunnel `expiration` in create and update requests is the allowed inactivity duration in hours. Blank create requests default to 72 hours. Tunnel responses expose that window as `expirationHours` and the current Unix expiration time as `tunnelExpiration`; clients can derive a live countdown from `tunnelExpiration`.
@@ -45,12 +45,12 @@ Successful tunnel or port changes refresh `tunnelExpiration`. Positive metering 
 Tunnel `tunnelCode` is a 40-bit `long`; `tunnelId` is the fixed 8-character lowercase base32 encoding of that 40-bit value.
 Tunnel URL format is `{tunnelId}.{clusterId}.{relay.domain}`.
 Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, and port operations reject expired tunnels; expired records are physically removed after the configured retention period.
-The seeded `trial` plan gives each namespace 5 GiB per calendar month, reset at 00:00 `Asia/Shanghai`, at most 10 active tunnels, and at most 10 ports per tunnel. Tunnel and port creation serialize on database rows, so replicas sharing the database cannot exceed those metadata quotas through concurrent requests. Deleted and expired tunnels do not count against the tunnel quota.
+The seeded `trial` plan gives each account namespace 5 GiB per calendar month, reset at 00:00 `Asia/Shanghai`, and at most 10 active tunnels shared by its resource namespaces. Each Tunnel allows at most 10 ports. Tunnel and port creation serialize on database rows, so replicas sharing the database cannot exceed those metadata quotas through concurrent requests. Deleted and expired tunnels do not count against the tunnel quota.
 `GET /limits` returns the monthly quota balance, reset time, current tunnel count, and enforceable plan limits. Request context, internal plan identifiers, and values derivable from the balance are not repeated. Tunnel detail includes a `status` object with the latest Host connection count, SSH-channel connection count, rates, cumulative upload/download bytes, and report time written by Gateway.
 
 Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`.
 
-Relay Service calls namespace APIs over mTLS and supplies `X-Namespace` from its authenticated user context. Relay Controller does not issue a namespace auth token in phase two. Gateway shares the database and does not call Relay Controller APIs.
+Relay Service calls namespace APIs over mTLS and supplies trusted `X-Namespace` and `X-Account-Namespace` values from its authenticated user context. Relay Controller does not infer namespace ownership or issue a namespace auth token in phase two. Gateway shares the database and does not call Relay Controller APIs.
 
 Tunnel port APIs manage the explicit per-port allow list for a tunnel. Each port declares `protocol` as `http`, `https`, or `auto`. Unconfigured ports are denied by default. `allowAnonymous` only controls sending-side access to that port; listening-side gateway connection still requires token authentication.
 Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress.
@@ -156,6 +156,6 @@ All environments reject startup without `RELAY_JWT_PRIVATE_KEY`. The decrypted v
 
 ## Security boundary
 
-mTLS authenticates Relay Service, while `X-Namespace` remains supplied from its authenticated user context. These APIs must stay internal; Relay Controller does not independently authenticate the namespace in phase two. Gateway accesses the shared database under its own service identity.
+mTLS authenticates Relay Service, while `X-Namespace` and `X-Account-Namespace` are supplied from its authenticated user context. These APIs must stay internal; Relay Controller validates header syntax but trusts Relay Service to provide the relationship in phase two. Gateway accesses the shared database under its own service identity.
 
 Gateway, not Relay Controller, enforces the data-plane limits: one Host per tunnel through a distributed Redis lock, 5 MiB/s per tunnel, 500 HTTP requests per minute per port, and 100 concurrent connections per port. Gateway reads shared account state for quota admission and disconnects active traffic after quota or policy changes.

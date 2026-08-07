@@ -4,7 +4,7 @@
 
 Relay Controller is the control plane for one configured region. It owns tunnel metadata, tunnel port policies, JWT issuance, and billing settlement. Relay Gateway owns traffic forwarding, metering writes, and runtime connection state.
 
-All user-facing APIs are scoped by `X-Namespace`. A tunnel is usable only when its cluster belongs to the controller's configured region and the tunnel has not expired.
+All user-facing APIs receive `X-Namespace` as the resource boundary and `X-Account-Namespace` as the shared quota owner. A tunnel is usable only when its resource namespace matches, its cluster belongs to the controller's configured region, and it has not expired.
 
 ## 2. Tunnel
 
@@ -24,7 +24,7 @@ Business rules:
 - default expiration is 72 hours and the maximum is 720 hours.
 - create and update requests use `expiration`; tunnel responses return the inactivity window as `expirationHours` and its current Unix deadline as `tunnelExpiration`.
 - tunnel expiration is extended by successful tunnel or port changes and positive metering, using the latest reported activity time.
-- a namespace owns at most 10 active tunnels by default.
+- an account namespace owns at most 10 active tunnels across its resource namespaces by default.
 - list returns only non-deleted, non-expired tunnels and includes `portCount`.
 - explicit delete physically removes tunnel metadata and its port policies.
 - expired or deleted tunnels cannot issue tokens or accept port operations.
@@ -76,7 +76,7 @@ Expired tunnels remain recoverable for the configured retention period. The hour
 ## 6. Acceptance Criteria
 
 - Namespace and region boundaries are enforced before returning or mutating business data.
-- Concurrent tunnel creation cannot exceed the namespace quota across Controller replicas sharing the database.
+- Concurrent tunnel creation cannot exceed the account-namespace quota across Controller replicas sharing the database.
 - Invalid request values return 4xx responses; unexpected failures return 5xx responses.
 - OpenAPI YAML is the source of controller mappings and Maven compilation generates the API interfaces.
 - Relay Controller itself does not depend on Redis. Gateway uses Redis for the distributed single-Host lock.

@@ -49,7 +49,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith(MockitoExtension.class)
 class RelayControllerApiTest {
     private static final String BASE = "/open-api-inner/v1/relay-controller";
-    private static final String NAMESPACE = "ns-user-001";
+    private static final String NAMESPACE = "ns-sub-user-001";
+    private static final String ACCOUNT_NAMESPACE = "ns-user-001";
     private static final String TUNNEL_ID = "aaaadysa";
     private static final String CLUSTER_ID = "cluster-a";
 
@@ -76,11 +77,12 @@ class RelayControllerApiTest {
 
     @Test
     void createTunnelApi() throws Exception {
-        when(tunnelAppService.createTunnel(eq(NAMESPACE), any(CreateTunnelRequest.class)))
+        when(tunnelAppService.createTunnel(eq(NAMESPACE), eq(ACCOUNT_NAMESPACE), any(CreateTunnelRequest.class)))
                 .thenReturn(createTunnelResponse());
 
         mockMvc.perform(post(BASE + "/tunnels")
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -119,9 +121,28 @@ class RelayControllerApiTest {
     }
 
     @Test
+    void createTunnelWithoutAccountNamespaceReturnsUnauthorized() throws Exception {
+        mockMvc.perform(post(BASE + "/tunnels")
+                        .header("X-Namespace", NAMESPACE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "dev",
+                                  "clusterId": "cluster-a",
+                                  "type": "bridge"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("40100"))
+                .andExpect(jsonPath("$.error.message").value("X-Account-Namespace is required"))
+                .andExpect(jsonPath("$.error.target").value("X-Account-Namespace"));
+    }
+
+    @Test
     void createTunnelWithInvalidTypeReturnsParamInvalid() throws Exception {
         mockMvc.perform(post(BASE + "/tunnels")
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -139,6 +160,7 @@ class RelayControllerApiTest {
     void createTunnelWithTooLargeExpirationReturnsParamInvalid() throws Exception {
         mockMvc.perform(post(BASE + "/tunnels")
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -155,22 +177,24 @@ class RelayControllerApiTest {
 
     @Test
     void getTunnelDetailNotFoundReturns404() throws Exception {
-        when(tunnelAppService.getTunnelDetail(NAMESPACE, TUNNEL_ID))
+        when(tunnelAppService.getTunnelDetail(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID))
                 .thenThrow(new BizException(ErrorCode.TUNNEL_NOT_FOUND));
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("10002"));
     }
 
     @Test
     void getTunnelDetailUnexpectedErrorReturns500() throws Exception {
-        when(tunnelAppService.getTunnelDetail(NAMESPACE, TUNNEL_ID))
+        when(tunnelAppService.getTunnelDetail(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID))
                 .thenThrow(new IllegalStateException("database password leaked"));
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.error.code").value("50000"))
                 .andExpect(jsonPath("$.error.message").value("internal error"))
@@ -180,7 +204,7 @@ class RelayControllerApiTest {
 
     @Test
     void listTunnelsApi() throws Exception {
-        when(tunnelAppService.listTunnels(NAMESPACE, CLUSTER_ID)).thenReturn(List.of(
+        when(tunnelAppService.listTunnels(NAMESPACE, ACCOUNT_NAMESPACE, CLUSTER_ID)).thenReturn(List.of(
                 TunnelListItemResponse.builder()
                         .tunnelId(TUNNEL_ID)
                         .tunnelCode(123456L)
@@ -196,6 +220,7 @@ class RelayControllerApiTest {
 
         mockMvc.perform(get(BASE + "/tunnels")
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .param("clusterId", CLUSTER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -210,7 +235,7 @@ class RelayControllerApiTest {
 
     @Test
     void getTunnelDetailApi() throws Exception {
-        when(tunnelAppService.getTunnelDetail(NAMESPACE, TUNNEL_ID)).thenReturn(TunnelDetailResponse.builder()
+        when(tunnelAppService.getTunnelDetail(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID)).thenReturn(TunnelDetailResponse.builder()
                 .name("dev")
                 .tunnelId(TUNNEL_ID)
                 .tunnelCode(123456L)
@@ -231,7 +256,8 @@ class RelayControllerApiTest {
                 .build());
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tunnelId").value(TUNNEL_ID))
                 .andExpect(jsonPath("$.clusterId").value(CLUSTER_ID))
@@ -250,7 +276,7 @@ class RelayControllerApiTest {
 
     @Test
     void issueTunnelTokenApi() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "host"))
+        when(tunnelAppService.issueToken(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID, "host"))
                 .thenReturn(TunnelTokenResponse.builder()
                         .tunnelId(TUNNEL_ID)
                         .scope(JwtScope.HOST)
@@ -261,6 +287,7 @@ class RelayControllerApiTest {
 
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .param("scope", "host"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tunnelId").value(TUNNEL_ID))
@@ -273,7 +300,7 @@ class RelayControllerApiTest {
 
     @Test
     void getLimitsApi() throws Exception {
-        when(limitsAppService.getLimits(NAMESPACE)).thenReturn(LimitsResponse.builder()
+        when(limitsAppService.getLimits(NAMESPACE, ACCOUNT_NAMESPACE)).thenReturn(LimitsResponse.builder()
                 .resetAt(1785513600L)
                 .quotaBytes(5368709120L)
                 .remainingBytes(5368707584L)
@@ -286,7 +313,8 @@ class RelayControllerApiTest {
                 .maxConnectionsPerPort(100)
                 .build());
 
-        mockMvc.perform(get(BASE + "/limits").header("X-Namespace", NAMESPACE))
+        mockMvc.perform(get(BASE + "/limits").header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resetAt").value(1785513600L))
                 .andExpect(jsonPath("$.quotaBytes").value(5368709120L))
@@ -303,11 +331,12 @@ class RelayControllerApiTest {
 
     @Test
     void issueTunnelTokenWithInvalidScopeReturnsBadRequest() throws Exception {
-        when(tunnelAppService.issueToken(NAMESPACE, TUNNEL_ID, "admin"))
+        when(tunnelAppService.issueToken(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID, "admin"))
                 .thenThrow(new BizException(ErrorCode.PARAM_INVALID, "scope must be host or connect"));
 
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .param("scope", "admin"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("40000"));
@@ -316,7 +345,8 @@ class RelayControllerApiTest {
     @Test
     void issueTunnelTokenWithoutScopeReturnsBadRequest() throws Exception {
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/token", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("40000"))
                 .andExpect(jsonPath("$.error.target").value("scope"));
@@ -324,11 +354,12 @@ class RelayControllerApiTest {
 
     @Test
     void updateTunnelApi() throws Exception {
-        when(tunnelAppService.updateTunnel(eq(NAMESPACE), eq(TUNNEL_ID), any(UpdateTunnelRequest.class)))
+        when(tunnelAppService.updateTunnel(eq(NAMESPACE), eq(ACCOUNT_NAMESPACE), eq(TUNNEL_ID), any(UpdateTunnelRequest.class)))
                 .thenReturn(true);
 
         mockMvc.perform(put(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -341,31 +372,34 @@ class RelayControllerApiTest {
 
     @Test
     void deleteTunnelApi() throws Exception {
-        when(tunnelAppService.deleteTunnel(NAMESPACE, TUNNEL_ID)).thenReturn(true);
+        when(tunnelAppService.deleteTunnel(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID)).thenReturn(true);
 
         mockMvc.perform(delete(BASE + "/tunnels/{tunnelId}", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").value(true));
     }
 
     @Test
     void deleteTunnelsApi() throws Exception {
-        when(tunnelAppService.deleteTunnels(NAMESPACE)).thenReturn(true);
+        when(tunnelAppService.deleteTunnels(NAMESPACE, ACCOUNT_NAMESPACE)).thenReturn(true);
 
         mockMvc.perform(delete(BASE + "/tunnels")
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").value(true));
     }
 
     @Test
     void createTunnelPortApi() throws Exception {
-        when(tunnelPortAppService.create(eq(NAMESPACE), eq(TUNNEL_ID), any(CreateTunnelPortRequest.class)))
+        when(tunnelPortAppService.create(eq(NAMESPACE), eq(ACCOUNT_NAMESPACE), eq(TUNNEL_ID), any(CreateTunnelPortRequest.class)))
                 .thenReturn(tunnelPortResponse(false));
 
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/ports", TUNNEL_ID)
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -382,7 +416,7 @@ class RelayControllerApiTest {
 
     @Test
     void listTunnelPortsApi() throws Exception {
-        when(tunnelPortAppService.list(NAMESPACE, TUNNEL_ID)).thenReturn(List.of(
+        when(tunnelPortAppService.list(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID)).thenReturn(List.of(
                 tunnelPortResponse(false),
                 TunnelPortResponse.builder()
                         .tunnelId(TUNNEL_ID)
@@ -393,7 +427,8 @@ class RelayControllerApiTest {
                         .build()));
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}/ports", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[1].allowAnonymous").value(true));
@@ -401,10 +436,11 @@ class RelayControllerApiTest {
 
     @Test
     void getTunnelPortApi() throws Exception {
-        when(tunnelPortAppService.detail(NAMESPACE, TUNNEL_ID, 8080L)).thenReturn(tunnelPortResponse(false));
+        when(tunnelPortAppService.detail(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID, 8080L)).thenReturn(tunnelPortResponse(false));
 
         mockMvc.perform(get(BASE + "/tunnels/{tunnelId}/ports/{port}", TUNNEL_ID, 8080)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tunnelId").value(TUNNEL_ID))
                 .andExpect(jsonPath("$.port").value(8080));
@@ -412,7 +448,7 @@ class RelayControllerApiTest {
 
     @Test
     void updateTunnelPortApi() throws Exception {
-        when(tunnelPortAppService.update(eq(NAMESPACE), eq(TUNNEL_ID), eq(8080L), any(UpdateTunnelPortRequest.class)))
+        when(tunnelPortAppService.update(eq(NAMESPACE), eq(ACCOUNT_NAMESPACE), eq(TUNNEL_ID), eq(8080L), any(UpdateTunnelPortRequest.class)))
                 .thenReturn(TunnelPortResponse.builder()
                         .tunnelId(TUNNEL_ID)
                         .tunnelCode(123456L)
@@ -423,6 +459,7 @@ class RelayControllerApiTest {
 
         mockMvc.perform(put(BASE + "/tunnels/{tunnelId}/ports/{port}", TUNNEL_ID, 8080)
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -438,6 +475,7 @@ class RelayControllerApiTest {
     void createTunnelPortWithInvalidProtocolReturnsBadRequest() throws Exception {
         mockMvc.perform(post(BASE + "/tunnels/{tunnelId}/ports", TUNNEL_ID)
                         .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -453,16 +491,18 @@ class RelayControllerApiTest {
     @Test
     void tunnelPortCollectionDoesNotSupportDelete() throws Exception {
         mockMvc.perform(delete(BASE + "/tunnels/{tunnelId}/ports", TUNNEL_ID)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isMethodNotAllowed());
     }
 
     @Test
     void deleteTunnelPortApi() throws Exception {
-        when(tunnelPortAppService.delete(NAMESPACE, TUNNEL_ID, 8080L)).thenReturn(true);
+        when(tunnelPortAppService.delete(NAMESPACE, ACCOUNT_NAMESPACE, TUNNEL_ID, 8080L)).thenReturn(true);
 
         mockMvc.perform(delete(BASE + "/tunnels/{tunnelId}/ports/{port}", TUNNEL_ID, 8080)
-                        .header("X-Namespace", NAMESPACE))
+                        .header("X-Namespace", NAMESPACE)
+                        .header("X-Account-Namespace", ACCOUNT_NAMESPACE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").value(true));
     }

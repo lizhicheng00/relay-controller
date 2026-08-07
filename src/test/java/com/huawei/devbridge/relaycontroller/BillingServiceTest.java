@@ -48,7 +48,7 @@ class BillingServiceTest {
     @Test
     void tokenIssuanceIsRejectedWhenSettledUsageReachesQuota() {
         BillingService service = service();
-        stubAccountAndPlan(1000L);
+        stubAccountByIdAndPlan(1000L);
         when(billingRepository.findPeriod(eq(7L), anyLong())).thenReturn(BillingPeriod.builder()
                 .periodStart(1782835200L)
                 .periodEnd(1785513600L)
@@ -56,7 +56,7 @@ class BillingServiceTest {
                 .billedBytes(1000L)
                 .build());
 
-        assertThatThrownBy(() -> service.assertTrafficAllowed("ns-user-001"))
+        assertThatThrownBy(() -> service.assertTrafficAllowed(7L))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ACCOUNT_QUOTA_EXCEEDED);
@@ -74,7 +74,7 @@ class BillingServiceTest {
                 .planCode("trial")
                 .status("disabled")
                 .build();
-        when(billingRepository.lockAccountByNamespace("ns-user-001")).thenReturn(account);
+        when(billingRepository.lockAccountById(7L)).thenReturn(account);
         when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
                 .planCode("trial")
                 .monthlyQuotaBytes(1000L)
@@ -84,7 +84,7 @@ class BillingServiceTest {
                 .billedBytes(0L)
                 .build());
 
-        assertThatThrownBy(() -> service.assertTrafficAllowed("ns-user-001"))
+        assertThatThrownBy(() -> service.assertTrafficAllowed(7L))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ACCOUNT_DISABLED);
@@ -131,6 +131,20 @@ class BillingServiceTest {
                 .status("active")
                 .build();
         when(billingRepository.lockAccountByNamespace("ns-user-001")).thenReturn(account);
+        when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
+                .planCode("trial")
+                .monthlyQuotaBytes(quotaBytes)
+                .build());
+    }
+
+    private void stubAccountByIdAndPlan(long quotaBytes) {
+        BillingAccount account = BillingAccount.builder()
+                .id(7L)
+                .namespace("ns-user-001")
+                .planCode("trial")
+                .status("active")
+                .build();
+        when(billingRepository.lockAccountById(7L)).thenReturn(account);
         when(billingRepository.findPlanByCode("trial")).thenReturn(BillingPlan.builder()
                 .planCode("trial")
                 .monthlyQuotaBytes(quotaBytes)

@@ -17,6 +17,7 @@ paths:
       operationId: createTunnel
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
       requestBody:
         required: true
         content:
@@ -38,6 +39,7 @@ paths:
       operationId: listTunnels
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - name: clusterId
           in: query
           required: false
@@ -61,6 +63,7 @@ paths:
       operationId: deleteTunnels
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
       responses:
         '200':
           description: Delete result.
@@ -77,6 +80,7 @@ paths:
       operationId: getTunnelDetail
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
       responses:
         '200':
@@ -93,6 +97,7 @@ paths:
       operationId: updateTunnel
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
       requestBody:
         required: true
@@ -115,6 +120,7 @@ paths:
       operationId: deleteTunnel
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
       responses:
         '200':
@@ -133,6 +139,7 @@ paths:
       operationId: issueTunnelToken
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
         - name: scope
           in: query
@@ -158,10 +165,11 @@ paths:
   /open-api-inner/v1/relay-controller/limits:
     get:
       tags: [Limits]
-      summary: Get namespace limits and monthly balance
+      summary: Get shared account limits and monthly balance
       operationId: getLimits
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
       responses:
         '200':
           description: Current plan limits and monthly traffic balance, reset at 00:00 Asia/Shanghai.
@@ -178,6 +186,7 @@ paths:
       operationId: createTunnelPort
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
       requestBody:
         required: true
@@ -200,6 +209,7 @@ paths:
       operationId: listTunnelPorts
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
       responses:
         '200':
@@ -219,6 +229,7 @@ paths:
       operationId: getTunnelPort
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
         - $ref: '#/components/parameters/PortPath'
       responses:
@@ -236,6 +247,7 @@ paths:
       operationId: updateTunnelPort
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
         - $ref: '#/components/parameters/PortPath'
       requestBody:
@@ -259,6 +271,7 @@ paths:
       operationId: deleteTunnelPort
       parameters:
         - $ref: '#/components/parameters/NamespaceHeader'
+        - $ref: '#/components/parameters/AccountNamespaceHeader'
         - $ref: '#/components/parameters/TunnelIdPath'
         - $ref: '#/components/parameters/PortPath'
       responses:
@@ -283,6 +296,15 @@ components:
       name: X-Namespace
       in: header
       required: true
+      description: Trusted upstream resource namespace used for Tunnel isolation.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    AccountNamespaceHeader:
+      name: X-Account-Namespace
+      in: header
+      required: true
+      description: Trusted upstream account namespace used for shared quota and billing.
       schema:
         type: string
         pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'

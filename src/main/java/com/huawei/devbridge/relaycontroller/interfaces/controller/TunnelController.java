@@ -18,37 +18,41 @@ public class TunnelController implements TunnelApi {
     private final TunnelAppService tunnelAppService;
 
     @Override
-    public CreateTunnelResponse createTunnel(String xNamespace, CreateTunnelRequest request) {
-        return tunnelAppService.createTunnel(xNamespace, request);
+    public CreateTunnelResponse createTunnel(
+            String xNamespace, String xAccountNamespace, CreateTunnelRequest request) {
+        return tunnelAppService.createTunnel(xNamespace, xAccountNamespace, request);
     }
 
     @Override
-    public Boolean deleteTunnel(String xNamespace, String tunnelId) {
-        return tunnelAppService.deleteTunnel(xNamespace, tunnelId);
+    public Boolean deleteTunnel(String xNamespace, String xAccountNamespace, String tunnelId) {
+        return tunnelAppService.deleteTunnel(xNamespace, xAccountNamespace, tunnelId);
     }
 
     @Override
-    public Boolean deleteTunnels(String xNamespace) {
-        return tunnelAppService.deleteTunnels(xNamespace);
+    public Boolean deleteTunnels(String xNamespace, String xAccountNamespace) {
+        return tunnelAppService.deleteTunnels(xNamespace, xAccountNamespace);
     }
 
     @Override
-    public TunnelDetailResponse getTunnelDetail(String xNamespace, String tunnelId) {
-        return tunnelAppService.getTunnelDetail(xNamespace, tunnelId);
+    public TunnelDetailResponse getTunnelDetail(String xNamespace, String xAccountNamespace, String tunnelId) {
+        return tunnelAppService.getTunnelDetail(xNamespace, xAccountNamespace, tunnelId);
     }
 
     @Override
-    public TunnelTokenResponse issueTunnelToken(String xNamespace, String tunnelId, String scope) {
-        return tunnelAppService.issueToken(xNamespace, tunnelId, scope);
+    public TunnelTokenResponse issueTunnelToken(
+            String xNamespace, String xAccountNamespace, String tunnelId, String scope) {
+        return tunnelAppService.issueToken(xNamespace, xAccountNamespace, tunnelId, scope);
     }
 
     @Override
-    public List<TunnelListItemResponse> listTunnels(String xNamespace, String clusterId) {
-        return tunnelAppService.listTunnels(xNamespace, clusterId);
+    public List<TunnelListItemResponse> listTunnels(
+            String xNamespace, String xAccountNamespace, String clusterId) {
+        return tunnelAppService.listTunnels(xNamespace, xAccountNamespace, clusterId);
     }
 
     @Override
-    public Boolean updateTunnel(String xNamespace, String tunnelId, UpdateTunnelRequest request) {
-        return tunnelAppService.updateTunnel(xNamespace, tunnelId, request);
+    public Boolean updateTunnel(
+            String xNamespace, String xAccountNamespace, String tunnelId, UpdateTunnelRequest request) {
+        return tunnelAppService.updateTunnel(xNamespace, xAccountNamespace, tunnelId, request);
     }
 }

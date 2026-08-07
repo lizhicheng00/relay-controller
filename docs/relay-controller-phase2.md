@@ -4,7 +4,7 @@
 
 Relay Controller owns:
 
-- namespace account and trial plan;
+- resource namespace isolation with account-namespace quota sharing;
 - monthly quota state;
 - Tunnel and Port metadata quotas;
 - idempotent metering settlement;

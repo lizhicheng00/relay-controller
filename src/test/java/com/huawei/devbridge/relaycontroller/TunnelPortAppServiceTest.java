@@ -59,7 +59,7 @@ class TunnelPortAppServiceTest {
         when(tunnelPortRepository.save(org.mockito.ArgumentMatchers.any(TunnelPort.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        TunnelPortResponse response = service.create("ns-user-001", "aaaadysa", request);
+        TunnelPortResponse response = service.create("ns-user-001", "ns-user-001", "aaaadysa", request);
 
         assertThat(response.getTunnelId()).isEqualTo("aaaadysa");
         assertThat(response.getTunnelCode()).isEqualTo(123456L);
@@ -81,7 +81,7 @@ class TunnelPortAppServiceTest {
                 .thenReturn(tunnel("ns-user-001", "cluster-a"));
         when(tunnelPortRepository.existsByTunnelCodeAndPort(123456L, 8080L)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
+        assertThatThrownBy(() -> service.create("ns-user-001", "ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_PORT_ALREADY_EXISTS);
@@ -100,7 +100,7 @@ class TunnelPortAppServiceTest {
         when(billingService.accountPlan(7L)).thenReturn(accountPlan());
         when(tunnelPortRepository.countByTunnelCode(123456L)).thenReturn(10L);
 
-        assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
+        assertThatThrownBy(() -> service.create("ns-user-001", "ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_PORT_QUOTA_EXCEEDED);
@@ -117,7 +117,7 @@ class TunnelPortAppServiceTest {
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a")))
                 .thenReturn(tunnel("ns-user-001", "cluster-a"));
 
-        assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
+        assertThatThrownBy(() -> service.create("ns-user-001", "ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_PORT_INVALID);
@@ -132,7 +132,7 @@ class TunnelPortAppServiceTest {
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a")))
                 .thenReturn(tunnel("ns-user-001", "cluster-a"));
 
-        assertThatThrownBy(() -> service.create("ns-user-001", "aaaadysa", request))
+        assertThatThrownBy(() -> service.create("ns-user-001", "ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_PORT_INVALID);
@@ -149,7 +149,7 @@ class TunnelPortAppServiceTest {
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a")))
                 .thenReturn(tunnel("ns-user-a", "cluster-a"));
 
-        assertThatThrownBy(() -> service.create("ns-user-b", "aaaadysa", request))
+        assertThatThrownBy(() -> service.create("ns-user-b", "ns-user-001", "aaaadysa", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_ACCESS_DENIED);
@@ -165,7 +165,7 @@ class TunnelPortAppServiceTest {
                 TunnelPort.builder().tunnelCode(123456L).port(8080L).protocol(TunnelProtocol.HTTP).allowAnonymous(false).build(),
                 TunnelPort.builder().tunnelCode(123456L).port(8888L).protocol(TunnelProtocol.HTTPS).allowAnonymous(true).build()));
 
-        List<TunnelPortResponse> response = service.list("ns-user-001", "aaaadysa");
+        List<TunnelPortResponse> response = service.list("ns-user-001", "ns-user-001", "aaaadysa");
 
         assertThat(response).extracting(TunnelPortResponse::getPort).containsExactly(8080L, 8888L);
     }
@@ -183,7 +183,7 @@ class TunnelPortAppServiceTest {
                 .thenReturn(TunnelPort.builder().tunnelCode(123456L).port(8080L)
                         .protocol(TunnelProtocol.HTTP).allowAnonymous(false).build());
 
-        TunnelPortResponse response = service.update("ns-user-001", "aaaadysa", 8080L, request);
+        TunnelPortResponse response = service.update("ns-user-001", "ns-user-001", "aaaadysa", 8080L, request);
 
         assertThat(response.getAllowAnonymous()).isTrue();
         assertThat(response.getProtocol()).isEqualTo(TunnelProtocol.HTTPS);
@@ -203,7 +203,7 @@ class TunnelPortAppServiceTest {
                 .thenReturn(TunnelPort.builder().tunnelCode(123456L).port(8080L)
                         .protocol(TunnelProtocol.HTTP).allowAnonymous(false).build());
 
-        TunnelPortResponse response = service.update("ns-user-001", "aaaadysa", 8080L, request);
+        TunnelPortResponse response = service.update("ns-user-001", "ns-user-001", "aaaadysa", 8080L, request);
 
         assertThat(response.getProtocol()).isEqualTo(TunnelProtocol.HTTP);
         assertThat(response.getAllowAnonymous()).isTrue();
@@ -222,7 +222,7 @@ class TunnelPortAppServiceTest {
                 .thenReturn(TunnelPort.builder().tunnelCode(123456L).port(8080L)
                         .protocol(TunnelProtocol.HTTP).allowAnonymous(false).build());
 
-        TunnelPortResponse response = service.update("ns-user-001", "aaaadysa", 8080L, request);
+        TunnelPortResponse response = service.update("ns-user-001", "ns-user-001", "aaaadysa", 8080L, request);
 
         assertThat(response.getProtocol()).isEqualTo(TunnelProtocol.HTTPS);
         assertThat(response.getAllowAnonymous()).isFalse();
@@ -238,7 +238,7 @@ class TunnelPortAppServiceTest {
         when(tunnelPortRepository.findByTunnelCodeAndPort(123456L, 8080L))
                 .thenReturn(TunnelPort.builder().tunnelCode(123456L).port(8080L).allowAnonymous(false).build());
 
-        Boolean deleted = service.delete("ns-user-001", "aaaadysa", 8080L);
+        Boolean deleted = service.delete("ns-user-001", "ns-user-001", "aaaadysa", 8080L);
 
         assertThat(deleted).isTrue();
         verify(tunnelPortRepository).deleteByTunnelCodeAndPort(123456L, 8080L);
@@ -250,7 +250,7 @@ class TunnelPortAppServiceTest {
         TunnelPortAppService service = newService();
 
         when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel("ns-user-001", "cluster-a"));
-        assertThatThrownBy(() -> service.detail("ns-user-001", "aaaadysa", 8080L))
+        assertThatThrownBy(() -> service.detail("ns-user-001", "ns-user-001", "aaaadysa", 8080L))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_PORT_NOT_FOUND);

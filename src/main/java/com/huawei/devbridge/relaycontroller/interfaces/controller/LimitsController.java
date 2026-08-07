@@ -12,7 +12,7 @@ public class LimitsController implements LimitsApi {
     private final LimitsAppService limitsAppService;
 
     @Override
-    public LimitsResponse getLimits(String xNamespace) {
-        return limitsAppService.getLimits(xNamespace);
+    public LimitsResponse getLimits(String xNamespace, String xAccountNamespace) {
+        return limitsAppService.getLimits(xNamespace, xAccountNamespace);
     }
 }

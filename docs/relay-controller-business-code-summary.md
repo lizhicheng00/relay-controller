@@ -29,9 +29,9 @@ The public collection supports create and list only. Repository-level `deleteByT
 
 ### Create Tunnel
 
-1. Require `X-Namespace`.
+1. Require resource `X-Namespace` and quota owner `X-Account-Namespace`.
 2. Verify the requested cluster belongs to the local region.
-3. Create or lock the namespace billing account and enforce the active tunnel quota in the database transaction.
+3. Create or lock the account-namespace billing account and enforce its shared active Tunnel quota in the database transaction.
 4. Resolve the expiration duration and cap it at 720 hours.
 5. Allocate a unique 40-bit code and Base32 tunnel ID.
 6. Persist and return metadata without issuing tokens.

@@ -86,7 +86,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.existsByTunnelCode(123456L)).thenReturn(false);
         when(tunnelRepository.existsByTunnelId("aaaadysa")).thenReturn(false);
         when(tunnelRepository.save(org.mockito.ArgumentMatchers.any(Tunnel.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        CreateTunnelResponse response = service.createTunnel("ns-user-001", request);
+        CreateTunnelResponse response = service.createTunnel("ns-sub-user-001", "ns-user-001", request);
 
         assertThat(response.getTunnelId()).isEqualTo("aaaadysa");
         assertThat(response.getTunnelCode()).isEqualTo(123456L);
@@ -94,6 +94,9 @@ class TunnelAppServiceTest {
         assertThat(response.getType()).isEqualTo("bridge");
         assertThat(response.getExpirationHours()).isEqualTo(72);
         assertThat(response.getTunnelExpiration()).isNotNull();
+        verify(billingService).lockAccountForQuota("ns-user-001");
+        verify(tunnelRepository).save(org.mockito.ArgumentMatchers.argThat(tunnel ->
+                "ns-sub-user-001".equals(tunnel.getNamespace()) && Long.valueOf(7L).equals(tunnel.getAccountId())));
     }
 
     @Test
@@ -103,7 +106,7 @@ class TunnelAppServiceTest {
         request.setName("dev");
         request.setClusterId("cluster-b");
 
-        assertThatThrownBy(() -> service.createTunnel("ns-user-001", request))
+        assertThatThrownBy(() -> service.createTunnel("ns-user-001", "ns-user-001", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CLUSTER_NOT_FOUND);
@@ -121,7 +124,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.existsByTunnelCode(123456L)).thenReturn(false);
         when(tunnelRepository.existsByTunnelId("aaaadysa")).thenReturn(false);
         when(tunnelRepository.save(org.mockito.ArgumentMatchers.any(Tunnel.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        CreateTunnelResponse response = service.createTunnel("ns-user-001", request);
+        CreateTunnelResponse response = service.createTunnel("ns-user-001", "ns-user-001", request);
 
         assertThat(response.getExpirationHours()).isEqualTo(2);
     }
@@ -137,7 +140,7 @@ class TunnelAppServiceTest {
         when(clusterRepository.findByClusterIdAndRegion("cluster-a", "region-a"))
                 .thenReturn(Cluster.builder().clusterId("cluster-a").region("region-a").build());
 
-        assertThatThrownBy(() -> service.createTunnel("ns-user-001", request))
+        assertThatThrownBy(() -> service.createTunnel("ns-user-001", "ns-user-001", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PARAM_INVALID);
@@ -154,14 +157,14 @@ class TunnelAppServiceTest {
         when(clusterRepository.findByClusterIdAndRegion("cluster-a", "region-a"))
                 .thenReturn(Cluster.builder().clusterId("cluster-a").region("region-a").build());
 
-        assertThatThrownBy(() -> service.createTunnel("ns-user-001", request))
+        assertThatThrownBy(() -> service.createTunnel("ns-user-001", "ns-user-001", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PARAM_INVALID);
     }
 
     @Test
-    void createTunnelRejectsWhenNamespaceQuotaExceeded() {
+    void createTunnelRejectsWhenAccountQuotaExceeded() {
         TunnelAppService service = newService(new RelayProperties());
         CreateTunnelRequest request = new CreateTunnelRequest();
         request.setName("dev");
@@ -173,7 +176,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.countActiveByAccountId(eq(7L), anyLong()))
                 .thenReturn(10L);
 
-        assertThatThrownBy(() -> service.createTunnel("ns-user-001", request))
+        assertThatThrownBy(() -> service.createTunnel("ns-user-001", "ns-user-001", request))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_QUOTA_EXCEEDED);
@@ -206,7 +209,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.save(org.mockito.ArgumentMatchers.any(Tunnel.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.createTunnel("ns-user-001", request);
+        service.createTunnel("ns-user-001", "ns-user-001", request);
 
         verify(billingService).lockAccountForQuota("ns-user-001");
         verify(tunnelRepository).countActiveByAccountId(eq(7L), anyLong());
@@ -228,7 +231,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
         long before = TimeUtils.nowSeconds();
-        Boolean updated = service.updateTunnel("ns-user-001", "aaaadysa", request);
+        Boolean updated = service.updateTunnel("ns-user-001", "ns-user-001", "aaaadysa", request);
         long after = TimeUtils.nowSeconds();
 
         assertThat(updated).isTrue();
@@ -255,7 +258,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
         long before = TimeUtils.nowSeconds();
-        service.updateTunnel("ns-user-001", "aaaadysa", request);
+        service.updateTunnel("ns-user-001", "ns-user-001", "aaaadysa", request);
         long after = TimeUtils.nowSeconds();
 
         assertThat(tunnel.getExpiration())
@@ -268,7 +271,7 @@ class TunnelAppServiceTest {
         when(clusterRepository.findIdsByRegion("region-a")).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.updateTunnel(
-                "ns-user-001", "aaaadysa", new UpdateTunnelRequest()))
+                "ns-user-001", "ns-user-001", "aaaadysa", new UpdateTunnelRequest()))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TUNNEL_NOT_FOUND);
@@ -293,7 +296,7 @@ class TunnelAppServiceTest {
                 eq("ns-user-001"), isNull(), eq("region-a"), anyLong()))
                 .thenReturn(List.of(local));
 
-        List<TunnelListItemResponse> response = service.listTunnels("ns-user-001", null);
+        List<TunnelListItemResponse> response = service.listTunnels("ns-user-001", "ns-user-001", null);
 
         assertThat(response).extracting(TunnelListItemResponse::getName).containsExactly("local");
         assertThat(response.get(0).getPortCount()).isEqualTo(2L);
@@ -307,7 +310,7 @@ class TunnelAppServiceTest {
                 eq("ns-user-001"), isNull(), eq("region-a"), anyLong()))
                 .thenReturn(List.of());
 
-        List<TunnelListItemResponse> response = service.listTunnels("ns-user-001", null);
+        List<TunnelListItemResponse> response = service.listTunnels("ns-user-001", "ns-user-001", null);
 
         assertThat(response).isEmpty();
     }
@@ -318,6 +321,7 @@ class TunnelAppServiceTest {
         Tunnel tunnel = Tunnel.builder()
                 .tunnelId("aaaadysa")
                 .namespace("ns-user-001")
+                .accountId(7L)
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 3600))
                 .build();
         TunnelRuntimeStatus status = TunnelRuntimeStatus.builder()
@@ -332,7 +336,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
         when(tunnelRuntimeStatusRepository.findByTunnelId("aaaadysa")).thenReturn(status);
 
-        TunnelDetailResponse response = service.getTunnelDetail("ns-user-001", "aaaadysa");
+        TunnelDetailResponse response = service.getTunnelDetail("ns-user-001", "ns-user-001", "aaaadysa");
 
         assertThat(response.getStatus().getHostConnectionCount()).isEqualTo(1);
         assertThat(response.getStatus().getClientConnectionCount()).isEqualTo(3);
@@ -358,7 +362,7 @@ class TunnelAppServiceTest {
 
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
-        Boolean updated = service.updateTunnel("ns-user-001", "aaaadysa", request);
+        Boolean updated = service.updateTunnel("ns-user-001", "ns-user-001", "aaaadysa", request);
 
         assertThat(updated).isTrue();
         assertThat(tunnel.getType()).isEqualTo(TunnelType.ENV);
@@ -378,7 +382,7 @@ class TunnelAppServiceTest {
 
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(tunnel);
 
-        Boolean deleted = service.deleteTunnel("ns-user-001", "aaaadysa");
+        Boolean deleted = service.deleteTunnel("ns-user-001", "ns-user-001", "aaaadysa");
 
         assertThat(deleted).isTrue();
         verify(tunnelPortRepository).deleteByTunnelCode(123456L);
@@ -400,7 +404,7 @@ class TunnelAppServiceTest {
         when(tunnelRepository.findByNamespaceAndRegion("ns-user-001", "region-a")).thenReturn(List.of(first));
         when(tunnelRepository.findByTunnelIdAndClustersForUpdate("aaaadysa", List.of("cluster-a"))).thenReturn(first);
 
-        Boolean deleted = service.deleteTunnels("ns-user-001");
+        Boolean deleted = service.deleteTunnels("ns-user-001", "ns-user-001");
 
         assertThat(deleted).isTrue();
         verify(tunnelPortRepository).deleteByTunnelCode(123456L);
@@ -413,21 +417,23 @@ class TunnelAppServiceTest {
         TunnelAppService service = newService(new RelayProperties());
         Tunnel tunnel = Tunnel.builder()
                 .tunnelId("aaaadysa")
-                .namespace("ns-user-001")
+                .namespace("ns-sub-user-001")
+                .accountId(7L)
                 .expiration(Math.toIntExact(TimeUtils.nowSeconds() + 3600))
                 .build();
         when(tunnelRepository.findByTunnelIdAndRegion("aaaadysa", "region-a")).thenReturn(tunnel);
         when(jwtTokenService.issueToken(tunnel, JwtScope.HOST))
                 .thenReturn(new JwtToken("host-token", 3600L, 200000L));
 
-        TunnelTokenResponse response = service.issueToken("ns-user-001", "aaaadysa", "host");
+        TunnelTokenResponse response = service.issueToken(
+                "ns-sub-user-001", "ns-user-001", "aaaadysa", "host");
 
         assertThat(response.getTunnelId()).isEqualTo("aaaadysa");
         assertThat(response.getScope()).isEqualTo(JwtScope.HOST);
         assertThat(response.getLifetime()).isEqualTo(3600L);
         assertThat(response.getExpiration()).isEqualTo(200000L);
         assertThat(response.getToken()).isEqualTo("host-token");
-        verify(billingService).assertTrafficAllowed("ns-user-001");
+        verify(billingService).assertTrafficAllowed(7L);
         verify(tunnelRepository, never()).refreshExpiration(anyString(), anyString(), anyLong());
     }
 
@@ -435,7 +441,7 @@ class TunnelAppServiceTest {
     void issueTokenRejectsUnsupportedScope() {
         TunnelAppService service = newService(new RelayProperties());
 
-        assertThatThrownBy(() -> service.issueToken("ns-user-001", "aaaadysa", "admin"))
+        assertThatThrownBy(() -> service.issueToken("ns-user-001", "ns-user-001", "aaaadysa", "admin"))
                 .isInstanceOf(BizException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PARAM_INVALID);

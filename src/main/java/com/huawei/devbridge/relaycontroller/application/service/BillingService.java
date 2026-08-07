@@ -28,10 +28,10 @@ public class BillingService {
     private final RelayProperties relayProperties;
 
     @Transactional
-    public AccountPlan lockAccountForQuota(String rawNamespace) {
-        String namespace = namespaceService.requireNamespace(rawNamespace);
-        ensureAccount(namespace);
-        BillingAccount account = billingRepository.lockAccountByNamespace(namespace);
+    public AccountPlan lockAccountForQuota(String rawAccountNamespace) {
+        String accountNamespace = namespaceService.requireNamespace(rawAccountNamespace);
+        ensureAccount(accountNamespace);
+        BillingAccount account = billingRepository.lockAccountByNamespace(accountNamespace);
         return new AccountPlan(requireActive(account), requirePlan(account.getPlanCode()));
     }
 
@@ -42,11 +42,11 @@ public class BillingService {
     }
 
     @Transactional
-    public LimitSnapshot currentSnapshot(String rawNamespace) {
-        String namespace = namespaceService.requireNamespace(rawNamespace);
-        ensureAccount(namespace);
+    public LimitSnapshot currentSnapshot(String rawAccountNamespace) {
+        String accountNamespace = namespaceService.requireNamespace(rawAccountNamespace);
+        ensureAccount(accountNamespace);
         return snapshot(
-                requireAccount(billingRepository.lockAccountByNamespace(namespace)),
+                requireAccount(billingRepository.lockAccountByNamespace(accountNamespace)),
                 TimeUtils.nowSeconds());
     }
 
@@ -58,8 +58,9 @@ public class BillingService {
     }
 
     @Transactional
-    public void assertTrafficAllowed(String namespace) {
-        LimitSnapshot snapshot = currentSnapshot(namespace);
+    public void assertTrafficAllowed(Long accountId) {
+        BillingAccount account = requireAccount(billingRepository.lockAccountById(accountId));
+        LimitSnapshot snapshot = snapshot(account, TimeUtils.nowSeconds());
         if (!snapshot.account().isActive()) {
             throw new BizException(ErrorCode.ACCOUNT_DISABLED);
         }

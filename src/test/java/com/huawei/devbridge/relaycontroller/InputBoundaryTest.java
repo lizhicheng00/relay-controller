@@ -21,6 +21,23 @@ class InputBoundaryTest {
     }
 
     @Test
+    void shouldKeepResourceAndAccountNamespacesSeparate() {
+        var context = new NamespaceService().requireContext("ns-sub-user-001", "ns-user-001");
+
+        assertThat(context.namespace()).isEqualTo("ns-sub-user-001");
+        assertThat(context.accountNamespace()).isEqualTo("ns-user-001");
+    }
+
+    @Test
+    void shouldRequireAccountNamespace() {
+        assertThatThrownBy(() -> new NamespaceService().requireContext("ns-sub-user-001", null))
+                .isInstanceOf(BizException.class)
+                .hasMessage("X-Account-Namespace is required")
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.UNAUTHORIZED);
+    }
+
+    @Test
     void shouldRejectOversizedNamespace() {
         assertThatThrownBy(() -> new NamespaceService().requireNamespace("a".repeat(129)))
                 .isInstanceOf(BizException.class)

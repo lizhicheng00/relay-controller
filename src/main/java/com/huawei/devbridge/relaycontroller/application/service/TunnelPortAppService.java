@@ -5,6 +5,7 @@ import com.huawei.devbridge.relaycontroller.common.exception.BizException;
 import com.huawei.devbridge.relaycontroller.common.exception.ErrorCode;
 import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
 import com.huawei.devbridge.relaycontroller.domain.model.AccountPlan;
+import com.huawei.devbridge.relaycontroller.domain.model.NamespaceContext;
 import com.huawei.devbridge.relaycontroller.domain.model.Tunnel;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelPort;
 import com.huawei.devbridge.relaycontroller.domain.model.TunnelProtocol;
@@ -37,8 +38,9 @@ public class TunnelPortAppService {
     private final BillingService billingService;
 
     @Transactional
-    public TunnelPortResponse create(String rawNamespace, String tunnelId, CreateTunnelPortRequest request) {
-        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, tunnelId);
+    public TunnelPortResponse create(
+            String rawNamespace, String rawAccountNamespace, String tunnelId, CreateTunnelPortRequest request) {
+        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, rawAccountNamespace, tunnelId);
         tunnelPortDomainService.validatePort(request.getPort());
         tunnelPortDomainService.validateProtocol(request.getProtocol());
         tunnelPortDomainService.validateAllowAnonymous(request.getAllowAnonymous());
@@ -66,22 +68,25 @@ public class TunnelPortAppService {
         return TunnelPortAssembler.toResponse(tunnel, tunnelPort);
     }
 
-    public List<TunnelPortResponse> list(String rawNamespace, String tunnelId) {
-        Tunnel tunnel = ownedTunnel(rawNamespace, tunnelId);
+    public List<TunnelPortResponse> list(String rawNamespace, String rawAccountNamespace, String tunnelId) {
+        Tunnel tunnel = ownedTunnel(rawNamespace, rawAccountNamespace, tunnelId);
         return tunnelPortRepository.findByTunnelCode(tunnel.getTunnelCode()).stream()
                 .map(tunnelPort -> TunnelPortAssembler.toResponse(tunnel, tunnelPort))
                 .toList();
     }
 
-    public TunnelPortResponse detail(String rawNamespace, String tunnelId, Long port) {
-        Tunnel tunnel = ownedTunnel(rawNamespace, tunnelId);
+    public TunnelPortResponse detail(
+            String rawNamespace, String rawAccountNamespace, String tunnelId, Long port) {
+        Tunnel tunnel = ownedTunnel(rawNamespace, rawAccountNamespace, tunnelId);
         TunnelPort tunnelPort = findTunnelPort(tunnel.getTunnelCode(), port);
         return TunnelPortAssembler.toResponse(tunnel, tunnelPort);
     }
 
     @Transactional
-    public TunnelPortResponse update(String rawNamespace, String tunnelId, Long port, UpdateTunnelPortRequest request) {
-        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, tunnelId);
+    public TunnelPortResponse update(
+            String rawNamespace, String rawAccountNamespace, String tunnelId, Long port,
+            UpdateTunnelPortRequest request) {
+        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, rawAccountNamespace, tunnelId);
         TunnelPort tunnelPort = findTunnelPort(tunnel.getTunnelCode(), port);
         TunnelProtocol protocol = request.getProtocol() == null ? tunnelPort.getProtocol() : request.getProtocol();
         Boolean allowAnonymous = request.getAllowAnonymous() == null
@@ -99,8 +104,8 @@ public class TunnelPortAppService {
     }
 
     @Transactional
-    public Boolean delete(String rawNamespace, String tunnelId, Long port) {
-        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, tunnelId);
+    public Boolean delete(String rawNamespace, String rawAccountNamespace, String tunnelId, Long port) {
+        Tunnel tunnel = ownedTunnelForUpdate(rawNamespace, rawAccountNamespace, tunnelId);
         findTunnelPort(tunnel.getTunnelCode(), port);
         tunnelPortRepository.deleteByTunnelCodeAndPort(tunnel.getTunnelCode(), port);
         refreshExpiration(tunnel);
@@ -109,20 +114,20 @@ public class TunnelPortAppService {
         return true;
     }
 
-    private Tunnel ownedTunnel(String rawNamespace, String tunnelId) {
-        String namespace = namespaceService.requireNamespace(rawNamespace);
+    private Tunnel ownedTunnel(String rawNamespace, String rawAccountNamespace, String tunnelId) {
+        NamespaceContext context = namespaceService.requireContext(rawNamespace, rawAccountNamespace);
         Tunnel tunnel = tunnelRepository.findByTunnelIdAndRegion(tunnelId, relayProperties.getRegion());
-        tunnelDomainService.assertOwnedAndNotExpired(tunnel, namespace);
+        tunnelDomainService.assertOwnedAndNotExpired(tunnel, context.namespace());
         return tunnel;
     }
 
-    private Tunnel ownedTunnelForUpdate(String rawNamespace, String tunnelId) {
-        String namespace = namespaceService.requireNamespace(rawNamespace);
+    private Tunnel ownedTunnelForUpdate(String rawNamespace, String rawAccountNamespace, String tunnelId) {
+        NamespaceContext context = namespaceService.requireContext(rawNamespace, rawAccountNamespace);
         List<String> clusterIds = localClusterService.localClusterIds();
         Tunnel tunnel = clusterIds.isEmpty()
                 ? null
                 : tunnelRepository.findByTunnelIdAndClustersForUpdate(tunnelId, clusterIds);
-        tunnelDomainService.assertOwnedAndNotExpired(tunnel, namespace);
+        tunnelDomainService.assertOwnedAndNotExpired(tunnel, context.namespace());
         return tunnel;
     }
 

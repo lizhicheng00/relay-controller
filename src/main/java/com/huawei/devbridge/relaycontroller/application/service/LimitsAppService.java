@@ -4,7 +4,9 @@ import com.huawei.devbridge.relaycontroller.common.util.TimeUtils;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPeriod;
 import com.huawei.devbridge.relaycontroller.domain.model.BillingPlan;
 import com.huawei.devbridge.relaycontroller.domain.model.LimitSnapshot;
+import com.huawei.devbridge.relaycontroller.domain.model.NamespaceContext;
 import com.huawei.devbridge.relaycontroller.domain.repository.TunnelRepository;
+import com.huawei.devbridge.relaycontroller.domain.service.NamespaceService;
 import com.huawei.devbridge.relaycontroller.interfaces.response.LimitsResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,9 +16,11 @@ import org.springframework.stereotype.Service;
 public class LimitsAppService {
     private final BillingService billingService;
     private final TunnelRepository tunnelRepository;
+    private final NamespaceService namespaceService;
 
-    public LimitsResponse getLimits(String namespace) {
-        LimitSnapshot snapshot = billingService.currentSnapshot(namespace);
+    public LimitsResponse getLimits(String namespace, String accountNamespace) {
+        NamespaceContext context = namespaceService.requireContext(namespace, accountNamespace);
+        LimitSnapshot snapshot = billingService.currentSnapshot(context.accountNamespace());
         BillingPeriod period = snapshot.period();
         BillingPlan plan = snapshot.plan();
         long activeTunnels = tunnelRepository.countActiveByAccountId(

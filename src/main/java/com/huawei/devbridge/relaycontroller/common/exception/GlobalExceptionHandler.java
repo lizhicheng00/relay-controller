@@ -50,9 +50,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestHeader(MissingRequestHeaderException exception) {
         log.warn("Missing request header: {}", exception.getHeaderName());
-        if ("X-Namespace".equalsIgnoreCase(exception.getHeaderName())) {
+        if ("X-Namespace".equalsIgnoreCase(exception.getHeaderName())
+                || "X-Account-Namespace".equalsIgnoreCase(exception.getHeaderName())) {
             return failure(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED,
-                    "X-Namespace is required", exception.getHeaderName());
+                    exception.getHeaderName() + " is required", exception.getHeaderName());
         }
         return failure(HttpStatus.BAD_REQUEST, ErrorCode.PARAM_INVALID,
                 "required request header is missing", exception.getHeaderName());

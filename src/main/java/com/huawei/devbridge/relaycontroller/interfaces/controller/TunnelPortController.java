@@ -15,27 +15,32 @@ public class TunnelPortController implements TunnelPortApi {
     private final TunnelPortAppService tunnelPortAppService;
 
     @Override
-    public TunnelPortResponse createTunnelPort(String xNamespace, String tunnelId, CreateTunnelPortRequest request) {
-        return tunnelPortAppService.create(xNamespace, tunnelId, request);
+    public TunnelPortResponse createTunnelPort(
+            String xNamespace, String xAccountNamespace, String tunnelId, CreateTunnelPortRequest request) {
+        return tunnelPortAppService.create(xNamespace, xAccountNamespace, tunnelId, request);
     }
 
     @Override
-    public Boolean deleteTunnelPort(String xNamespace, String tunnelId, Long port) {
-        return tunnelPortAppService.delete(xNamespace, tunnelId, port);
+    public Boolean deleteTunnelPort(String xNamespace, String xAccountNamespace, String tunnelId, Long port) {
+        return tunnelPortAppService.delete(xNamespace, xAccountNamespace, tunnelId, port);
     }
 
     @Override
-    public TunnelPortResponse getTunnelPort(String xNamespace, String tunnelId, Long port) {
-        return tunnelPortAppService.detail(xNamespace, tunnelId, port);
+    public TunnelPortResponse getTunnelPort(
+            String xNamespace, String xAccountNamespace, String tunnelId, Long port) {
+        return tunnelPortAppService.detail(xNamespace, xAccountNamespace, tunnelId, port);
     }
 
     @Override
-    public List<TunnelPortResponse> listTunnelPorts(String xNamespace, String tunnelId) {
-        return tunnelPortAppService.list(xNamespace, tunnelId);
+    public List<TunnelPortResponse> listTunnelPorts(
+            String xNamespace, String xAccountNamespace, String tunnelId) {
+        return tunnelPortAppService.list(xNamespace, xAccountNamespace, tunnelId);
     }
 
     @Override
-    public TunnelPortResponse updateTunnelPort(String xNamespace, String tunnelId, Long port, UpdateTunnelPortRequest request) {
-        return tunnelPortAppService.update(xNamespace, tunnelId, port, request);
+    public TunnelPortResponse updateTunnelPort(
+            String xNamespace, String xAccountNamespace, String tunnelId, Long port,
+            UpdateTunnelPortRequest request) {
+        return tunnelPortAppService.update(xNamespace, xAccountNamespace, tunnelId, port, request);
     }
 }
