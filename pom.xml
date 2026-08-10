@@ -51,7 +51,7 @@
         <dependency>
             <groupId>com.huawei.apigateway</groupId>
             <artifactId>java-sdk-core</artifactId>
-            <version>5.0.3.JDK17-RELEASE</version>
+            <version>5.0.4.JDK17-RELEASE</version>
         </dependency>
         <dependency>
             <groupId>com.huaweicloud.cloudspace</groupId>
