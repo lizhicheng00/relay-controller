@@ -102,7 +102,7 @@ export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 go run ./cmd/relay-controller
 ```
 
-The service creates no database itself. Create the database first; embedded migrations under `assets/migrations` run at startup. The migration history and checksums remain compatible with the existing Flyway `flyway_schema_history` table.
+The service creates no database itself. Create the database first; embedded SQL files under `assets/migrations` run at startup in version order. Successful files are recorded in `schema_migration`; add a new file for every schema change and do not edit an applied file.
 
 ## Security Boundary
 

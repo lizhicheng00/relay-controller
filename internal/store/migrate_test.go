@@ -1,24 +1,26 @@
 package store
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
-func TestEmbeddedMigrationChecksumsMatchReleasedFlywayHistory(t *testing.T) {
+func TestLoadMigrationsInVersionOrder(t *testing.T) {
 	migrations, err := loadMigrations()
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := map[int]int32{
-		1: -1809567610,
-		2: -1206028741,
-		3: -69587134,
-		4: 1107761935,
-	}
-	if len(migrations) != len(expected) {
-		t.Fatalf("found %d migrations, want %d", len(migrations), len(expected))
-	}
+	fileNames := make([]string, 0, len(migrations))
 	for _, migration := range migrations {
-		if migration.checksum != expected[migration.version] {
-			t.Fatalf("V%d checksum = %d, want %d", migration.version, migration.checksum, expected[migration.version])
-		}
+		fileNames = append(fileNames, migration.fileName)
+	}
+	want := []string{
+		"V1__init_schema.sql",
+		"V2__add_cn_north_4_bridge_cluster.sql",
+		"V3__add_phase2_billing.sql",
+		"V4__refine_phase2_schema.sql",
+	}
+	if !reflect.DeepEqual(fileNames, want) {
+		t.Fatalf("migration order = %v, want %v", fileNames, want)
 	}
 }

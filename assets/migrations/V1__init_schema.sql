@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS flyway_schema_history;
+
 CREATE TABLE IF NOT EXISTS cluster (
     _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
     cluster_id VARCHAR(128) NOT NULL COMMENT 'cluster identifier',

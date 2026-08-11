@@ -1,4 +1,4 @@
-CREATE TABLE billing_plan (
+CREATE TABLE IF NOT EXISTS billing_plan (
     plan_code VARCHAR(32) NOT NULL COMMENT 'stable plan identifier',
     monthly_quota_bytes BIGINT UNSIGNED NOT NULL COMMENT 'monthly traffic quota',
     max_tunnels SMALLINT UNSIGNED NOT NULL COMMENT 'maximum active tunnels',
@@ -30,7 +30,7 @@ ON DUPLICATE KEY UPDATE
     max_http_requests_per_minute_per_port = VALUES(max_http_requests_per_minute_per_port),
     max_connections_per_port = VALUES(max_connections_per_port);
 
-CREATE TABLE billing_account (
+CREATE TABLE IF NOT EXISTS billing_account (
     _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
     namespace VARCHAR(128) NOT NULL COMMENT 'account namespace',
     plan_code VARCHAR(32) NOT NULL DEFAULT 'trial' COMMENT 'billing plan identifier',
@@ -46,8 +46,8 @@ SELECT DISTINCT namespace, 'trial', 'active'
 FROM tunnel;
 
 ALTER TABLE tunnel
-    ADD COLUMN account_id BIGINT UNSIGNED NULL COMMENT 'billing account id' AFTER namespace,
-    ADD KEY idx_tunnel_account_id (account_id);
+    ADD COLUMN IF NOT EXISTS account_id BIGINT UNSIGNED NULL COMMENT 'billing account id' AFTER namespace,
+    ADD KEY IF NOT EXISTS idx_tunnel_account_id (account_id);
 
 UPDATE tunnel t
 INNER JOIN billing_account a ON a.namespace = t.namespace
@@ -57,7 +57,7 @@ WHERE t.account_id IS NULL;
 ALTER TABLE tunnel
     MODIFY COLUMN account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id';
 
-CREATE TABLE billing_period (
+CREATE TABLE IF NOT EXISTS billing_period (
     account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id',
     period_start BIGINT UNSIGNED NOT NULL COMMENT 'inclusive UTC period start',
     period_end BIGINT UNSIGNED NOT NULL COMMENT 'exclusive UTC period end',
@@ -66,7 +66,7 @@ CREATE TABLE billing_period (
     PRIMARY KEY (account_id, period_start)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Monthly UTC billing period';
 
-CREATE TABLE tunnel_metering (
+CREATE TABLE IF NOT EXISTS tunnel_metering (
     _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
     account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id',
     cluster_id VARCHAR(128) NOT NULL COMMENT 'cluster identifier',
@@ -85,7 +85,7 @@ PARTITION BY RANGE (reported_at) (
     PARTITION p_future VALUES LESS THAN MAXVALUE
 );
 
-CREATE TABLE billing_usage_1m (
+CREATE TABLE IF NOT EXISTS billing_usage_1m (
     account_id BIGINT UNSIGNED NOT NULL COMMENT 'billing account id',
     tunnel_id VARCHAR(32) NOT NULL COMMENT 'base32 tunnel id',
     window_start BIGINT UNSIGNED NOT NULL COMMENT 'one-minute UTC window start',
@@ -94,7 +94,7 @@ CREATE TABLE billing_usage_1m (
     KEY idx_bill_account_window (account_id, window_start)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Settled one-minute tunnel usage';
 
-CREATE TABLE tunnel_runtime_status (
+CREATE TABLE IF NOT EXISTS tunnel_runtime_status (
     tunnel_id VARCHAR(32) NOT NULL COMMENT 'base32 tunnel id',
     host_connection_count INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'active host connection count',
     client_connection_count INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'active SSH channel count',
@@ -104,7 +104,7 @@ CREATE TABLE tunnel_runtime_status (
     PRIMARY KEY (tunnel_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Latest gateway tunnel runtime status';
 
-CREATE TABLE shedlock (
+CREATE TABLE IF NOT EXISTS shedlock (
     name VARCHAR(64) NOT NULL,
     lock_until TIMESTAMP(3) NOT NULL,
     locked_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
