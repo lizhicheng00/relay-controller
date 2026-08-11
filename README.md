@@ -103,8 +103,6 @@ go build -trimpath -ldflags '-s -w -X main.version=1.0.0' -o bin/relay-controlle
 ./bin/relay-controller
 ```
 
-`make check`, `make build`, and `make race` are equivalent shortcuts; the race check additionally requires a C compiler.
-
 For local HTTP development only:
 
 ```bash

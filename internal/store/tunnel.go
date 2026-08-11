@@ -11,7 +11,7 @@ import (
 
 const tunnelColumns = `t._id, t.name, t.tunnel_id, t.tunnel_code, t.cluster_id,
 	t.expiration, t.expiration_hours, t.namespace, t.account_id, t.description,
-	t.bandwidth_used, t.url, t.type, t.deleted, t.created_at, t.updated_at`
+	t.bandwidth_used, t.url, t.type, t.created_at, t.updated_at`
 
 type scanner interface {
 	Scan(...any) error
@@ -107,13 +107,6 @@ func (s *Store) CountActiveTunnels(ctx context.Context, accountID uint64, now in
 	err := s.exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM tunnel
 		WHERE account_id = ? AND deleted = 0 AND expiration > ?`, accountID, now).Scan(&count)
 	return count, err
-}
-
-func (s *Store) TunnelIdentityExists(ctx context.Context, tunnelID string, tunnelCode uint64) (bool, error) {
-	var exists bool
-	err := s.exec.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM tunnel WHERE tunnel_id = ? OR tunnel_code = ?)`, tunnelID, tunnelCode).Scan(&exists)
-	return exists, err
 }
 
 func (s *Store) InsertTunnel(ctx context.Context, tunnel *core.Tunnel) error {
@@ -280,7 +273,7 @@ func scanTunnel(row scanner) (core.Tunnel, error) {
 	var description sql.NullString
 	err := row.Scan(&tunnel.ID, &tunnel.Name, &tunnel.TunnelID, &tunnel.TunnelCode, &tunnel.ClusterID,
 		&tunnel.Expiration, &tunnel.ExpirationHours, &tunnel.Namespace, &tunnel.AccountID, &description,
-		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.Deleted, &tunnel.CreatedAt, &tunnel.UpdatedAt)
+		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.CreatedAt, &tunnel.UpdatedAt)
 	if err != nil {
 		return core.Tunnel{}, err
 	}
@@ -295,7 +288,7 @@ func scanTunnelWithPortCount(row scanner) (core.Tunnel, error) {
 	var description sql.NullString
 	err := row.Scan(&tunnel.ID, &tunnel.Name, &tunnel.TunnelID, &tunnel.TunnelCode, &tunnel.ClusterID,
 		&tunnel.Expiration, &tunnel.ExpirationHours, &tunnel.Namespace, &tunnel.AccountID, &description,
-		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.Deleted, &tunnel.CreatedAt, &tunnel.UpdatedAt,
+		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.CreatedAt, &tunnel.UpdatedAt,
 		&tunnel.PortCount)
 	if err != nil {
 		return core.Tunnel{}, err

@@ -11,7 +11,7 @@ import (
 	_ "time/tzdata"
 )
 
-const Max40Bit = uint64(1<<40) - 1
+const max40Bit = uint64(1<<40) - 1
 
 var shanghai = mustLocation("Asia/Shanghai")
 
@@ -94,17 +94,17 @@ func BillingPeriodRange(timestamp int64) (int64, int64) {
 
 func NewTunnelCode() (uint64, string, error) {
 	var bytes [8]byte
-	if _, err := rand.Read(bytes[3:]); err != nil {
+	if _, err := rand.Read(bytes[:]); err != nil {
 		return 0, "", fmt.Errorf("generate tunnel code: %w", err)
 	}
-	code := binary.BigEndian.Uint64(bytes[:]) & Max40Bit
+	code := binary.BigEndian.Uint64(bytes[:]) & max40Bit
 	if code == 0 {
 		code = 1
 	}
-	return code, Encode40Bit(code), nil
+	return code, encode40Bit(code), nil
 }
 
-func Encode40Bit(value uint64) string {
+func encode40Bit(value uint64) string {
 	bytes := []byte{byte(value >> 32), byte(value >> 24), byte(value >> 16), byte(value >> 8), byte(value)}
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bytes))
 }

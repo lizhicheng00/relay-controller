@@ -9,10 +9,10 @@ func TestEncode40Bit(t *testing.T) {
 	tests := map[uint64]string{
 		1:        "aaaaaaab",
 		123456:   "aaaadysa",
-		Max40Bit: "77777777",
+		max40Bit: "77777777",
 	}
 	for value, expected := range tests {
-		if actual := Encode40Bit(value); actual != expected {
+		if actual := encode40Bit(value); actual != expected {
 			t.Fatalf("Encode40Bit(%d) = %q, want %q", value, actual, expected)
 		}
 	}

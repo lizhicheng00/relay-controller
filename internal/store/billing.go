@@ -16,22 +16,22 @@ func (s *Store) CreateAccountIfAbsent(ctx context.Context, namespace, planCode s
 }
 
 func (s *Store) LockAccountByNamespace(ctx context.Context, namespace string) (core.BillingAccount, error) {
-	return scanAccount(s.exec.QueryRowContext(ctx, `SELECT _id, namespace, plan_code, status, quota_blocked_until
+	return scanAccount(s.exec.QueryRowContext(ctx, `SELECT _id, plan_code, status
 		FROM billing_account WHERE namespace = ? LIMIT 1 FOR UPDATE`, namespace))
 }
 
 func (s *Store) LockAccountByID(ctx context.Context, accountID uint64) (core.BillingAccount, error) {
-	return scanAccount(s.exec.QueryRowContext(ctx, `SELECT _id, namespace, plan_code, status, quota_blocked_until
+	return scanAccount(s.exec.QueryRowContext(ctx, `SELECT _id, plan_code, status
 		FROM billing_account WHERE _id = ? LIMIT 1 FOR UPDATE`, accountID))
 }
 
 func (s *Store) FindPlan(ctx context.Context, planCode string) (core.BillingPlan, error) {
 	var plan core.BillingPlan
-	err := s.exec.QueryRowContext(ctx, `SELECT plan_code, monthly_quota_bytes, max_tunnels,
+	err := s.exec.QueryRowContext(ctx, `SELECT monthly_quota_bytes, max_tunnels,
 		max_ports_per_tunnel, max_hosts_per_tunnel, max_tunnel_bandwidth_bytes_per_second,
 		max_http_requests_per_minute_per_port, max_connections_per_port
 		FROM billing_plan WHERE plan_code = ? LIMIT 1`, planCode).Scan(
-		&plan.PlanCode, &plan.MonthlyQuotaBytes, &plan.MaxTunnels, &plan.MaxPortsPerTunnel,
+		&plan.MonthlyQuotaBytes, &plan.MaxTunnels, &plan.MaxPortsPerTunnel,
 		&plan.MaxHostsPerTunnel, &plan.MaxTunnelBandwidthBytesPerSecond,
 		&plan.MaxHTTPRequestsPerMinutePerPort, &plan.MaxConnectionsPerPort)
 	return plan, err
@@ -46,9 +46,9 @@ func (s *Store) CreatePeriodIfAbsent(ctx context.Context, accountID uint64, star
 
 func (s *Store) FindPeriod(ctx context.Context, accountID uint64, start int64) (core.BillingPeriod, error) {
 	var period core.BillingPeriod
-	err := s.exec.QueryRowContext(ctx, `SELECT account_id, period_start, period_end, quota_bytes, billed_bytes
+	err := s.exec.QueryRowContext(ctx, `SELECT period_end, quota_bytes, billed_bytes
 		FROM billing_period WHERE account_id = ? AND period_start = ? LIMIT 1`, accountID, start).Scan(
-		&period.AccountID, &period.Start, &period.End, &period.QuotaBytes, &period.BilledBytes)
+		&period.End, &period.QuotaBytes, &period.BilledBytes)
 	return period, err
 }
 
@@ -198,7 +198,7 @@ func (s *Store) DropMeteringPartitions(ctx context.Context, names []string) erro
 
 func scanAccount(row scanner) (core.BillingAccount, error) {
 	var account core.BillingAccount
-	err := row.Scan(&account.ID, &account.Namespace, &account.PlanCode, &account.Status, &account.QuotaBlockedUntil)
+	err := row.Scan(&account.ID, &account.PlanCode, &account.Status)
 	return account, err
 }
 

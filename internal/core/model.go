@@ -14,7 +14,6 @@ type Tunnel struct {
 	BandwidthUsed   uint64
 	URL             string
 	Type            string
-	Deleted         bool
 	CreatedAt       int64
 	UpdatedAt       int64
 	PortCount       uint64
@@ -122,15 +121,12 @@ type LimitsResponse struct {
 }
 
 type BillingAccount struct {
-	ID                uint64
-	Namespace         string
-	PlanCode          string
-	Status            string
-	QuotaBlockedUntil int64
+	ID       uint64
+	PlanCode string
+	Status   string
 }
 
 type BillingPlan struct {
-	PlanCode                         string
 	MonthlyQuotaBytes                uint64
 	MaxTunnels                       int
 	MaxPortsPerTunnel                int
@@ -141,8 +137,6 @@ type BillingPlan struct {
 }
 
 type BillingPeriod struct {
-	AccountID   uint64
-	Start       int64
 	End         int64
 	QuotaBytes  uint64
 	BilledBytes uint64

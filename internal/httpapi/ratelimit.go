@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,7 +39,7 @@ func NewRateLimiter(enabled bool, requestsPerMinute int) *RateLimiter {
 
 func (r *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if !stringsHasAPIPrefix(request.URL.Path) || r.Allow(rateKey(request)) {
+		if !isAPIPath(request.URL.Path) || r.Allow(rateKey(request)) {
 			next.ServeHTTP(response, request)
 			return
 		}
@@ -88,6 +89,6 @@ func rateKey(request *http.Request) string {
 	return "ip:" + request.RemoteAddr
 }
 
-func stringsHasAPIPrefix(path string) bool {
-	return path == apiBase+"/limits" || path == apiBase+"/tunnels" || len(path) > len(apiBase+"/tunnels/") && path[:len(apiBase+"/tunnels/")] == apiBase+"/tunnels/"
+func isAPIPath(path string) bool {
+	return path == apiBase+"/limits" || path == apiBase+"/tunnels" || strings.HasPrefix(path, apiBase+"/tunnels/")
 }
