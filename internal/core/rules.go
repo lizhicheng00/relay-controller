@@ -40,50 +40,31 @@ func ValidTunnelID(value string) bool {
 	return true
 }
 
-func NormalizeTunnelType(value *string, defaultBridge bool) (string, error) {
-	if value == nil {
-		if defaultBridge {
-			return "bridge", nil
-		}
-		return "", nil
-	}
-	normalized := strings.ToLower(strings.TrimSpace(*value))
-	if normalized == "" && defaultBridge {
-		return "bridge", nil
-	}
+func NormalizeTunnelType(value string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
 	if normalized != "bridge" && normalized != "env" {
 		return "", InvalidField("type", "must be bridge or env")
 	}
 	return normalized, nil
 }
 
-func NormalizeProtocol(value *string, required bool) (string, error) {
-	if value == nil {
-		if required {
-			return "", InvalidField("protocol", "is required")
-		}
-		return "", nil
-	}
-	normalized := strings.ToLower(strings.TrimSpace(*value))
+func NormalizeProtocol(value string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
 	if normalized != "http" && normalized != "https" && normalized != "auto" {
 		return "", InvalidField("protocol", "must be http, https, or auto")
 	}
 	return normalized, nil
 }
 
-func ResolveExpiration(hours *int, fallback int, now int64) (int, int64, error) {
-	resolved := fallback
-	if hours != nil {
-		resolved = *hours
+func ExpirationAt(hours int, now int64) (int64, error) {
+	if hours < 1 || hours > 720 {
+		return 0, InvalidField("expiration", "must be between 1 and 720")
 	}
-	if resolved < 1 || resolved > 720 {
-		return 0, 0, InvalidField("expiration", "must be between 1 and 720")
-	}
-	expiration := now + int64(resolved)*3600
+	expiration := now + int64(hours)*3600
 	if expiration > math.MaxUint32 {
-		return 0, 0, InvalidField("expiration", "is too large")
+		return 0, InvalidField("expiration", "is too large")
 	}
-	return resolved, expiration, nil
+	return expiration, nil
 }
 
 func BillingPeriodRange(timestamp int64) (int64, int64) {

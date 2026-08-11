@@ -44,23 +44,23 @@ func TestBillingPeriodUsesShanghaiMonthBoundary(t *testing.T) {
 
 func TestNormalizeEnumsIgnoringCase(t *testing.T) {
 	tunnelType := "BrIdGe"
-	if actual, err := NormalizeTunnelType(&tunnelType, true); err != nil || actual != "bridge" {
+	if actual, err := NormalizeTunnelType(tunnelType); err != nil || actual != "bridge" {
 		t.Fatalf("normalize tunnel type = %q, %v", actual, err)
 	}
 	protocol := "HtTpS"
-	if actual, err := NormalizeProtocol(&protocol, true); err != nil || actual != "https" {
+	if actual, err := NormalizeProtocol(protocol); err != nil || actual != "https" {
 		t.Fatalf("normalize protocol = %q, %v", actual, err)
 	}
 }
 
-func TestResolveExpiration(t *testing.T) {
+func TestExpirationAt(t *testing.T) {
 	hours := 24
-	resolved, expiration, err := ResolveExpiration(&hours, 72, 1000)
-	if err != nil || resolved != 24 || expiration != 87400 {
-		t.Fatalf("ResolveExpiration = %d, %d, %v", resolved, expiration, err)
+	expiration, err := ExpirationAt(hours, 1000)
+	if err != nil || expiration != 87400 {
+		t.Fatalf("ExpirationAt = %d, %v", expiration, err)
 	}
 	tooLarge := 721
-	if _, _, err := ResolveExpiration(&tooLarge, 72, 1000); err == nil {
+	if _, err := ExpirationAt(tooLarge, 1000); err == nil {
 		t.Fatal("expected expiration over 720 hours to fail")
 	}
 }

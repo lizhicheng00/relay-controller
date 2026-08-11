@@ -43,9 +43,9 @@ cmd/relay-controller   process startup and graceful shutdown
 internal/httpapi       HTTP routing, JSON errors, recovery, rate limiting
 internal/service       tunnel, port, token, billing, cleanup workflows
 internal/core          business models and deterministic rules
-internal/store         MySQL queries, transactions, migrations
+internal/store         MySQL queries and transactions
 internal/security      RS256 signing and PKCS12 mTLS
-assets                 embedded SQL migrations
+migrations             reserved for deployment-managed schema changes
 ```
 
 The runtime uses the Go standard library where practical. The only direct dependencies are the MySQL driver and PKCS12 decoder.
@@ -102,7 +102,7 @@ export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 go run ./cmd/relay-controller
 ```
 
-The service creates no database itself. Create the database first; embedded SQL files under `assets/migrations` run at startup in version order. Successful files are recorded in `schema_migration`; add a new file for every schema change and do not edit an applied file.
+The service does not create or migrate the shared database. Provision the existing Relay Controller schema before startup. The empty `migrations` directory is reserved for deployment-managed schema changes.
 
 ## Security Boundary
 

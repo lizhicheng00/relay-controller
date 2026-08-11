@@ -47,8 +47,7 @@ func Open(ctx context.Context, cfg config.Database) (*Store, error) {
 	pingContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(pingContext); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("connect database: %w", err)
+		return nil, fmt.Errorf("connect database: %w", errors.Join(err, db.Close()))
 	}
 	return &Store{db: db, exec: db}, nil
 }
@@ -110,7 +109,6 @@ func dataSourceName(cfg config.Database) (string, error) {
 	driverConfig.Addr = host
 	driverConfig.DBName = database
 	driverConfig.ParseTime = true
-	driverConfig.MultiStatements = true
 	driverConfig.Timeout = 10 * time.Second
 	driverConfig.ReadTimeout = 30 * time.Second
 	driverConfig.WriteTimeout = 30 * time.Second

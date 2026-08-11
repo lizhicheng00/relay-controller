@@ -35,10 +35,6 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
-	if err := database.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -89,10 +85,6 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	var createFailures []error
 	for failure := range failures {
 		createFailures = append(createFailures, failure)
-		var appError *core.AppError
-		if !errors.As(failure, &appError) || appError.Code != core.CodeTunnelQuotaExceeded {
-			continue
-		}
 	}
 	if len(tunnels) != 10 {
 		t.Fatalf("created %d tunnels concurrently, want 10; failures: %v", len(tunnels), createFailures)

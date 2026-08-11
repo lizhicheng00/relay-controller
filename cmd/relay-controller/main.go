@@ -62,10 +62,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer database.Close()
-	if err := database.Migrate(ctx); err != nil {
-		return err
-	}
+	defer func() {
+		if err := database.Close(); err != nil {
+			logger.Warn("database close failed", "error", err)
+		}
+	}()
 
 	application := service.New(database, signer, cfg.Relay.Domain, cfg.Relay.Region, logger)
 	limiter := httpapi.NewRateLimiter(cfg.Relay.RequestsPerMinute)

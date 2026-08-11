@@ -51,7 +51,11 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 		return core.TunnelResponse{}, internal("create billing account", err)
 	}
 	now := s.now().Unix()
-	expirationHours, expiration, err := core.ResolveExpiration(request.Expiration, defaultExpirationHours, now)
+	expirationHours := defaultExpirationHours
+	if request.Expiration != nil {
+		expirationHours = *request.Expiration
+	}
+	expiration, err := core.ExpirationAt(expirationHours, now)
 	if err != nil {
 		return core.TunnelResponse{}, err
 	}
@@ -123,7 +127,7 @@ func (s *Service) GetTunnel(ctx context.Context, namespace, accountNamespace, tu
 	if err != nil {
 		return core.TunnelResponse{}, err
 	}
-	tunnel, err := s.ownedTunnel(ctx, s.store, namespace, tunnelID, true)
+	tunnel, err := s.findOwnedTunnel(ctx, namespace, tunnelID, true)
 	if err != nil {
 		return core.TunnelResponse{}, err
 	}
@@ -144,7 +148,7 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, accountNamespace,
 	}
 	now := s.now().Unix()
 	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnel, err := s.ownedTunnel(ctx, tx, namespace, tunnelID, true)
+		tunnel, err := s.lockOwnedTunnel(ctx, tx, namespace, tunnelID, true)
 		if err != nil {
 			return err
 		}
@@ -155,7 +159,7 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, accountNamespace,
 			tunnel.Description = request.Description
 		}
 		if request.Type != nil {
-			tunnel.Type, err = core.NormalizeTunnelType(request.Type, false)
+			tunnel.Type, err = core.NormalizeTunnelType(*request.Type)
 			if err != nil {
 				return err
 			}
@@ -164,7 +168,8 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, accountNamespace,
 		if request.Expiration != nil {
 			hours = *request.Expiration
 		}
-		tunnel.ExpirationHours, tunnel.Expiration, err = core.ResolveExpiration(&hours, defaultExpirationHours, now)
+		tunnel.ExpirationHours = hours
+		tunnel.Expiration, err = core.ExpirationAt(hours, now)
 		if err != nil {
 			return err
 		}
@@ -187,7 +192,7 @@ func (s *Service) DeleteTunnel(ctx context.Context, namespace, accountNamespace,
 		return false, err
 	}
 	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnel, err := s.ownedTunnel(ctx, tx, namespace, tunnelID, false)
+		tunnel, err := s.lockOwnedTunnel(ctx, tx, namespace, tunnelID, false)
 		if err != nil {
 			return err
 		}
@@ -238,7 +243,7 @@ func (s *Service) IssueTunnelToken(ctx context.Context, namespace, accountNamesp
 	if scope != "host" && scope != "connect" {
 		return core.TunnelTokenResponse{}, core.Invalid("scope must be host or connect")
 	}
-	tunnel, err := s.ownedTunnel(ctx, s.store, namespace, tunnelID, true)
+	tunnel, err := s.findOwnedTunnel(ctx, namespace, tunnelID, true)
 	if err != nil {
 		return core.TunnelTokenResponse{}, err
 	}
@@ -246,219 +251,6 @@ func (s *Service) IssueTunnelToken(ctx context.Context, namespace, accountNamesp
 		return core.TunnelTokenResponse{}, err
 	}
 	return s.signer.Issue(tunnel, scope, s.now().Unix())
-}
-
-func (s *Service) CreatePort(ctx context.Context, namespace, accountNamespace, tunnelID string, request core.CreateTunnelPortRequest) (core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	port, protocol, allowAnonymous, err := validateCreatePort(request)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	var tunnel core.Tunnel
-	tunnelPort := core.TunnelPort{Port: port, Protocol: protocol, AllowAnonymous: allowAnonymous}
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnel, err = s.ownedTunnel(ctx, tx, namespace, tunnelID, true)
-		if err != nil {
-			return err
-		}
-		tunnelPort.TunnelCode = tunnel.TunnelCode
-		if _, err := tx.FindPort(ctx, tunnel.TunnelCode, port); err == nil {
-			return core.NewError(http.StatusConflict, core.CodeTunnelPortExists, "tunnel port already exists")
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return internal("find tunnel port", err)
-		}
-		_, plan, err := s.lockActiveAccountPlanByID(ctx, tx, tunnel.AccountID)
-		if err != nil {
-			return err
-		}
-		count, err := tx.CountPorts(ctx, tunnel.TunnelCode)
-		if err != nil {
-			return internal("count tunnel ports", err)
-		}
-		if plan.MaxPortsPerTunnel > 0 && count >= uint64(plan.MaxPortsPerTunnel) {
-			return core.NewError(http.StatusTooManyRequests, core.CodeTunnelPortQuotaExceeded,
-				fmt.Sprintf("tunnel port quota exceeded: max=%d", plan.MaxPortsPerTunnel))
-		}
-		if err := tx.InsertPort(ctx, &tunnelPort); err != nil {
-			if store.IsDuplicate(err) {
-				return core.NewError(http.StatusConflict, core.CodeTunnelPortExists, "tunnel port already exists")
-			}
-			return internal("insert tunnel port", err)
-		}
-		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, s.now().Unix()); err != nil {
-			return internal("refresh tunnel expiration", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	s.log.Info("tunnel port created", "tunnelId", tunnelID, "port", port, "protocol", protocol)
-	return core.PortResponse(tunnel, tunnelPort), nil
-}
-
-func (s *Service) ListPorts(ctx context.Context, namespace, accountNamespace, tunnelID string) ([]core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return nil, err
-	}
-	tunnel, err := s.ownedTunnel(ctx, s.store, namespace, tunnelID, true)
-	if err != nil {
-		return nil, err
-	}
-	ports, err := s.store.ListPorts(ctx, tunnel.TunnelCode)
-	if err != nil {
-		return nil, internal("list tunnel ports", err)
-	}
-	response := make([]core.TunnelPortResponse, 0, len(ports))
-	for _, port := range ports {
-		response = append(response, core.PortResponse(tunnel, port))
-	}
-	return response, nil
-}
-
-func (s *Service) GetPort(ctx context.Context, namespace, accountNamespace, tunnelID string, port uint16) (core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	tunnel, err := s.ownedTunnel(ctx, s.store, namespace, tunnelID, true)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	tunnelPort, err := s.store.FindPort(ctx, tunnel.TunnelCode, port)
-	if errors.Is(err, sql.ErrNoRows) {
-		return core.TunnelPortResponse{}, core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
-	}
-	if err != nil {
-		return core.TunnelPortResponse{}, internal("find tunnel port", err)
-	}
-	return core.PortResponse(tunnel, tunnelPort), nil
-}
-
-func (s *Service) UpdatePort(ctx context.Context, namespace, accountNamespace, tunnelID string, port uint16, request core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	protocol, err := core.NormalizeProtocol(request.Protocol, false)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	var tunnel core.Tunnel
-	var tunnelPort core.TunnelPort
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnel, err = s.ownedTunnel(ctx, tx, namespace, tunnelID, true)
-		if err != nil {
-			return err
-		}
-		tunnelPort, err = tx.FindPort(ctx, tunnel.TunnelCode, port)
-		if errors.Is(err, sql.ErrNoRows) {
-			return core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
-		}
-		if err != nil {
-			return internal("find tunnel port", err)
-		}
-		if request.Protocol == nil && request.AllowAnonymous == nil {
-			return nil
-		}
-		if request.Protocol != nil {
-			tunnelPort.Protocol = protocol
-		}
-		if request.AllowAnonymous != nil {
-			tunnelPort.AllowAnonymous = *request.AllowAnonymous
-		}
-		if err := tx.UpdatePort(ctx, tunnelPort); err != nil {
-			return internal("update tunnel port", err)
-		}
-		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, s.now().Unix()); err != nil {
-			return internal("refresh tunnel expiration", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
-	return core.PortResponse(tunnel, tunnelPort), nil
-}
-
-func (s *Service) DeletePort(ctx context.Context, namespace, accountNamespace, tunnelID string, port uint16) (bool, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return false, err
-	}
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnel, err := s.ownedTunnel(ctx, tx, namespace, tunnelID, true)
-		if err != nil {
-			return err
-		}
-		tunnelPort, err := tx.FindPort(ctx, tunnel.TunnelCode, port)
-		if errors.Is(err, sql.ErrNoRows) {
-			return core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
-		}
-		if err != nil {
-			return internal("find tunnel port", err)
-		}
-		if err := tx.DeletePort(ctx, tunnelPort.ID); err != nil {
-			return internal("delete tunnel port", err)
-		}
-		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, s.now().Unix()); err != nil {
-			return internal("refresh tunnel expiration", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-	s.log.Info("tunnel port deleted", "tunnelId", tunnelID, "port", port)
-	return true, nil
-}
-
-func (s *Service) GetLimits(ctx context.Context, namespace, accountNamespace string) (core.LimitsResponse, error) {
-	_, accountNamespace, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.LimitsResponse{}, err
-	}
-	now := s.now().Unix()
-	var response core.LimitsResponse
-	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
-		return core.LimitsResponse{}, internal("create billing account", err)
-	}
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		account, err := tx.LockAccountByNamespace(ctx, accountNamespace)
-		if err != nil {
-			return internal("lock billing account", err)
-		}
-		plan, err := s.requirePlan(ctx, tx, account.PlanCode)
-		if err != nil {
-			return err
-		}
-		period, err := ensurePeriod(ctx, tx, account.ID, plan, now)
-		if err != nil {
-			return err
-		}
-		activeTunnels, err := tx.CountActiveTunnels(ctx, account.ID, now)
-		if err != nil {
-			return internal("count active tunnels", err)
-		}
-		remaining := uint64(0)
-		if period.BilledBytes < period.QuotaBytes {
-			remaining = period.QuotaBytes - period.BilledBytes
-		}
-		response = core.LimitsResponse{
-			ResetAt: period.End, QuotaBytes: period.QuotaBytes, RemainingBytes: remaining,
-			ActiveTunnels: activeTunnels, MaxTunnels: plan.MaxTunnels, MaxPortsPerTunnel: plan.MaxPortsPerTunnel,
-			MaxHostsPerTunnel:                plan.MaxHostsPerTunnel,
-			MaxTunnelBandwidthBytesPerSecond: plan.MaxTunnelBandwidthBytesPerSecond,
-			MaxHTTPRequestsPerMinutePerPort:  plan.MaxHTTPRequestsPerMinutePerPort,
-			MaxConnectionsPerPort:            plan.MaxConnectionsPerPort,
-		}
-		return nil
-	})
-	return response, err
 }
 
 func (s *Service) requireLocalCluster(ctx context.Context, clusterID string) error {
@@ -475,14 +267,17 @@ func (s *Service) requireLocalCluster(ctx context.Context, clusterID string) err
 	return nil
 }
 
-func (s *Service) ownedTunnel(ctx context.Context, database *store.Store, namespace, tunnelID string, requireActive bool) (core.Tunnel, error) {
-	var tunnel core.Tunnel
-	var err error
-	if database == s.store {
-		tunnel, err = database.FindTunnel(ctx, tunnelID, s.region)
-	} else {
-		tunnel, err = database.LockTunnel(ctx, tunnelID, s.region)
-	}
+func (s *Service) findOwnedTunnel(ctx context.Context, namespace, tunnelID string, requireActive bool) (core.Tunnel, error) {
+	tunnel, err := s.store.FindTunnel(ctx, tunnelID, s.region)
+	return s.checkOwnedTunnel(tunnel, err, namespace, requireActive)
+}
+
+func (s *Service) lockOwnedTunnel(ctx context.Context, tx *store.Store, namespace, tunnelID string, requireActive bool) (core.Tunnel, error) {
+	tunnel, err := tx.LockTunnel(ctx, tunnelID, s.region)
+	return s.checkOwnedTunnel(tunnel, err, namespace, requireActive)
+}
+
+func (s *Service) checkOwnedTunnel(tunnel core.Tunnel, err error, namespace string, requireActive bool) (core.Tunnel, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return core.Tunnel{}, core.NewError(http.StatusNotFound, core.CodeTunnelNotFound, "tunnel not found")
 	}
@@ -594,7 +389,10 @@ func validateCreateTunnel(request core.CreateTunnelRequest) (string, error) {
 	if request.Expiration != nil && (*request.Expiration < 1 || *request.Expiration > 720) {
 		return "", core.InvalidField("expiration", "must be between 1 and 720")
 	}
-	return core.NormalizeTunnelType(request.Type, true)
+	if request.Type == nil || strings.TrimSpace(*request.Type) == "" {
+		return "bridge", nil
+	}
+	return core.NormalizeTunnelType(*request.Type)
 }
 
 func validateUpdateTunnel(request core.UpdateTunnelRequest) error {
@@ -608,24 +406,10 @@ func validateUpdateTunnel(request core.UpdateTunnelRequest) error {
 		return core.InvalidField("expiration", "must be between 1 and 720")
 	}
 	if request.Type != nil {
-		_, err := core.NormalizeTunnelType(request.Type, false)
+		_, err := core.NormalizeTunnelType(*request.Type)
 		return err
 	}
 	return nil
-}
-
-func validateCreatePort(request core.CreateTunnelPortRequest) (uint16, string, bool, error) {
-	if request.Port == nil || *request.Port < 1 || *request.Port > 65535 {
-		return 0, "", false, core.NewError(http.StatusBadRequest, core.CodeTunnelPortInvalid, "tunnel port invalid")
-	}
-	protocol, err := core.NormalizeProtocol(request.Protocol, true)
-	if err != nil {
-		return 0, "", false, err
-	}
-	if request.AllowAnonymous == nil {
-		return 0, "", false, core.InvalidField("allowAnonymous", "is required")
-	}
-	return uint16(*request.Port), protocol, *request.AllowAnonymous, nil
 }
 
 func buildTunnelURL(tunnelID, clusterID, domain string) string {

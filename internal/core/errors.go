@@ -22,7 +22,6 @@ const (
 	CodeAccountDisabled         = "12001"
 	CodeAccountQuotaExceeded    = "12002"
 	CodeJWTGenerateFailed       = "30001"
-	CodeJWTKeyInvalid           = "30002"
 	CodeRateLimited             = "42900"
 	CodeInternal                = "50000"
 )

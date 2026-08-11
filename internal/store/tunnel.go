@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -198,7 +199,7 @@ func (s *Store) FindTunnelStatus(ctx context.Context, tunnelID string) (*core.Tu
 		FROM tunnel_runtime_status WHERE tunnel_id = ? LIMIT 1`, tunnelID).Scan(
 		&status.HostConnectionCount, &status.ClientConnectionCount, &status.UploadBytesPerSecond,
 		&status.DownloadBytesPerSecond, &status.TotalUploadBytes, &status.TotalDownloadBytes, &status.ReportedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

@@ -47,29 +47,33 @@ func (s *JWTSigner) Issue(tunnel core.Tunnel, scope string, now int64) (core.Tun
 	expiration := now + s.lifetime
 	jti, err := randomUUID()
 	if err != nil {
-		return core.TunnelTokenResponse{}, core.NewError(500, core.CodeJWTGenerateFailed, "jwt generate failed")
+		return core.TunnelTokenResponse{}, jwtGenerationError(err)
 	}
 	header, err := json.Marshal(map[string]any{"alg": "RS256", "kid": s.keyID, "typ": "JWT"})
 	if err != nil {
-		return core.TunnelTokenResponse{}, core.NewError(500, core.CodeJWTGenerateFailed, "jwt generate failed")
+		return core.TunnelTokenResponse{}, jwtGenerationError(err)
 	}
 	claims, err := json.Marshal(map[string]any{
 		"iss": s.issuer, "aud": []string{s.audience}, "exp": expiration, "nbf": now, "jti": jti,
 		"tunnelId": tunnel.TunnelID, "clusterId": tunnel.ClusterID, "scp": scope,
 	})
 	if err != nil {
-		return core.TunnelTokenResponse{}, core.NewError(500, core.CodeJWTGenerateFailed, "jwt generate failed")
+		return core.TunnelTokenResponse{}, jwtGenerationError(err)
 	}
 	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
 	digest := sha256.Sum256([]byte(unsigned))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, s.privateKey, crypto.SHA256, digest[:])
 	if err != nil {
-		return core.TunnelTokenResponse{}, core.NewError(500, core.CodeJWTGenerateFailed, "jwt generate failed")
+		return core.TunnelTokenResponse{}, jwtGenerationError(err)
 	}
 	return core.TunnelTokenResponse{
 		TunnelID: tunnel.TunnelID, Scope: scope, Lifetime: s.lifetime, Expiration: expiration,
 		Token: unsigned + "." + base64.RawURLEncoding.EncodeToString(signature),
 	}, nil
+}
+
+func jwtGenerationError(cause error) *core.AppError {
+	return &core.AppError{Status: 500, Code: core.CodeJWTGenerateFailed, Message: "jwt generate failed", Cause: cause}
 }
 
 func parsePrivateKey(configured string) (*rsa.PrivateKey, error) {
