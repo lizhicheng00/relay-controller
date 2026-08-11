@@ -63,7 +63,7 @@ Each policy contains:
 
 There is no public delete-all port endpoint. Deleting a tunnel and the aging job still delete all related port rows internally.
 
-Gateway reads a port policy using its `clusterId`. Relay Controller verifies that the cluster is local and that the tunnel belongs to it before returning the policy.
+Gateway reads tunnel and port policy from the shared database. Public port operations still verify namespace ownership, local region, and tunnel activity before returning or changing a policy.
 
 Gateway writes the latest Host activity directly to the shared runtime-status table. Tunnel detail returns it as a `status` object containing Host connection count, client connection count measured as active SSH channels, current upload/download rates, cumulative upload/download bytes, and report time. Read operations and token issuance do not extend the tunnel lifetime.
 
@@ -71,12 +71,12 @@ Gateway writes the latest Host activity directly to the shared runtime-status ta
 
 Gateway appends idempotent incremental usage directly to the shared database. Relay Controller settles each report once into monthly and Tunnel totals; it does not expose a metering HTTP endpoint.
 
-Expired tunnels remain recoverable for the configured retention period. The hourly cleanup job hard-deletes aged tunnel metadata, port policies, and runtime status in bounded batches.
+Expired tunnels remain stored for the configured retention period but cannot be used. The hourly cleanup job hard-deletes aged tunnel metadata, port policies, and runtime status in bounded batches.
 
 ## 6. Acceptance Criteria
 
 - Namespace and region boundaries are enforced before returning or mutating business data.
 - Concurrent tunnel creation cannot exceed the account-namespace quota across Controller replicas sharing the database.
 - Invalid request values return 4xx responses; unexpected failures return 5xx responses.
-- OpenAPI YAML is the source of controller mappings and Maven compilation generates the API interfaces.
+- OpenAPI YAML is the external contract; HTTP contract tests keep the Go routes and response shapes aligned with it.
 - Relay Controller itself does not depend on Redis. Gateway uses Redis for the distributed single-Host lock.

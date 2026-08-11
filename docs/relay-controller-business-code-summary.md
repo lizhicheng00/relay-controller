@@ -2,102 +2,45 @@
 
 ## 1. Architecture
 
-The project uses a small layered structure:
+The Go service keeps four business boundaries:
 
-- `interfaces`: generated OpenAPI contracts, controllers, request/response models, rate limiting;
-- `application`: tunnel, port, account limits, settlement, cluster, and cleanup workflows;
-- `domain`: business models, enums, repositories, and validation services;
-- `infrastructure`: MySQL persistence, JWT signing, and configuration.
+- `httpapi` owns the OpenAPI-facing HTTP contract, validation entry points, error responses, recovery, and the bounded local rate limiter.
+- `service` coordinates tunnel, port, token, account, billing, and lifecycle transactions.
+- `core` contains business models and pure rules such as identifiers, Base32, expiration, and Beijing billing periods.
+- `store` owns SQL, transactions, Flyway-compatible migration history, row locking, and metering partitions.
 
-OpenAPI source is `src/main/resources/static/openapi.yaml`. Maven generates Spring interfaces under `target/generated-sources/openapi`; controllers only implement those interfaces.
+`security` loads the PKCS8 RSA signing key and PKCS12 mTLS stores. `assets` embeds the OpenAPI document and unchanged migrations into the binary.
 
-## 2. Core Data
+## 2. Tunnel Flow
 
-### Tunnel
+Creation validates both namespace headers, confirms that `clusterId` belongs to the configured region, creates the parent billing account when needed, and locks that account before checking the shared tunnel quota. It then generates one random 40-bit code and its eight-character Base32 ID, persists the tunnel, and returns metadata.
 
-Important fields are `tunnelId`, `tunnelCode`, `clusterId`, `namespace`, `expiration`, `expirationHours`, `type`, `url`, and `deleted`. `expirationHours` is the inactivity window; `expiration` is its current Unix deadline. `portCount` is a list-query projection and is not stored in the `tunnel` table.
+List filtering happens in SQL by resource namespace, local region, active expiration, and deletion state. `portCount` is calculated in the same query. Detail additionally reads the latest Gateway-written runtime status.
 
-Active tunnel list SQL filters namespace, region, soft-delete state, and expiration in the database. It calculates `portCount` with one indexed correlated count, avoiding an N+1 query.
+Update and port mutations refresh the configured inactivity window. Positive metering refreshes it from the latest report timestamp during settlement. Reads, token issuance, open idle connections, and zero-byte reports do not count as activity.
 
-### Tunnel Port
+Explicit deletion and scheduled aging remove the tunnel, its ports, and runtime status in one transaction. Metering remains until its audit partitions expire so already reported traffic is not lost.
 
-`tunnel_port` uses `(tunnel_code, port)` as its unique business key. `protocol` is persisted as `http`, `https`, or `auto`; `allow_anonymous` controls sending-side access.
+## 3. Port And Token Flow
 
-The public collection supports create and list only. Repository-level `deleteByTunnelCode` remains internal for tunnel deletion and aging cleanup.
+A tunnel port is unique by `(tunnel_code, port)`. Create requires `protocol` (`http`, `https`, or `auto`) and `allowAnonymous`; update accepts either field independently. The account row is locked while checking the per-tunnel port quota, so replicas cannot exceed it through concurrent requests.
 
-## 3. Main Flows
+Token issuance requires an active owned tunnel and available monthly quota. Every request signs a fresh RS256 token containing `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`. Its fixed lifetime is independent of tunnel expiration and the response is marked `Cache-Control: no-store`.
 
-### Create Tunnel
+## 4. Billing Flow
 
-1. Require resource `X-Namespace` and quota owner `X-Account-Namespace`.
-2. Verify the requested cluster belongs to the local region.
-3. Create or lock the account-namespace billing account and enforce its shared active Tunnel quota in the database transaction.
-4. Resolve the expiration duration and cap it at 720 hours.
-5. Allocate a unique 40-bit code and Base32 tunnel ID.
-6. Persist and return metadata without issuing tokens.
+Gateway appends upload and download deltas to `tunnel_metering`. The unique report key makes an exact retry idempotent. Each minute Controller replicas claim different unsettled rows with database row locks, aggregate both directions into the Beijing calendar-month period and tunnel total, refresh activity, update quota blocking, and mark those rows settled in one transaction.
 
-### List Tunnels
+`billing_period` is the durable monthly result. Raw metering is a seven-day audit buffer split into UTC hourly partitions. One database scheduler lock serializes partition DDL across replicas; tunnel cleanup itself uses bounded `SKIP LOCKED` batches and may run concurrently.
 
-The repository returns only active local-region rows and computes `portCount`. Expired or soft-deleted tunnels do not appear.
+## 5. Reliability And Security
 
-### Issue Token
+- Database transactions enforce account tunnel quotas, port quotas, and exactly-once settlement across replicas.
+- Region and namespace checks happen before business data is returned or changed.
+- Invalid input returns 4xx; unexpected failures return a stable 5xx body while the server logs the cause and stack.
+- mTLS rejects callers without a certificate signed by the configured client CA.
+- JWT startup fails when the configured key is not valid PKCS8 RSA or is weaker than 2048 bits.
+- Graceful shutdown stops HTTP intake and waits for scheduler goroutines.
+- Redis is intentionally outside this service; Gateway owns distributed data-plane locks and limits.
 
-1. Verify namespace ownership, local region, and expiration.
-2. Validate `scope` as `host` or `connect`.
-3. Set expiration from the fixed configured token TTL.
-4. Add `aud=relay-gateway` and a random `jti`, then sign a new RS256 JWT.
-5. Return `tunnelId`, `scope`, `lifetime`, `expiration`, and `token`.
-
-No cache is read or written. This makes each call independent and removes Redis from the runtime architecture.
-
-### Port Policy
-
-Create and update use the `TunnelProtocol` enum from request through persistence. This prevents unsupported protocol strings from entering the domain or database. Successful port mutations refresh the tunnel inactivity window. Gateway reads the shared tunnel and port tables directly.
-
-### Tunnel Activity
-
-Successful tunnel and port changes refresh `tunnelExpiration`. Positive metering settlement refreshes it from the latest `reportedAt`. Reads, token issuance, open connections without traffic, and zero-usage reports do not refresh it.
-
-## 4. API Summary
-
-```text
-POST   /open-api-inner/v1/relay-controller/tunnels
-GET    /open-api-inner/v1/relay-controller/tunnels
-DELETE /open-api-inner/v1/relay-controller/tunnels
-GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
-PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
-DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
-POST   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/token?scope=host|connect
-
-POST   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
-GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
-GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
-PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
-DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
-
-GET    /open-api-inner/v1/relay-controller/limits
-```
-
-## 5. Persistence And Lifecycle
-
-Flyway `V1` creates the phase-one tables. The consolidated `V3` adds the phase-two plans, accounts, monthly periods, metering, runtime status, and the Tunnel account binding. `V4` fixes period boundaries at 00:00 `Asia/Shanghai`, extends runtime status with cumulative upload/download bytes, splits raw metering by direction, and removes the redundant one-minute aggregate. Compound database names use snake_case while Java fields use camelCase.
-
-Tunnel expiration is refreshed by meaningful configuration changes and positive metering settlement. Explicit deletion removes the Tunnel, its Port rows, and runtime status in one transaction; scheduled cleanup does the same for aged Tunnels.
-
-## 6. Runtime Configuration
-
-Required configuration:
-
-- `DATASOURCE_URL`
-- `DATASOURCE_USERNAME`
-- `DATASOURCE_PASSWORD`
-- `RELAY_REGION`
-- `RELAY_DOMAIN`
-- `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`
-- `RELAY_JWT_PRIVATE_KEY` for stable production signing
-
-mTLS additionally requires the server keystore and client-CA truststore variables documented in `README.md`. Redis configuration is intentionally absent.
-
-## 7. Verification
-
-Tests cover API mappings and errors, database-scoped metadata quotas, monthly balance, idempotent settlement claims, runtime detail, expiration handling, token claims and uniqueness, port protocol behavior, rate limiting, and aged tunnel cleanup.
+The API contract is [assets/openapi.yaml](../assets/openapi.yaml). Runtime configuration and commands are in [README.md](../README.md).

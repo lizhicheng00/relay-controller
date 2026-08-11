@@ -19,7 +19,6 @@ Relay Gateway owns:
 - bandwidth, HTTP request, and connection token buckets;
 - incremental metering writes and shutdown flush;
 - latest runtime-status writes;
-- active Tunnel expiration refresh;
 - immediate admission and disconnect execution.
 
 CLI echo, ping, random port allocation, verbose logging, and local HTTP request printing are not Relay Controller code.

@@ -1,161 +1,137 @@
 # Relay Controller
 
-Relay Controller is the DevBridge / Relay Tunnel control plane service. It manages tunnel metadata, namespace accounts, limits, JWT signing, billing settlement, runtime status, and port policies.
+Relay Controller is the regional DevBridge control plane. It manages tunnels, port policies, namespace accounts, limits, JWT issuance, billing settlement, runtime-status queries, and expired-resource cleanup. Relay Gateway owns traffic forwarding and writes metering and runtime status directly to the shared database.
 
-This service does not implement WebSocket, WebTransport, TCP, or HTTP body forwarding. Real traffic bridging belongs to Relay Gateway.
+## Business Rules
 
-Detailed business and code summary: [docs/relay-controller-business-code-summary.md](docs/relay-controller-business-code-summary.md)
+- One process serves one `RELAY_REGION`; only clusters registered to that region are accepted.
+- `X-Namespace` isolates resources. `X-Account-Namespace` identifies the parent account that shares quota across its namespaces.
+- A trial account has 5 GiB per Beijing calendar month, 10 active tunnels, and 10 ports per tunnel.
+- `tunnelCode` is a random positive 40-bit integer. `tunnelId` is its fixed eight-character lowercase Base32 encoding.
+- Tunnel URLs use `{tunnelId}.{clusterId}.{RELAY_DOMAIN}`.
+- Tunnel inactivity defaults to 72 hours and is capped at 720 hours. Configuration changes and positive settled metering refresh the deadline.
+- Every token request creates a new RS256 JWT with `aud=relay-gateway`; tokens are never cached.
+- Gateway appends metering rows. Controller settles each row exactly once into monthly and tunnel totals.
+- Explicit deletion and aged cleanup physically remove tunnel metadata, port policies, and runtime status. Raw metering is retained by hourly partition policy for billing audit.
 
-User story and implementation design: [docs/relay-controller-user-story.md](docs/relay-controller-user-story.md)
+## API
 
-## Stack
-
-- Java 17
-- Spring Boot 3
-- Jetty embedded server
-- Maven
-- MySQL
-- MyBatis Plus
-- Nimbus JOSE JWT
-
-## Implemented APIs
+All business APIs use the prefix `/open-api-inner/v1/relay-controller` and require both namespace headers.
 
 ```text
-POST   /open-api-inner/v1/relay-controller/tunnels
-GET    /open-api-inner/v1/relay-controller/tunnels?clusterId=
-DELETE /open-api-inner/v1/relay-controller/tunnels
-GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
-PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
-DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}
-POST   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/token?scope=host|connect
-GET    /open-api-inner/v1/relay-controller/limits
+POST   /tunnels
+GET    /tunnels?clusterId=
+DELETE /tunnels
+GET    /tunnels/{tunnelId}
+PUT    /tunnels/{tunnelId}
+DELETE /tunnels/{tunnelId}
+POST   /tunnels/{tunnelId}/token?scope=host|connect
 
-POST   /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
-GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports
-GET    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
-PUT    /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
-DELETE /open-api-inner/v1/relay-controller/tunnels/{tunnelId}/ports/{port}
+POST   /tunnels/{tunnelId}/ports
+GET    /tunnels/{tunnelId}/ports
+GET    /tunnels/{tunnelId}/ports/{port}
+PUT    /tunnels/{tunnelId}/ports/{port}
+DELETE /tunnels/{tunnelId}/ports/{port}
+
+GET    /limits
 ```
 
-All APIs require `X-Namespace` for resource isolation and `X-Account-Namespace` for shared quota and billing. Tunnel creation stores the resource namespace and resolves `account_id` from the account namespace.
-Each Relay Controller instance owns one configured region. Set `RELAY_REGION`; tunnel and port operations only accept clusters found under that local region. Set `RELAY_DOMAIN` to the tunnel URL suffix.
-Tunnel `type` is restricted to `bridge` or `env`; blank create requests default to `bridge`.
-Tunnel `expiration` in create and update requests is the allowed inactivity duration in hours. Blank create requests default to 72 hours. Tunnel responses expose that window as `expirationHours` and the current Unix expiration time as `tunnelExpiration`; clients can derive a live countdown from `tunnelExpiration`.
-Successful tunnel or port changes refresh `tunnelExpiration`. Positive metering settled by Controller also refreshes it from the latest `reportedAt`. Reads, token issuance, open connections without traffic, and zero-usage reports do not refresh expiration.
-Tunnel `tunnelCode` is a 40-bit `long`; `tunnelId` is the fixed 8-character lowercase base32 encoding of that 40-bit value.
-Tunnel URL format is `{tunnelId}.{clusterId}.{relay.domain}`.
-Delete operations physically remove tunnels and their port policies. List APIs return only active, non-expired tunnels. Detail, update, and port operations reject expired tunnels; expired records are physically removed after the configured retention period.
-The seeded `trial` plan gives each account namespace 5 GiB per calendar month, reset at 00:00 `Asia/Shanghai`, and at most 10 active tunnels shared by its resource namespaces. Each Tunnel allows at most 10 ports. Tunnel and port creation serialize on database rows, so replicas sharing the database cannot exceed those metadata quotas through concurrent requests. Deleted and expired tunnels do not count against the tunnel quota.
-`GET /limits` returns the monthly quota balance, reset time, current tunnel count, and enforceable plan limits. Request context, internal plan identifiers, and values derivable from the balance are not repeated. Tunnel detail includes a `status` object with the latest Host connection count, SSH-channel connection count, rates, cumulative upload/download bytes, and report time written by Gateway.
+The complete contract is [assets/openapi.yaml](assets/openapi.yaml) and is served at `GET /openapi.yaml`.
 
-Tunnel tokens are issued explicitly with `POST /tunnels/{tunnelId}/token?scope=host|connect`. Every call creates a new token; tokens are not cached. Issuance is rejected after the current monthly quota is exhausted. Token lifetime is fixed by `relay.jwt.token.ttl-seconds` and does not follow the tunnel expiration. JWT claims are `iss`, `aud`, `exp`, `nbf`, `jti`, `tunnelId`, `clusterId`, and `scp`.
-
-Relay Service calls namespace APIs over mTLS and supplies trusted `X-Namespace` and `X-Account-Namespace` values from its authenticated user context. Relay Controller does not infer namespace ownership or issue a namespace auth token in phase two. Gateway shares the database and does not call Relay Controller APIs.
-
-Tunnel port APIs manage the explicit per-port allow list for a tunnel. Each port declares `protocol` as `http`, `https`, or `auto`. Unconfigured ports are denied by default. `allowAnonymous` only controls sending-side access to that port; listening-side gateway connection still requires token authentication.
-Namespace-scoped Tunnel and limits APIs have an in-memory fixed-window safety limit. The key is `X-Namespace`; set the per-instance limit with `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE`. The bounded local limiter is not a cross-replica business quota, so a strict deployment-wide API limit belongs at the ingress.
-
-OpenAPI is maintained as YAML at `src/main/resources/static/openapi.yaml`. Maven uses this YAML during `generate-sources` to generate Spring API interfaces under `target/generated-sources/openapi`; controllers implement those generated interfaces and do not declare request mappings by hand.
-The same YAML is served directly as a static resource:
+## Structure
 
 ```text
-GET /openapi.yaml
+cmd/relay-controller   process startup and graceful shutdown
+internal/httpapi       HTTP routing, JSON errors, recovery, rate limiting
+internal/service       tunnel, port, token, billing, cleanup workflows
+internal/core          business models and deterministic rules
+internal/store         MySQL queries, transactions, migrations
+internal/security      RS256 signing and PKCS12 mTLS
+assets                 embedded OpenAPI and SQL migrations
 ```
 
-## Database
+The runtime uses the Go standard library where practical. The only direct dependencies are the MySQL driver and PKCS12 decoder.
 
-Create the MySQL database before starting the service:
+## Configuration
 
-```sql
-CREATE DATABASE IF NOT EXISTS relay_controller
-DEFAULT CHARACTER SET utf8mb4
-COLLATE utf8mb4_0900_ai_ci;
+Required environment variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `DATASOURCE_URL` | `jdbc:mariadb://host:3306/database` or `jdbc:mysql://...` |
+| `DATASOURCE_USERNAME` | Database user |
+| `DATASOURCE_PASSWORD` | Database password |
+| `RELAY_REGION` | Region owned by this instance |
+| `RELAY_DOMAIN` | Tunnel DNS suffix |
+| `RELAY_JWT_PRIVATE_KEY` | PKCS8 RSA private key, PEM or Base64 DER, at least 2048 bits |
+
+Important optional values:
+
+| Variable | Default |
+| --- | ---: |
+| `SERVER_TLS_ENABLED` | `true` |
+| `SERVER_PORT` | `8443` with TLS, otherwise `8080` |
+| `RELAY_DEFAULT_EXPIRATION_HOURS` | `72` |
+| `RELAY_JWT_TOKEN_TTL` | `24h` |
+| `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | `120` per process and namespace |
+| `RELAY_BILLING_SETTLEMENT_INTERVAL` | `1m` |
+| `RELAY_BILLING_SETTLEMENT_BATCH_SIZE` | `500` |
+| `RELAY_TUNNEL_CLEANUP_RETENTION_DAYS` | `3` |
+| `LOG_LEVEL` | `INFO` |
+
+When TLS is enabled, also set:
+
+```text
+SERVER_SSL_KEY_STORE_BASE64
+SERVER_SSL_KEY_STORE_PASSWORD
+SERVER_SSL_TRUST_STORE_BASE64
+SERVER_SSL_TRUST_STORE_PASSWORD
 ```
 
-Flyway runs on application startup and applies migrations from `src/main/resources/db/migration`. The consolidated `V3` adds the phase-two billing and runtime schema. `V4` adds cumulative upload/download bytes to Tunnel runtime status and splits raw metering into upload/download bytes.
-Because this consolidation happened before phase two was released, development databases that already applied the former V3-V5 sequence must be rebuilt or explicitly realigned; deployed migration history must not be rewritten after release.
+The key store must be PKCS12 and contain the server key and certificate chain. The trust store must be PKCS12 and contain the accepted client CA. TLS 1.2 and 1.3 are enabled, and a trusted client certificate is mandatory.
 
-Gateway phase-two metering appends incremental upload/download usage directly to `tunnel_metering` every 30 seconds and at session end. The unique key `(tunnel_id, session_id, reported_at)` makes an exact retry idempotent. Every minute Relay Controller locks an unsettled batch with `SKIP LOCKED`, bills the sum of both directions, updates monthly and Tunnel totals, and marks the same records settled in one transaction.
+Secrets must reach the process already decrypted. Values beginning with `ENC(` are rejected so a ciphertext cannot accidentally be used as a database password or private key. Base64 is encoding, not encryption.
 
-There is no metering HTTP endpoint. Gateway writes phase-two usage directly to the shared database according to [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md).
+## Build And Run
 
-Database columns use snake_case for compound words, for example `tunnel_id`, `tunnel_code`, `cluster_id`, `bandwidth_used`, and `allow_anonymous`. Java fields remain camelCase and rely on MyBatis Plus underscore-to-camel mapping. The list-only `portCount` projection is explicitly marked as non-persistent.
-
-## Run
-
-Configure MySQL in `src/main/resources/application.yml`, then run:
+Go 1.25 or newer is required.
 
 ```bash
-mvn spring-boot:run
+go test ./...
+go vet ./...
+go build -trimpath -ldflags '-s -w -X main.version=1.0.0' -o bin/relay-controller ./cmd/relay-controller
+./bin/relay-controller
 ```
 
-For another local machine, prefer overriding only the datasource URL, username, and password:
+`make check`, `make build`, and `make race` are equivalent shortcuts; the race check additionally requires a C compiler.
+
+For local HTTP development only:
 
 ```bash
+export SERVER_TLS_ENABLED=false
 export DATASOURCE_URL='jdbc:mariadb://127.0.0.1:3306/relay_controller'
-export DATASOURCE_USERNAME='root'
+export DATASOURCE_USERNAME='relay_controller'
 export DATASOURCE_PASSWORD='<secret>'
-mvn spring-boot:run
+export RELAY_REGION='cn-north-4'
+export RELAY_DOMAIN='myhuaweicloud.com'
+export RELAY_JWT_PRIVATE_KEY='<PKCS8 PEM or Base64 DER>'
+go run ./cmd/relay-controller
 ```
 
-For IntelliJ IDEA, paste this semicolon-separated template into **Run/Debug Configuration > Environment variables** and fill in each value:
+The service creates no database itself. Create the database first; embedded migrations under `assets/migrations` run at startup. The migration history and checksums remain compatible with the existing Flyway `flyway_schema_history` table.
 
-```text
-SPRING_PROFILES_ACTIVE=;SERVER_PORT=;DATASOURCE_URL=;DATASOURCE_USERNAME=;DATASOURCE_PASSWORD=;RELAY_JWT_PRIVATE_KEY=;SERVER_SSL_KEY_STORE_BASE64=;SERVER_SSL_KEY_STORE_PASSWORD=;SERVER_SSL_TRUST_STORE_BASE64=;SERVER_SSL_TRUST_STORE_PASSWORD=
-```
-
-Keep these values out of committed YAML:
-
-```text
-DATASOURCE_PASSWORD
-RELAY_JWT_PRIVATE_KEY
-SERVER_SSL_KEY_STORE_BASE64
-SERVER_SSL_KEY_STORE_PASSWORD
-SERVER_SSL_TRUST_STORE_BASE64
-SERVER_SSL_TRUST_STORE_PASSWORD
-```
-
-For TLS, treat these as secrets:
-
-```text
-SERVER_SSL_KEY_STORE_BASE64
-SERVER_SSL_KEY_STORE_PASSWORD
-SERVER_SSL_TRUST_STORE_BASE64
-SERVER_SSL_TRUST_STORE_PASSWORD
-```
-
-The Base64 keystore content is sensitive because it contains the server private key. The truststore usually contains only trusted client CA certificates, but it must still be protected from unauthorized replacement. Base64 is transport encoding, not encryption; keep both values in deployment secret storage.
-
-The project uses MariaDB Connector/J. Use a `jdbc:mariadb://` datasource URL; Spring Boot infers the driver, so no driver class is configured explicitly.
-
-## Mutual TLS
-
-Relay Controller requires client certificates at the embedded Jetty layer. The `dev` and `prod` profile groups both activate `mtls`; provide a Base64-encoded PKCS12 server keystore plus a truststore containing the client CA:
+Run the API workflow after startup:
 
 ```bash
-export SPRING_PROFILES_ACTIVE=dev
-export SERVER_PORT=8443
-export SERVER_SSL_KEY_STORE_BASE64="$(base64 < /path/to/server.p12 | tr -d '\n')"
-export SERVER_SSL_KEY_STORE_PASSWORD='<secret>'
-export SERVER_SSL_TRUST_STORE_BASE64="$(base64 < /path/to/server-truststore.p12 | tr -d '\n')"
-export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
-export RELAY_DOMAIN='myhuaweicloud.com'
-export RELAY_REGION='cn-north-4'
-export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'
-export RELAY_JWT_PRIVATE_KEY='<PKCS#8 PEM or Base64>'
-mvn spring-boot:run
+BASE_URL=http://localhost:8080 CLUSTER_ID=cn-north-4-bridge ./scripts/http-smoke-test.sh
 ```
 
-The profile registers `spring.ssl.bundle.jks.mtls` and assigns it through `server.ssl.bundle`. With `server.ssl.client-auth=need`, requests without a trusted client certificate fail during the TLS handshake and never reach the API controllers. Only TLS 1.2 and 1.3 are enabled. Callers must use `https://` and pass a client certificate signed by the CA in the configured truststore.
+For mTLS, additionally set `TLS_CA_CERT`, `TLS_CLIENT_CERT`, and `TLS_CLIENT_KEY` for the script.
 
-Use JDK 17 for normal development and deployment. The project uses Jetty instead of Tomcat. If Maven itself is run on JDK 26, Maven's own dependencies may still print JVM warnings before the application starts; those are not emitted by the Relay Controller runtime.
+## Security Boundary
 
-The optional `local-company-library-stubs` profile supports local IDE and `spring-boot:run` use only. It disables Spring Boot executable-JAR repackaging so a build containing fake SCC, random, or exception utilities is not mistaken for a deployable artifact.
+mTLS authenticates the calling service, not the end user. Relay Service must derive and overwrite `X-Namespace` and `X-Account-Namespace` from its authenticated context; Controller validates syntax and trusts that internal identity assertion. Gateway uses its own database identity and must validate JWT signature, `aud`, expiration, tunnel, cluster, and scope.
 
-All environments reject startup without `RELAY_JWT_PRIVATE_KEY`. The decrypted value must be a PKCS#8 RSA private key of at least 2048 bits; rotate it through `relay.jwt.key-id` and the verifier's public-key set. Gateway must validate both the signature and `aud=relay-gateway`.
+Gateway enforces data-plane limits such as one Host per tunnel, bandwidth, HTTP request rate, and concurrent connections. The Controller's in-memory request limiter is only a bounded per-instance safety limit; strict cross-replica API limiting belongs at ingress.
 
-## Security boundary
-
-mTLS authenticates Relay Service, while `X-Namespace` and `X-Account-Namespace` are supplied from its authenticated user context. These APIs must stay internal; Relay Controller validates header syntax but trusts Relay Service to provide the relationship in phase two. Gateway accesses the shared database under its own service identity.
-
-Gateway, not Relay Controller, enforces the data-plane limits: one Host per tunnel through a distributed Redis lock, 5 MiB/s per tunnel, 500 HTTP requests per minute per port, and 100 concurrent connections per port. Gateway reads shared account state for quota admission and disconnects active traffic after quota or policy changes.
+See [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md) for the shared-database metering contract.

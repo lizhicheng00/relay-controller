@@ -1,4 +1,6 @@
 target/
+bin/
+coverage.out
 .idea/
 .vscode/
 *.iml
