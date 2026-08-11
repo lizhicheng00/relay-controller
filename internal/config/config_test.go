@@ -2,22 +2,22 @@ package config
 
 import "testing"
 
-func TestLoadMinimalHTTPConfiguration(t *testing.T) {
+func TestLoadConfiguration(t *testing.T) {
 	setRequiredEnvironment(t)
-	t.Setenv("SERVER_TLS_ENABLED", "false")
+	t.Setenv("SERVER_PORT", "9443")
+	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "180")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Port != 8080 || cfg.Relay.DefaultExpirationHours != 72 || cfg.Relay.RequestsPerMinute != 120 {
+	if cfg.Port != 9443 || cfg.Relay.RequestsPerMinute != 180 || cfg.Relay.Region != "region-a" {
 		t.Fatalf("unexpected defaults: %#v", cfg)
 	}
 }
 
 func TestLoadRejectsEncryptedPlaceholder(t *testing.T) {
 	setRequiredEnvironment(t)
-	t.Setenv("SERVER_TLS_ENABLED", "false")
 	t.Setenv("DATASOURCE_PASSWORD", "ENC(ciphertext)")
 
 	if _, err := Load(); err == nil {
@@ -25,9 +25,8 @@ func TestLoadRejectsEncryptedPlaceholder(t *testing.T) {
 	}
 }
 
-func TestLoadRequiresMutualTLSMaterialByDefault(t *testing.T) {
+func TestLoadRequiresMutualTLSMaterial(t *testing.T) {
 	setRequiredEnvironment(t)
-	t.Setenv("SERVER_TLS_ENABLED", "true")
 	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "")
 
 	if _, err := Load(); err == nil {
@@ -37,11 +36,19 @@ func TestLoadRequiresMutualTLSMaterialByDefault(t *testing.T) {
 
 func TestLoadRejectsEncryptedTLSSecret(t *testing.T) {
 	setRequiredEnvironment(t)
-	t.Setenv("SERVER_TLS_ENABLED", "true")
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "${ENC(ciphertext)}")
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected encrypted TLS secret without a decryptor to fail")
+	}
+}
+
+func TestLoadRejectsInvalidRateLimit(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "0")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid rate limit to fail")
 	}
 }
 
@@ -52,6 +59,7 @@ func setRequiredEnvironment(t *testing.T) {
 	t.Setenv("DATASOURCE_PASSWORD", "secret")
 	t.Setenv("RELAY_DOMAIN", "myhuaweicloud.com")
 	t.Setenv("RELAY_REGION", "region-a")
+	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "120")
 	t.Setenv("RELAY_JWT_PRIVATE_KEY", "key")
 	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "secret")

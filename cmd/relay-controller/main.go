@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
@@ -25,6 +24,13 @@ import (
 
 var version = "dev"
 
+const (
+	jwtIssuer   = "devbridge"
+	jwtAudience = "relay-gateway"
+	jwtKeyID    = "1"
+	jwtTokenTTL = 24 * time.Hour
+)
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("relay controller stopped", "error", err)
@@ -37,21 +43,17 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
 	signer, err := security.NewJWTSigner(
-		cfg.Relay.JWTPrivateKey, cfg.Relay.JWTIssuer, cfg.Relay.JWTAudience,
-		cfg.Relay.JWTKeyID, cfg.Relay.JWTTokenTTL)
+		cfg.Relay.JWTPrivateKey, jwtIssuer, jwtAudience, jwtKeyID, jwtTokenTTL)
 	if err != nil {
 		return err
 	}
-	var tlsConfig *tls.Config
-	if cfg.TLS.Enabled {
-		tlsConfig, err = security.TLSConfig(cfg.TLS)
-		if err != nil {
-			return err
-		}
+	tlsConfig, err := security.TLSConfig(cfg.TLS)
+	if err != nil {
+		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -65,8 +67,8 @@ func run() error {
 		return err
 	}
 
-	application := service.New(database, signer, cfg.Relay, logger)
-	limiter := httpapi.NewRateLimiter(cfg.Relay.RateLimitEnabled, cfg.Relay.RequestsPerMinute)
+	application := service.New(database, signer, cfg.Relay.Domain, cfg.Relay.Region, logger)
+	limiter := httpapi.NewRateLimiter(cfg.Relay.RequestsPerMinute)
 	server := &http.Server{
 		Handler:           httpapi.New(application, logger, limiter),
 		ErrorLog:          log.New(serverLogWriter{logger: logger}, "", 0),
@@ -84,17 +86,9 @@ func run() error {
 	jobs := application.StartJobs(ctx)
 	serverErrors := make(chan error, 1)
 	go func() {
-		if cfg.TLS.Enabled {
-			serverErrors <- server.ServeTLS(listener, "", "")
-			return
-		}
-		serverErrors <- server.Serve(listener)
+		serverErrors <- server.ServeTLS(listener, "", "")
 	}()
-	protocol := "http"
-	if cfg.TLS.Enabled {
-		protocol = "https"
-	}
-	logger.Info("Relay Controller started", "version", version, "address", protocol+"://0.0.0.0:"+strconv.Itoa(cfg.Port), "region", cfg.Relay.Region)
+	logger.Info("Relay Controller started", "version", version, "address", "https://0.0.0.0:"+strconv.Itoa(cfg.Port), "region", cfg.Relay.Region)
 
 	var serveErr error
 	select {

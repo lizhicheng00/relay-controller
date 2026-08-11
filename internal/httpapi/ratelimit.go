@@ -17,7 +17,6 @@ const (
 )
 
 type RateLimiter struct {
-	enabled     bool
 	limit       int
 	mutex       sync.Mutex
 	counters    map[string]windowCounter
@@ -31,9 +30,9 @@ type windowCounter struct {
 	count       int
 }
 
-func NewRateLimiter(enabled bool, requestsPerMinute int) *RateLimiter {
+func NewRateLimiter(requestsPerMinute int) *RateLimiter {
 	return &RateLimiter{
-		enabled: enabled, limit: requestsPerMinute, counters: make(map[string]windowCounter), now: time.Now,
+		limit: requestsPerMinute, counters: make(map[string]windowCounter), now: time.Now,
 	}
 }
 
@@ -49,9 +48,6 @@ func (r *RateLimiter) Middleware(next http.Handler) http.Handler {
 }
 
 func (r *RateLimiter) Allow(key string) bool {
-	if !r.enabled || r.limit <= 0 {
-		return true
-	}
 	now := r.now()
 	r.mutex.Lock()
 	defer r.mutex.Unlock()

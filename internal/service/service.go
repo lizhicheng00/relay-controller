@@ -11,24 +11,28 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lizhicheng00/relay-controller/internal/config"
 	"github.com/lizhicheng00/relay-controller/internal/core"
 	"github.com/lizhicheng00/relay-controller/internal/security"
 	"github.com/lizhicheng00/relay-controller/internal/store"
 )
 
-const tunnelCodeRetries = 5
+const (
+	tunnelCodeRetries      = 5
+	defaultExpirationHours = 72
+	defaultPlanCode        = "trial"
+)
 
 type Service struct {
 	store  *store.Store
 	signer *security.JWTSigner
-	config config.Relay
+	domain string
+	region string
 	log    *slog.Logger
 	now    func() time.Time
 }
 
-func New(store *store.Store, signer *security.JWTSigner, cfg config.Relay, logger *slog.Logger) *Service {
-	return &Service{store: store, signer: signer, config: cfg, log: logger, now: time.Now}
+func New(store *store.Store, signer *security.JWTSigner, domain, region string, logger *slog.Logger) *Service {
+	return &Service{store: store, signer: signer, domain: domain, region: region, log: logger, now: time.Now}
 }
 
 func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace string, request core.CreateTunnelRequest) (core.TunnelResponse, error) {
@@ -43,11 +47,11 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 	if err := s.requireLocalCluster(ctx, request.ClusterID); err != nil {
 		return core.TunnelResponse{}, err
 	}
-	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, s.config.DefaultPlanCode); err != nil {
+	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
 		return core.TunnelResponse{}, internal("create billing account", err)
 	}
 	now := s.now().Unix()
-	expirationHours, expiration, err := core.ResolveExpiration(request.Expiration, s.config.DefaultExpirationHours, now)
+	expirationHours, expiration, err := core.ResolveExpiration(request.Expiration, defaultExpirationHours, now)
 	if err != nil {
 		return core.TunnelResponse{}, err
 	}
@@ -75,7 +79,7 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 			tunnel = core.Tunnel{
 				Name: request.Name, TunnelID: tunnelID, TunnelCode: code, ClusterID: request.ClusterID,
 				Expiration: expiration, ExpirationHours: expirationHours, Namespace: namespace,
-				AccountID: account.ID, Description: request.Description, URL: buildTunnelURL(tunnelID, request.ClusterID, s.config.Domain),
+				AccountID: account.ID, Description: request.Description, URL: buildTunnelURL(tunnelID, request.ClusterID, s.domain),
 				Type: tunnelType, CreatedAt: now, UpdatedAt: now,
 			}
 			if err := tx.InsertTunnel(ctx, &tunnel); err == nil {
@@ -103,7 +107,7 @@ func (s *Service) ListTunnels(ctx context.Context, namespace, accountNamespace, 
 			return nil, err
 		}
 	}
-	tunnels, err := s.store.ListActiveTunnels(ctx, namespace, clusterID, s.config.Region, s.now().Unix())
+	tunnels, err := s.store.ListActiveTunnels(ctx, namespace, clusterID, s.region, s.now().Unix())
 	if err != nil {
 		return nil, internal("list tunnels", err)
 	}
@@ -160,7 +164,7 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, accountNamespace,
 		if request.Expiration != nil {
 			hours = *request.Expiration
 		}
-		tunnel.ExpirationHours, tunnel.Expiration, err = core.ResolveExpiration(&hours, s.config.DefaultExpirationHours, now)
+		tunnel.ExpirationHours, tunnel.Expiration, err = core.ResolveExpiration(&hours, defaultExpirationHours, now)
 		if err != nil {
 			return err
 		}
@@ -206,7 +210,7 @@ func (s *Service) DeleteTunnels(ctx context.Context, namespace, accountNamespace
 	}
 	deleted := 0
 	err = s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnels, err := tx.LockNamespaceTunnels(ctx, namespace, s.config.Region)
+		tunnels, err := tx.LockNamespaceTunnels(ctx, namespace, s.region)
 		if err != nil {
 			return internal("lock namespace tunnels", err)
 		}
@@ -284,7 +288,7 @@ func (s *Service) CreatePort(ctx context.Context, namespace, accountNamespace, t
 			}
 			return internal("insert tunnel port", err)
 		}
-		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.config.Region, s.now().Unix()); err != nil {
+		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, s.now().Unix()); err != nil {
 			return internal("refresh tunnel expiration", err)
 		}
 		return nil
@@ -370,7 +374,7 @@ func (s *Service) UpdatePort(ctx context.Context, namespace, accountNamespace, t
 		if err := tx.UpdatePort(ctx, tunnelPort); err != nil {
 			return internal("update tunnel port", err)
 		}
-		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.config.Region, s.now().Unix()); err != nil {
+		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, s.now().Unix()); err != nil {
 			return internal("refresh tunnel expiration", err)
 		}
 		return nil
@@ -401,7 +405,7 @@ func (s *Service) DeletePort(ctx context.Context, namespace, accountNamespace, t
 		if err := tx.DeletePort(ctx, tunnelPort.ID); err != nil {
 			return internal("delete tunnel port", err)
 		}
-		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.config.Region, s.now().Unix()); err != nil {
+		if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, s.now().Unix()); err != nil {
 			return internal("refresh tunnel expiration", err)
 		}
 		return nil
@@ -420,7 +424,7 @@ func (s *Service) GetLimits(ctx context.Context, namespace, accountNamespace str
 	}
 	now := s.now().Unix()
 	var response core.LimitsResponse
-	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, s.config.DefaultPlanCode); err != nil {
+	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
 		return core.LimitsResponse{}, internal("create billing account", err)
 	}
 	err = s.store.InTx(ctx, func(tx *store.Store) error {
@@ -461,7 +465,7 @@ func (s *Service) requireLocalCluster(ctx context.Context, clusterID string) err
 	if !core.ValidIdentifier(clusterID) {
 		return core.Invalid("clusterId is invalid")
 	}
-	exists, err := s.store.ClusterExists(ctx, clusterID, s.config.Region)
+	exists, err := s.store.ClusterExists(ctx, clusterID, s.region)
 	if err != nil {
 		return internal("find local cluster", err)
 	}
@@ -475,9 +479,9 @@ func (s *Service) ownedTunnel(ctx context.Context, database *store.Store, namesp
 	var tunnel core.Tunnel
 	var err error
 	if database == s.store {
-		tunnel, err = database.FindTunnel(ctx, tunnelID, s.config.Region)
+		tunnel, err = database.FindTunnel(ctx, tunnelID, s.region)
 	} else {
-		tunnel, err = database.LockTunnel(ctx, tunnelID, s.config.Region)
+		tunnel, err = database.LockTunnel(ctx, tunnelID, s.region)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return core.Tunnel{}, core.NewError(http.StatusNotFound, core.CodeTunnelNotFound, "tunnel not found")
@@ -539,7 +543,7 @@ func (s *Service) assertTrafficAllowed(ctx context.Context, accountID uint64) er
 		if err != nil {
 			return err
 		}
-		if s.config.BillingEnforcement && period.BilledBytes >= period.QuotaBytes {
+		if period.BilledBytes >= period.QuotaBytes {
 			return core.NewError(http.StatusTooManyRequests, core.CodeAccountQuotaExceeded, "monthly traffic quota exceeded")
 		}
 		return nil

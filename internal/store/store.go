@@ -25,6 +25,11 @@ type Store struct {
 	exec executor
 }
 
+const (
+	maxOpenConnections = 20
+	maxIdleConnections = 10
+)
+
 func Open(ctx context.Context, cfg config.Database) (*Store, error) {
 	dsn, err := dataSourceName(cfg)
 	if err != nil {
@@ -34,8 +39,8 @@ func Open(ctx context.Context, cfg config.Database) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	db.SetMaxOpenConns(cfg.MaxOpenConns)
-	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetMaxOpenConns(maxOpenConnections)
+	db.SetMaxIdleConns(maxIdleConnections)
 	db.SetConnMaxLifetime(3 * time.Minute)
 	db.SetConnMaxIdleTime(time.Minute)
 

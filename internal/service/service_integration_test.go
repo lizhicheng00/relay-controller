@@ -29,7 +29,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	ctx := context.Background()
 	database, err := store.Open(ctx, config.Database{
 		URL: databaseURL, Username: os.Getenv("RELAY_INTEGRATION_DATABASE_USERNAME"),
-		Password: os.Getenv("RELAY_INTEGRATION_DATABASE_PASSWORD"), MaxOpenConns: 20, MaxIdleConns: 10,
+		Password: os.Getenv("RELAY_INTEGRATION_DATABASE_PASSWORD"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -48,12 +48,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	relayConfig := config.Relay{
-		Domain: "myhuaweicloud.com", Region: "region-a", DefaultExpirationHours: 72,
-		CleanupRetentionDays: 3, DefaultPlanCode: "trial", BillingEnforcement: true,
-		SettlementBatchSize: 500,
-	}
-	application := New(database, signer, relayConfig, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	application := New(database, signer, "myhuaweicloud.com", "region-a", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	now := time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC)
 	application.now = func() time.Time { return now }
 

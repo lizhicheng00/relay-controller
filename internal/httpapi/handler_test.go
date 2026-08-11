@@ -88,7 +88,7 @@ func TestPortCollectionDoesNotSupportDelete(t *testing.T) {
 }
 
 func TestRateLimiterUsesFixedNamespaceWindow(t *testing.T) {
-	limiter := NewRateLimiter(true, 2)
+	limiter := NewRateLimiter(2)
 	now := time.Unix(1000, 0)
 	limiter.now = func() time.Time { return now }
 	if !limiter.Allow("namespace:ns-user-001") || !limiter.Allow("namespace:ns-user-001") || limiter.Allow("namespace:ns-user-001") {

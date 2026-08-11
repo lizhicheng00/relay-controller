@@ -36,8 +36,6 @@ DELETE /tunnels/{tunnelId}/ports/{port}
 GET    /limits
 ```
 
-The complete contract is [assets/openapi.yaml](assets/openapi.yaml) and is served at `GET /openapi.yaml`.
-
 ## Structure
 
 ```text
@@ -47,7 +45,7 @@ internal/service       tunnel, port, token, billing, cleanup workflows
 internal/core          business models and deterministic rules
 internal/store         MySQL queries, transactions, migrations
 internal/security      RS256 signing and PKCS12 mTLS
-assets                 embedded OpenAPI and SQL migrations
+assets                 embedded SQL migrations
 ```
 
 The runtime uses the Go standard library where practical. The only direct dependencies are the MySQL driver and PKCS12 decoder.
@@ -63,30 +61,14 @@ Required environment variables:
 | `DATASOURCE_PASSWORD` | Database password |
 | `RELAY_REGION` | Region owned by this instance |
 | `RELAY_DOMAIN` | Tunnel DNS suffix |
+| `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute |
 | `RELAY_JWT_PRIVATE_KEY` | PKCS8 RSA private key, PEM or Base64 DER, at least 2048 bits |
+| `SERVER_SSL_KEY_STORE_BASE64` | Base64 PKCS12 server key store |
+| `SERVER_SSL_KEY_STORE_PASSWORD` | Server key store password |
+| `SERVER_SSL_TRUST_STORE_BASE64` | Base64 PKCS12 client CA trust store |
+| `SERVER_SSL_TRUST_STORE_PASSWORD` | Trust store password |
 
-Important optional values:
-
-| Variable | Default |
-| --- | ---: |
-| `SERVER_TLS_ENABLED` | `true` |
-| `SERVER_PORT` | `8443` with TLS, otherwise `8080` |
-| `RELAY_DEFAULT_EXPIRATION_HOURS` | `72` |
-| `RELAY_JWT_TOKEN_TTL` | `24h` |
-| `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | `120` per process and namespace |
-| `RELAY_BILLING_SETTLEMENT_INTERVAL` | `1m` |
-| `RELAY_BILLING_SETTLEMENT_BATCH_SIZE` | `500` |
-| `RELAY_TUNNEL_CLEANUP_RETENTION_DAYS` | `3` |
-| `LOG_LEVEL` | `INFO` |
-
-When TLS is enabled, also set:
-
-```text
-SERVER_SSL_KEY_STORE_BASE64
-SERVER_SSL_KEY_STORE_PASSWORD
-SERVER_SSL_TRUST_STORE_BASE64
-SERVER_SSL_TRUST_STORE_PASSWORD
-```
+`SERVER_PORT` is the only optional deployment setting and defaults to `8443`.
 
 The key store must be PKCS12 and contain the server key and certificate chain. The trust store must be PKCS12 and contain the accepted client CA. TLS 1.2 and 1.3 are enabled, and a trusted client certificate is mandatory.
 
@@ -103,33 +85,27 @@ go build -trimpath -ldflags '-s -w -X main.version=1.0.0' -o bin/relay-controlle
 ./bin/relay-controller
 ```
 
-For local HTTP development only:
+For local development, provide the same mTLS configuration used in deployment:
 
 ```bash
-export SERVER_TLS_ENABLED=false
 export DATASOURCE_URL='jdbc:mariadb://127.0.0.1:3306/relay_controller'
 export DATASOURCE_USERNAME='relay_controller'
 export DATASOURCE_PASSWORD='<secret>'
 export RELAY_REGION='cn-north-4'
 export RELAY_DOMAIN='myhuaweicloud.com'
+export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'
 export RELAY_JWT_PRIVATE_KEY='<PKCS8 PEM or Base64 DER>'
+export SERVER_SSL_KEY_STORE_BASE64='<Base64 PKCS12>'
+export SERVER_SSL_KEY_STORE_PASSWORD='<secret>'
+export SERVER_SSL_TRUST_STORE_BASE64='<Base64 PKCS12>'
+export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 go run ./cmd/relay-controller
 ```
 
 The service creates no database itself. Create the database first; embedded migrations under `assets/migrations` run at startup. The migration history and checksums remain compatible with the existing Flyway `flyway_schema_history` table.
-
-Run the API workflow after startup:
-
-```bash
-BASE_URL=http://localhost:8080 CLUSTER_ID=cn-north-4-bridge ./scripts/http-smoke-test.sh
-```
-
-For mTLS, additionally set `TLS_CA_CERT`, `TLS_CLIENT_CERT`, and `TLS_CLIENT_KEY` for the script.
 
 ## Security Boundary
 
 mTLS authenticates the calling service, not the end user. Relay Service must derive and overwrite `X-Namespace` and `X-Account-Namespace` from its authenticated context; Controller validates syntax and trusts that internal identity assertion. Gateway uses its own database identity and must validate JWT signature, `aud`, expiration, tunnel, cluster, and scope.
 
 Gateway enforces data-plane limits such as one Host per tunnel, bandwidth, HTTP request rate, and concurrent connections. The Controller's in-memory request limiter is only a bounded per-instance safety limit; strict cross-replica API limiting belongs at ingress.
-
-See [docs/relay-controller-phase2.md](docs/relay-controller-phase2.md) for the shared-database metering contract.

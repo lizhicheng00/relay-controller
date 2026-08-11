@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lizhicheng00/relay-controller/assets"
 	"github.com/lizhicheng00/relay-controller/internal/core"
 )
 
@@ -45,7 +44,6 @@ type Handler struct {
 func New(api API, logger *slog.Logger, limiter *RateLimiter) http.Handler {
 	handler := &Handler{api: api, log: logger}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
 	mux.HandleFunc("POST "+apiBase+"/tunnels", handler.createTunnel)
 	mux.HandleFunc("GET "+apiBase+"/tunnels", handler.listTunnels)
 	mux.HandleFunc("DELETE "+apiBase+"/tunnels", handler.deleteTunnels)
@@ -226,18 +224,6 @@ func (h *Handler) getLimits(response http.ResponseWriter, request *http.Request)
 	}
 	result, err := h.api.GetLimits(request.Context(), namespace, accountNamespace)
 	h.writeResult(response, result, err)
-}
-
-func (h *Handler) openapi(response http.ResponseWriter, _ *http.Request) {
-	content, err := assets.Files.ReadFile("openapi.yaml")
-	if err != nil {
-		h.writeError(response, core.Internal(err))
-		return
-	}
-	response.Header().Set("Content-Type", "application/yaml; charset=utf-8")
-	response.Header().Set("X-Content-Type-Options", "nosniff")
-	response.WriteHeader(http.StatusOK)
-	_, _ = response.Write(content)
 }
 
 func (h *Handler) writeResult(response http.ResponseWriter, result any, err error) {

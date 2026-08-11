@@ -13,11 +13,18 @@ import (
 )
 
 const (
-	cleanupBatchSize = 100
-	partitionLock    = "meteringPartitions"
-	hourSeconds      = int64(3600)
-	retentionSeconds = 7 * 24 * hourSeconds
-	futureHours      = 2
+	cleanupBatchSize      = 100
+	cleanupRetentionDays  = 3
+	settlementBatchSize   = 500
+	settlementInterval    = time.Minute
+	cleanupInitialDelay   = time.Hour
+	cleanupInterval       = time.Hour
+	partitionInitialDelay = time.Minute
+	partitionInterval     = time.Hour
+	partitionLock         = "meteringPartitions"
+	hourSeconds           = int64(3600)
+	retentionSeconds      = 7 * 24 * hourSeconds
+	futureHours           = 2
 )
 
 type periodKey struct {
@@ -32,16 +39,14 @@ type tunnelUsage struct {
 
 func (s *Service) StartJobs(ctx context.Context) *sync.WaitGroup {
 	var waitGroup sync.WaitGroup
-	if s.config.BillingSettlement {
-		startJob(ctx, &waitGroup, s.config.SettlementInterval, s.config.SettlementInterval, s.runSettlement)
-	}
-	startJob(ctx, &waitGroup, s.config.CleanupInitialDelay, s.config.CleanupInterval, s.runCleanup)
-	startJob(ctx, &waitGroup, s.config.PartitionInitialDelay, s.config.PartitionInterval, s.runPartitionMaintenance)
+	startJob(ctx, &waitGroup, settlementInterval, settlementInterval, s.runSettlement)
+	startJob(ctx, &waitGroup, cleanupInitialDelay, cleanupInterval, s.runCleanup)
+	startJob(ctx, &waitGroup, partitionInitialDelay, partitionInterval, s.runPartitionMaintenance)
 	return &waitGroup
 }
 
 func (s *Service) SettleBatch(ctx context.Context, limit int) (int, error) {
-	clusterIDs, err := s.store.LocalClusterIDs(ctx, s.config.Region)
+	clusterIDs, err := s.store.LocalClusterIDs(ctx, s.region)
 	if err != nil {
 		return 0, internal("list local clusters", err)
 	}
@@ -92,10 +97,10 @@ func (s *Service) SettleBatch(ctx context.Context, limit int) (int, error) {
 		settledAt := uint64(s.now().Unix())
 		for _, tunnelID := range tunnelIDs {
 			usage := usageByTunnel[tunnelID]
-			if err := tx.IncreaseTunnelUsage(ctx, tunnelID, s.config.Region, usage.bytes, settledAt); err != nil {
+			if err := tx.IncreaseTunnelUsage(ctx, tunnelID, s.region, usage.bytes, settledAt); err != nil {
 				return internal("increase tunnel usage", err)
 			}
-			if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.config.Region, usage.lastReportedAt); err != nil {
+			if err := tx.RefreshTunnelExpiration(ctx, tunnelID, s.region, usage.lastReportedAt); err != nil {
 				return internal("refresh tunnel expiration", err)
 			}
 		}
@@ -145,10 +150,10 @@ func (s *Service) SettleBatch(ctx context.Context, limit int) (int, error) {
 }
 
 func (s *Service) CleanupAgedTunnels(ctx context.Context, now int64) (int, error) {
-	cutoff := now - int64(s.config.CleanupRetentionDays)*24*hourSeconds
+	cutoff := now - cleanupRetentionDays*24*hourSeconds
 	deleted := 0
 	err := s.store.InTx(ctx, func(tx *store.Store) error {
-		tunnels, err := tx.LockAgedTunnels(ctx, s.config.Region, cutoff, cleanupBatchSize)
+		tunnels, err := tx.LockAgedTunnels(ctx, s.region, cutoff, cleanupBatchSize)
 		if err != nil {
 			return internal("lock aged tunnels", err)
 		}
@@ -212,13 +217,13 @@ func (s *Service) MaintainPartitions(ctx context.Context, now int64) error {
 func (s *Service) runSettlement(ctx context.Context) {
 	settled := 0
 	for {
-		count, err := s.SettleBatch(ctx, s.config.SettlementBatchSize)
+		count, err := s.SettleBatch(ctx, settlementBatchSize)
 		if err != nil {
 			s.log.Error("billing settlement failed", "error", err)
 			return
 		}
 		settled += count
-		if count < s.config.SettlementBatchSize {
+		if count < settlementBatchSize {
 			break
 		}
 	}
@@ -234,7 +239,7 @@ func (s *Service) runCleanup(ctx context.Context) {
 		return
 	}
 	if deleted > 0 {
-		s.log.Info("aged tunnels deleted", "region", s.config.Region, "count", deleted)
+		s.log.Info("aged tunnels deleted", "region", s.region, "count", deleted)
 	}
 }
 
