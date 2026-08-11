@@ -76,7 +76,7 @@ Secrets must reach the process already decrypted. Values beginning with `ENC(` a
 
 ## Build And Run
 
-Go 1.25 or newer is required.
+Go 1.24 or newer is required.
 
 ```bash
 go test ./...
