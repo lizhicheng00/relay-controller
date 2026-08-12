@@ -106,6 +106,24 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if first.response.Type != "bridge" || first.response.ExpirationHours != 72 || first.response.URL != first.response.TunnelID+".cluster-a.myhuaweicloud.com" {
 		t.Fatalf("unexpected tunnel response: %#v", first.response)
 	}
+	originalExpiration := first.response.TunnelExpiration
+	now = now.Add(time.Hour)
+	name := "updated-tunnel"
+	if _, err := application.UpdateTunnel(ctx, first.namespace, first.response.TunnelID, core.UpdateTunnelRequest{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := application.GetTunnel(ctx, first.namespace, first.response.TunnelID)
+	if err != nil || detail.TunnelExpiration != originalExpiration {
+		t.Fatalf("metadata update changed expiration: expiration=%d, err=%v", detail.TunnelExpiration, err)
+	}
+	expirationHours := 48
+	if _, err := application.UpdateTunnel(ctx, first.namespace, first.response.TunnelID, core.UpdateTunnelRequest{Expiration: &expirationHours}); err != nil {
+		t.Fatal(err)
+	}
+	detail, err = application.GetTunnel(ctx, first.namespace, first.response.TunnelID)
+	if err != nil || detail.TunnelExpiration != now.Unix()+48*3600 {
+		t.Fatalf("expiration update = %d, err=%v", detail.TunnelExpiration, err)
+	}
 	for index := 1; index <= 10; index++ {
 		protocol := "auto"
 		allowAnonymous := false
@@ -149,7 +167,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if err != nil || settled != 1 {
 		t.Fatalf("settled = %d, err = %v", settled, err)
 	}
-	detail, err := application.GetTunnel(ctx, first.namespace, first.response.TunnelID)
+	detail, err = application.GetTunnel(ctx, first.namespace, first.response.TunnelID)
 	if err != nil || detail.BandwidthUsed != 300 {
 		t.Fatalf("tunnel usage = %d, err = %v", detail.BandwidthUsed, err)
 	}

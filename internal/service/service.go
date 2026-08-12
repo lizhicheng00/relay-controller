@@ -40,12 +40,6 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 	if err != nil {
 		return core.TunnelResponse{}, err
 	}
-	if err := s.requireLocalCluster(ctx, request.ClusterID); err != nil {
-		return core.TunnelResponse{}, err
-	}
-	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
-		return core.TunnelResponse{}, internal("create billing account", err)
-	}
 	now := s.now().Unix()
 	expirationHours := defaultExpirationHours
 	if request.Expiration != nil {
@@ -54,6 +48,12 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 	expiration, err := core.ExpirationAt(expirationHours, now)
 	if err != nil {
 		return core.TunnelResponse{}, err
+	}
+	if err := s.requireLocalCluster(ctx, request.ClusterID); err != nil {
+		return core.TunnelResponse{}, err
+	}
+	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
+		return core.TunnelResponse{}, internal("create billing account", err)
 	}
 
 	var tunnel core.Tunnel
@@ -130,32 +130,35 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, tunnelID string, 
 	if err := validateUpdateTunnel(request); err != nil {
 		return false, err
 	}
+	var tunnelType string
+	if request.Type != nil {
+		var err error
+		tunnelType, err = core.NormalizeTunnelType(*request.Type)
+		if err != nil {
+			return false, err
+		}
+	}
 	now := s.now().Unix()
 	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		tunnel, err := s.lockOwnedTunnel(ctx, tx, namespace, tunnelID, true)
 		if err != nil {
 			return err
 		}
-		if request.Name != nil && strings.TrimSpace(*request.Name) != "" {
+		if request.Name != nil {
 			tunnel.Name = *request.Name
 		}
 		if request.Description != nil {
 			tunnel.Description = request.Description
 		}
 		if request.Type != nil {
-			tunnel.Type, err = core.NormalizeTunnelType(*request.Type)
+			tunnel.Type = tunnelType
+		}
+		if request.Expiration != nil {
+			tunnel.ExpirationHours = *request.Expiration
+			tunnel.Expiration, err = core.ExpirationAt(*request.Expiration, now)
 			if err != nil {
 				return err
 			}
-		}
-		hours := tunnel.ExpirationHours
-		if request.Expiration != nil {
-			hours = *request.Expiration
-		}
-		tunnel.ExpirationHours = hours
-		tunnel.Expiration, err = core.ExpirationAt(hours, now)
-		if err != nil {
-			return err
 		}
 		tunnel.UpdatedAt = now
 		if err := tx.UpdateTunnel(ctx, tunnel); err != nil {
@@ -213,7 +216,7 @@ func (s *Service) DeleteTunnels(ctx context.Context, namespace string) (bool, er
 func (s *Service) IssueTunnelToken(ctx context.Context, namespace, tunnelID, scope string) (core.TunnelTokenResponse, error) {
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if scope != "host" && scope != "connect" {
-		return core.TunnelTokenResponse{}, core.Invalid("scope must be host or connect")
+		return core.TunnelTokenResponse{}, core.InvalidField("scope", "must be host or connect")
 	}
 	tunnel, err := s.findOwnedTunnel(ctx, namespace, tunnelID, true)
 	if err != nil {
@@ -346,15 +349,16 @@ func validateCreateTunnel(request core.CreateTunnelRequest) (string, error) {
 }
 
 func validateUpdateTunnel(request core.UpdateTunnelRequest) error {
-	if request.Name != nil && utf8.RuneCountInString(*request.Name) > 128 {
-		return core.InvalidField("name", "must not exceed 128 characters")
+	if request.Name != nil {
+		if strings.TrimSpace(*request.Name) == "" {
+			return core.InvalidField("name", "must not be blank")
+		}
+		if utf8.RuneCountInString(*request.Name) > 128 {
+			return core.InvalidField("name", "must not exceed 128 characters")
+		}
 	}
 	if request.Description != nil && utf8.RuneCountInString(*request.Description) > 512 {
 		return core.InvalidField("description", "must not exceed 512 characters")
-	}
-	if request.Type != nil {
-		_, err := core.NormalizeTunnelType(*request.Type)
-		return err
 	}
 	return nil
 }

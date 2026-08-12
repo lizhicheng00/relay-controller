@@ -217,7 +217,9 @@ func (s *Service) runSettlement(ctx context.Context) {
 	for {
 		count, err := s.SettleBatch(ctx, settlementBatchSize)
 		if err != nil {
-			s.log.Error("billing settlement failed", "error", err)
+			if ctx.Err() == nil {
+				s.log.Error("billing settlement failed", "error", err)
+			}
 			return
 		}
 		settled += count
@@ -231,10 +233,19 @@ func (s *Service) runSettlement(ctx context.Context) {
 }
 
 func (s *Service) runCleanup(ctx context.Context) {
-	deleted, err := s.CleanupAgedTunnels(ctx, s.now().Unix())
-	if err != nil {
-		s.log.Error("tunnel cleanup failed", "error", err)
-		return
+	deleted := 0
+	for {
+		count, err := s.CleanupAgedTunnels(ctx, s.now().Unix())
+		if err != nil {
+			if ctx.Err() == nil {
+				s.log.Error("tunnel cleanup failed", "error", err)
+			}
+			return
+		}
+		deleted += count
+		if count < cleanupBatchSize {
+			break
+		}
 	}
 	if deleted > 0 {
 		s.log.Info("aged tunnels deleted", "region", s.region, "count", deleted)
@@ -243,7 +254,9 @@ func (s *Service) runCleanup(ctx context.Context) {
 
 func (s *Service) runPartitionMaintenance(ctx context.Context) {
 	if err := s.MaintainPartitions(ctx, s.now().Unix()); err != nil {
-		s.log.Error("metering partition maintenance failed", "error", err)
+		if ctx.Err() == nil {
+			s.log.Error("metering partition maintenance failed", "error", err)
+		}
 	}
 }
 

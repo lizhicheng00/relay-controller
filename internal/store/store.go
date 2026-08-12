@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strings"
@@ -31,6 +32,7 @@ type NamedLock struct {
 const (
 	maxOpenConnections = 20
 	maxIdleConnections = 10
+	lockReleaseTimeout = 5 * time.Second
 )
 
 func Open(ctx context.Context, cfg config.Database) (*Store, error) {
@@ -67,7 +69,7 @@ func (s *Store) TryNamedLock(ctx context.Context, name string) (*NamedLock, erro
 	}
 	var acquired bool
 	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, 0)", name).Scan(&acquired); err != nil {
-		_ = conn.Close()
+		discardConn(conn)
 		return nil, err
 	}
 	if !acquired {
@@ -78,13 +80,24 @@ func (s *Store) TryNamedLock(ctx context.Context, name string) (*NamedLock, erro
 }
 
 func (l *NamedLock) Release() error {
+	ctx, cancel := context.WithTimeout(context.Background(), lockReleaseTimeout)
+	defer cancel()
 	var released bool
-	err := l.conn.QueryRowContext(context.Background(), "SELECT RELEASE_LOCK(?)", l.name).Scan(&released)
-	closeErr := l.conn.Close()
+	err := l.conn.QueryRowContext(ctx, "SELECT RELEASE_LOCK(?)", l.name).Scan(&released)
 	if err != nil {
+		discardConn(l.conn)
 		return err
 	}
-	return closeErr
+	if !released {
+		discardConn(l.conn)
+		return fmt.Errorf("named lock %q was not held", l.name)
+	}
+	return l.conn.Close()
+}
+
+func discardConn(conn *sql.Conn) {
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	_ = conn.Close()
 }
 
 func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {

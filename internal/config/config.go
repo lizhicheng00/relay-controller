@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 )
@@ -31,8 +32,11 @@ type TLS struct {
 	TrustStorePassword string
 }
 
-func Load() Config {
-	requestsPerMinute, _ := strconv.Atoi(os.Getenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE"))
+func Load() (Config, error) {
+	requestsPerMinute, err := strconv.Atoi(os.Getenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE"))
+	if err != nil || requestsPerMinute < 1 {
+		return Config{}, fmt.Errorf("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE must be a positive integer")
+	}
 	return Config{
 		Database: Database{
 			URL:      os.Getenv("DATASOURCE_URL"),
@@ -51,5 +55,5 @@ func Load() Config {
 			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),
 			TrustStorePassword: os.Getenv("SERVER_SSL_TRUST_STORE_PASSWORD"),
 		},
-	}
+	}, nil
 }
