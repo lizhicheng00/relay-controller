@@ -51,10 +51,6 @@ func Open(ctx context.Context, cfg config.Database) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
-	if _, err := db.ExecContext(pingContext, "DROP TABLE IF EXISTS shedlock"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("remove obsolete shedlock table: %w", err)
-	}
 	return &Store{db: db, exec: db}, nil
 }
 
