@@ -8,12 +8,11 @@ import (
 	"math"
 	"strings"
 	"time"
-	_ "time/tzdata"
 )
 
 const max40Bit = uint64(1<<40) - 1
 
-var shanghai = mustLocation("Asia/Shanghai")
+var shanghai = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 func ValidIdentifier(value string) bool {
 	if len(value) < 1 || len(value) > 128 || !asciiLetterOrDigit(value[0]) {
@@ -99,12 +98,4 @@ func AddBytes(first, second uint64) (uint64, error) {
 
 func asciiLetterOrDigit(value byte) bool {
 	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z' || value >= '0' && value <= '9'
-}
-
-func mustLocation(name string) *time.Location {
-	location, err := time.LoadLocation(name)
-	if err != nil {
-		panic(err)
-	}
-	return location
 }

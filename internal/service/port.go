@@ -11,11 +11,7 @@ import (
 	"github.com/lizhicheng00/relay-controller/internal/store"
 )
 
-func (s *Service) CreatePort(ctx context.Context, namespace, accountNamespace, tunnelID string, request core.CreateTunnelPortRequest) (core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
+func (s *Service) CreatePort(ctx context.Context, namespace, tunnelID string, request core.CreateTunnelPortRequest) (core.TunnelPortResponse, error) {
 	port, protocol, allowAnonymous, err := validateCreatePort(request)
 	if err != nil {
 		return core.TunnelPortResponse{}, err
@@ -28,11 +24,6 @@ func (s *Service) CreatePort(ctx context.Context, namespace, accountNamespace, t
 			return err
 		}
 		tunnelPort.TunnelCode = tunnel.TunnelCode
-		if _, err := tx.FindPort(ctx, tunnel.TunnelCode, port); err == nil {
-			return core.NewError(http.StatusConflict, core.CodeTunnelPortExists, "tunnel port already exists")
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return internal("find tunnel port", err)
-		}
 		_, plan, err := s.lockActiveAccountPlanByID(ctx, tx, tunnel.AccountID)
 		if err != nil {
 			return err
@@ -41,7 +32,7 @@ func (s *Service) CreatePort(ctx context.Context, namespace, accountNamespace, t
 		if err != nil {
 			return internal("count tunnel ports", err)
 		}
-		if plan.MaxPortsPerTunnel > 0 && count >= uint64(plan.MaxPortsPerTunnel) {
+		if count >= uint64(plan.MaxPortsPerTunnel) {
 			return core.NewError(http.StatusTooManyRequests, core.CodeTunnelPortQuotaExceeded,
 				fmt.Sprintf("tunnel port quota exceeded: max=%d", plan.MaxPortsPerTunnel))
 		}
@@ -63,11 +54,7 @@ func (s *Service) CreatePort(ctx context.Context, namespace, accountNamespace, t
 	return core.PortResponse(tunnel, tunnelPort), nil
 }
 
-func (s *Service) ListPorts(ctx context.Context, namespace, accountNamespace, tunnelID string) ([]core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) ListPorts(ctx context.Context, namespace, tunnelID string) ([]core.TunnelPortResponse, error) {
 	tunnel, err := s.findOwnedTunnel(ctx, namespace, tunnelID, true)
 	if err != nil {
 		return nil, err
@@ -83,11 +70,7 @@ func (s *Service) ListPorts(ctx context.Context, namespace, accountNamespace, tu
 	return response, nil
 }
 
-func (s *Service) GetPort(ctx context.Context, namespace, accountNamespace, tunnelID string, port uint16) (core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
+func (s *Service) GetPort(ctx context.Context, namespace, tunnelID string, port uint16) (core.TunnelPortResponse, error) {
 	tunnel, err := s.findOwnedTunnel(ctx, namespace, tunnelID, true)
 	if err != nil {
 		return core.TunnelPortResponse{}, err
@@ -102,11 +85,8 @@ func (s *Service) GetPort(ctx context.Context, namespace, accountNamespace, tunn
 	return core.PortResponse(tunnel, tunnelPort), nil
 }
 
-func (s *Service) UpdatePort(ctx context.Context, namespace, accountNamespace, tunnelID string, port uint16, request core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelPortResponse{}, err
-	}
+func (s *Service) UpdatePort(ctx context.Context, namespace, tunnelID string, port uint16, request core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error) {
+	var err error
 	protocol := ""
 	if request.Protocol != nil {
 		protocol, err = core.NormalizeProtocol(*request.Protocol)
@@ -151,12 +131,8 @@ func (s *Service) UpdatePort(ctx context.Context, namespace, accountNamespace, t
 	return core.PortResponse(tunnel, tunnelPort), nil
 }
 
-func (s *Service) DeletePort(ctx context.Context, namespace, accountNamespace, tunnelID string, port uint16) (bool, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return false, err
-	}
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
+func (s *Service) DeletePort(ctx context.Context, namespace, tunnelID string, port uint16) (bool, error) {
+	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		tunnel, err := s.lockOwnedTunnel(ctx, tx, namespace, tunnelID, true)
 		if err != nil {
 			return err

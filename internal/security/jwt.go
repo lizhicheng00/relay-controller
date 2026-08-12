@@ -20,13 +20,16 @@ import (
 
 type JWTSigner struct {
 	privateKey *rsa.PrivateKey
-	issuer     string
-	audience   string
-	keyID      string
-	lifetime   int64
 }
 
-func NewJWTSigner(configuredKey, issuer, audience, keyID string, lifetime time.Duration) (*JWTSigner, error) {
+const (
+	jwtIssuer   = "devbridge"
+	jwtAudience = "relay-gateway"
+	jwtKeyID    = "1"
+	jwtLifetime = int64((24 * time.Hour) / time.Second)
+)
+
+func NewJWTSigner(configuredKey string) (*JWTSigner, error) {
 	privateKey, err := parsePrivateKey(configuredKey)
 	if err != nil {
 		return nil, fmt.Errorf("jwt private key invalid: %w", err)
@@ -34,32 +37,20 @@ func NewJWTSigner(configuredKey, issuer, audience, keyID string, lifetime time.D
 	if privateKey.N.BitLen() < 2048 {
 		return nil, fmt.Errorf("jwt RSA key must be at least 2048 bits")
 	}
-	lifetimeSeconds := int64(lifetime / time.Second)
-	if lifetimeSeconds <= 0 {
-		return nil, fmt.Errorf("jwt token lifetime must be positive")
-	}
-	return &JWTSigner{
-		privateKey: privateKey, issuer: issuer, audience: audience, keyID: keyID, lifetime: lifetimeSeconds,
-	}, nil
+	return &JWTSigner{privateKey: privateKey}, nil
 }
 
 func (s *JWTSigner) Issue(tunnel core.Tunnel, scope string, now int64) (core.TunnelTokenResponse, error) {
-	expiration := now + s.lifetime
+	expiration := now + jwtLifetime
 	jti, err := randomUUID()
 	if err != nil {
 		return core.TunnelTokenResponse{}, jwtGenerationError(err)
 	}
-	header, err := json.Marshal(map[string]any{"alg": "RS256", "kid": s.keyID, "typ": "JWT"})
-	if err != nil {
-		return core.TunnelTokenResponse{}, jwtGenerationError(err)
-	}
-	claims, err := json.Marshal(map[string]any{
-		"iss": s.issuer, "aud": []string{s.audience}, "exp": expiration, "nbf": now, "jti": jti,
+	header, _ := json.Marshal(map[string]any{"alg": "RS256", "kid": jwtKeyID, "typ": "JWT"})
+	claims, _ := json.Marshal(map[string]any{
+		"iss": jwtIssuer, "aud": []string{jwtAudience}, "exp": expiration, "nbf": now, "jti": jti,
 		"tunnelId": tunnel.TunnelID, "clusterId": tunnel.ClusterID, "scp": scope,
 	})
-	if err != nil {
-		return core.TunnelTokenResponse{}, jwtGenerationError(err)
-	}
 	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
 	digest := sha256.Sum256([]byte(unsigned))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, s.privateKey, crypto.SHA256, digest[:])
@@ -67,7 +58,7 @@ func (s *JWTSigner) Issue(tunnel core.Tunnel, scope string, now int64) (core.Tun
 		return core.TunnelTokenResponse{}, jwtGenerationError(err)
 	}
 	return core.TunnelTokenResponse{
-		TunnelID: tunnel.TunnelID, Scope: scope, Lifetime: s.lifetime, Expiration: expiration,
+		TunnelID: tunnel.TunnelID, Scope: scope, Lifetime: jwtLifetime, Expiration: expiration,
 		Token: unsigned + "." + base64.RawURLEncoding.EncodeToString(signature),
 	}, nil
 }

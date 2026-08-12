@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,15 +21,6 @@ import (
 	"github.com/lizhicheng00/relay-controller/internal/store"
 )
 
-var version = "dev"
-
-const (
-	jwtIssuer   = "devbridge"
-	jwtAudience = "relay-gateway"
-	jwtKeyID    = "1"
-	jwtTokenTTL = 24 * time.Hour
-)
-
 func main() {
 	if err := run(); err != nil {
 		slog.Error("relay controller stopped", "error", err)
@@ -39,15 +29,11 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load configuration: %w", err)
-	}
+	cfg := config.Load()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	signer, err := security.NewJWTSigner(
-		cfg.Relay.JWTPrivateKey, jwtIssuer, jwtAudience, jwtKeyID, jwtTokenTTL)
+	signer, err := security.NewJWTSigner(cfg.Relay.JWTPrivateKey)
 	if err != nil {
 		return err
 	}
@@ -63,16 +49,14 @@ func run() error {
 		return err
 	}
 	defer func() {
-		if err := database.Close(); err != nil {
-			logger.Warn("database close failed", "error", err)
-		}
+		_ = database.Close()
 	}()
 
 	application := service.New(database, signer, cfg.Relay.Domain, cfg.Relay.Region, logger)
 	limiter := httpapi.NewRateLimiter(cfg.Relay.RequestsPerMinute)
 	server := &http.Server{
 		Handler:           httpapi.New(application, logger, limiter),
-		ErrorLog:          log.New(serverLogWriter{logger: logger}, "", 0),
+		ErrorLog:          log.New(io.Discard, "", 0),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -80,16 +64,16 @@ func run() error {
 		MaxHeaderBytes:    1 << 20,
 		TLSConfig:         tlsConfig,
 	}
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.Port))
+	listener, err := net.Listen("tcp", ":8443")
 	if err != nil {
-		return fmt.Errorf("listen on port %d: %w", cfg.Port, err)
+		return fmt.Errorf("listen: %w", err)
 	}
 	jobs := application.StartJobs(ctx)
 	serverErrors := make(chan error, 1)
 	go func() {
 		serverErrors <- server.ServeTLS(listener, "", "")
 	}()
-	logger.Info("Relay Controller started", "version", version, "address", "https://0.0.0.0:"+strconv.Itoa(cfg.Port), "region", cfg.Relay.Region)
+	logger.Info("Relay Controller started", "region", cfg.Relay.Region)
 
 	var serveErr error
 	select {
@@ -112,18 +96,4 @@ func run() error {
 	}
 	logger.Info("Relay Controller stopped")
 	return nil
-}
-
-type serverLogWriter struct {
-	logger *slog.Logger
-}
-
-func (w serverLogWriter) Write(content []byte) (int, error) {
-	message := strings.TrimSpace(string(content))
-	if strings.Contains(message, "TLS handshake error") {
-		w.logger.Debug("TLS client authentication rejected")
-	} else {
-		w.logger.Warn("HTTP server error", "message", message)
-	}
-	return len(content), nil
 }

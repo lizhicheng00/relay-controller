@@ -40,7 +40,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	der, _ := x509.MarshalPKCS8PrivateKey(privateKey)
-	signer, err := security.NewJWTSigner(base64.StdEncoding.EncodeToString(der), "devbridge", "relay-gateway", "1", time.Hour)
+	signer, err := security.NewJWTSigner(base64.StdEncoding.EncodeToString(der))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	application.now = func() time.Time { return now }
 
 	accountNamespace := fmt.Sprintf("ns-integration-account-%d", time.Now().UnixNano())
-	if _, err := application.GetLimits(ctx, "ns-integration-bootstrap", accountNamespace); err != nil {
+	if _, err := application.GetLimits(ctx, accountNamespace); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +101,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 		protocol := "auto"
 		allowAnonymous := false
 		port := int64(8000 + index)
-		if _, err := application.CreatePort(ctx, first.namespace, accountNamespace, first.response.TunnelID,
+		if _, err := application.CreatePort(ctx, first.namespace, first.response.TunnelID,
 			core.CreateTunnelPortRequest{Port: &port, Protocol: &protocol, AllowAnonymous: &allowAnonymous}); err != nil {
 			t.Fatalf("create port %d: %v", port, err)
 		}
@@ -109,15 +109,15 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	port := int64(9000)
 	protocol := "http"
 	allowAnonymous := false
-	_, err = application.CreatePort(ctx, first.namespace, accountNamespace, first.response.TunnelID,
+	_, err = application.CreatePort(ctx, first.namespace, first.response.TunnelID,
 		core.CreateTunnelPortRequest{Port: &port, Protocol: &protocol, AllowAnonymous: &allowAnonymous})
 	assertErrorCode(t, err, core.CodeTunnelPortQuotaExceeded)
 
-	firstToken, err := application.IssueTunnelToken(ctx, first.namespace, accountNamespace, first.response.TunnelID, "host")
+	firstToken, err := application.IssueTunnelToken(ctx, first.namespace, first.response.TunnelID, "host")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondToken, err := application.IssueTunnelToken(ctx, first.namespace, accountNamespace, first.response.TunnelID, "host")
+	secondToken, err := application.IssueTunnelToken(ctx, first.namespace, first.response.TunnelID, "host")
 	if err != nil || firstToken.Token == secondToken.Token {
 		t.Fatal("token calls must return independently signed tokens")
 	}
@@ -140,11 +140,11 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if err != nil || settled != 1 {
 		t.Fatalf("settled = %d, err = %v", settled, err)
 	}
-	detail, err := application.GetTunnel(ctx, first.namespace, accountNamespace, first.response.TunnelID)
+	detail, err := application.GetTunnel(ctx, first.namespace, first.response.TunnelID)
 	if err != nil || detail.BandwidthUsed != 300 {
 		t.Fatalf("tunnel usage = %d, err = %v", detail.BandwidthUsed, err)
 	}
-	limits, err := application.GetLimits(ctx, first.namespace, accountNamespace)
+	limits, err := application.GetLimits(ctx, accountNamespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	}
 
 	for _, tunnel := range tunnels {
-		if _, err := application.DeleteTunnel(ctx, tunnel.namespace, accountNamespace, tunnel.response.TunnelID); err != nil {
+		if _, err := application.DeleteTunnel(ctx, tunnel.namespace, tunnel.response.TunnelID); err != nil {
 			t.Fatal(err)
 		}
 	}

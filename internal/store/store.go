@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -31,11 +29,7 @@ const (
 )
 
 func Open(ctx context.Context, cfg config.Database) (*Store, error) {
-	dsn, err := dataSourceName(cfg)
-	if err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("mysql", dsn)
+	db, err := sql.Open("mysql", dataSourceName(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -47,7 +41,8 @@ func Open(ctx context.Context, cfg config.Database) (*Store, error) {
 	pingContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(pingContext); err != nil {
-		return nil, fmt.Errorf("connect database: %w", errors.Join(err, db.Close()))
+		_ = db.Close()
+		return nil, fmt.Errorf("connect database: %w", err)
 	}
 	return &Store{db: db, exec: db}, nil
 }
@@ -63,9 +58,7 @@ func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
 	}
 	txStore := &Store{db: s.db, exec: tx}
 	if err := fn(txStore); err != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
-			return errors.Join(err, fmt.Errorf("rollback transaction: %w", rollbackErr))
-		}
+		_ = tx.Rollback()
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -79,40 +72,23 @@ func IsDuplicate(err error) bool {
 	return errors.As(err, &mysqlError) && mysqlError.Number == 1062
 }
 
-func dataSourceName(cfg config.Database) (string, error) {
-	raw := strings.TrimSpace(cfg.URL)
-	if !strings.Contains(raw, "://") && !strings.HasPrefix(raw, "jdbc:") {
-		return raw, nil
-	}
-	raw = strings.TrimPrefix(raw, "jdbc:")
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return "", fmt.Errorf("parse DATASOURCE_URL: %w", err)
-	}
-	if parsed.Scheme != "mariadb" && parsed.Scheme != "mysql" {
-		return "", fmt.Errorf("DATASOURCE_URL must use mariadb or mysql")
-	}
-	host := parsed.Host
-	if _, _, err := net.SplitHostPort(host); err != nil {
-		host = net.JoinHostPort(parsed.Hostname(), "3306")
-	}
-	database := strings.TrimPrefix(parsed.EscapedPath(), "/")
-	database, err = url.PathUnescape(database)
-	if err != nil || database == "" || strings.Contains(database, "/") {
-		return "", fmt.Errorf("DATASOURCE_URL must contain one database name")
-	}
+func dataSourceName(cfg config.Database) string {
+	address := strings.TrimPrefix(cfg.URL, "jdbc:mariadb://")
+	address = strings.TrimPrefix(address, "jdbc:mysql://")
+	address, database, _ := strings.Cut(address, "/")
 
 	driverConfig := mysql.NewConfig()
 	driverConfig.User = cfg.Username
 	driverConfig.Passwd = cfg.Password
 	driverConfig.Net = "tcp"
-	driverConfig.Addr = host
+	driverConfig.Addr = address
 	driverConfig.DBName = database
+	driverConfig.ClientFoundRows = true
 	driverConfig.ParseTime = true
 	driverConfig.Timeout = 10 * time.Second
 	driverConfig.ReadTimeout = 30 * time.Second
 	driverConfig.WriteTimeout = 30 * time.Second
 	driverConfig.Collation = "utf8mb4_unicode_ci"
 	driverConfig.Params = map[string]string{"time_zone": "'+00:00'"}
-	return driverConfig.FormatDSN(), nil
+	return driverConfig.FormatDSN()
 }

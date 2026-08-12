@@ -22,18 +22,18 @@ const (
 
 type API interface {
 	CreateTunnel(context.Context, string, string, core.CreateTunnelRequest) (core.TunnelResponse, error)
-	ListTunnels(context.Context, string, string, string) ([]core.TunnelListItem, error)
-	GetTunnel(context.Context, string, string, string) (core.TunnelResponse, error)
-	UpdateTunnel(context.Context, string, string, string, core.UpdateTunnelRequest) (bool, error)
-	DeleteTunnel(context.Context, string, string, string) (bool, error)
-	DeleteTunnels(context.Context, string, string) (bool, error)
-	IssueTunnelToken(context.Context, string, string, string, string) (core.TunnelTokenResponse, error)
-	CreatePort(context.Context, string, string, string, core.CreateTunnelPortRequest) (core.TunnelPortResponse, error)
-	ListPorts(context.Context, string, string, string) ([]core.TunnelPortResponse, error)
-	GetPort(context.Context, string, string, string, uint16) (core.TunnelPortResponse, error)
-	UpdatePort(context.Context, string, string, string, uint16, core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error)
-	DeletePort(context.Context, string, string, string, uint16) (bool, error)
-	GetLimits(context.Context, string, string) (core.LimitsResponse, error)
+	ListTunnels(context.Context, string, string) ([]core.TunnelListItem, error)
+	GetTunnel(context.Context, string, string) (core.TunnelResponse, error)
+	UpdateTunnel(context.Context, string, string, core.UpdateTunnelRequest) (bool, error)
+	DeleteTunnel(context.Context, string, string) (bool, error)
+	DeleteTunnels(context.Context, string) (bool, error)
+	IssueTunnelToken(context.Context, string, string, string) (core.TunnelTokenResponse, error)
+	CreatePort(context.Context, string, string, core.CreateTunnelPortRequest) (core.TunnelPortResponse, error)
+	ListPorts(context.Context, string, string) ([]core.TunnelPortResponse, error)
+	GetPort(context.Context, string, string, uint16) (core.TunnelPortResponse, error)
+	UpdatePort(context.Context, string, string, uint16, core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error)
+	DeletePort(context.Context, string, string, uint16) (bool, error)
+	GetLimits(context.Context, string) (core.LimitsResponse, error)
 }
 
 type Handler struct {
@@ -81,27 +81,27 @@ func (h *Handler) createTunnel(response http.ResponseWriter, request *http.Reque
 }
 
 func (h *Handler) listTunnels(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, err := requestContext(request)
+	namespace, _, err := requestContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.ListTunnels(request.Context(), namespace, accountNamespace, request.URL.Query().Get("clusterId"))
+	result, err := h.api.ListTunnels(request.Context(), namespace, request.URL.Query().Get("clusterId"))
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) getTunnel(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.GetTunnel(request.Context(), namespace, accountNamespace, tunnelID)
+	result, err := h.api.GetTunnel(request.Context(), namespace, tunnelID)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) updateTunnel(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -111,32 +111,32 @@ func (h *Handler) updateTunnel(response http.ResponseWriter, request *http.Reque
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.UpdateTunnel(request.Context(), namespace, accountNamespace, tunnelID, body)
+	result, err := h.api.UpdateTunnel(request.Context(), namespace, tunnelID, body)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) deleteTunnel(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.DeleteTunnel(request.Context(), namespace, accountNamespace, tunnelID)
+	result, err := h.api.DeleteTunnel(request.Context(), namespace, tunnelID)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) deleteTunnels(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, err := requestContext(request)
+	namespace, _, err := requestContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.DeleteTunnels(request.Context(), namespace, accountNamespace)
+	result, err := h.api.DeleteTunnels(request.Context(), namespace)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) issueToken(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -149,7 +149,7 @@ func (h *Handler) issueToken(response http.ResponseWriter, request *http.Request
 		})
 		return
 	}
-	result, err := h.api.IssueTunnelToken(request.Context(), namespace, accountNamespace, tunnelID, scope)
+	result, err := h.api.IssueTunnelToken(request.Context(), namespace, tunnelID, scope)
 	if err == nil {
 		response.Header().Set("Cache-Control", "no-store")
 	}
@@ -157,7 +157,7 @@ func (h *Handler) issueToken(response http.ResponseWriter, request *http.Request
 }
 
 func (h *Handler) createPort(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -167,32 +167,32 @@ func (h *Handler) createPort(response http.ResponseWriter, request *http.Request
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.CreatePort(request.Context(), namespace, accountNamespace, tunnelID, body)
+	result, err := h.api.CreatePort(request.Context(), namespace, tunnelID, body)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) listPorts(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.ListPorts(request.Context(), namespace, accountNamespace, tunnelID)
+	result, err := h.api.ListPorts(request.Context(), namespace, tunnelID)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) getPort(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, port, err := portContext(request)
+	namespace, tunnelID, port, err := portContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.GetPort(request.Context(), namespace, accountNamespace, tunnelID, port)
+	result, err := h.api.GetPort(request.Context(), namespace, tunnelID, port)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) updatePort(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, port, err := portContext(request)
+	namespace, tunnelID, port, err := portContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -202,27 +202,27 @@ func (h *Handler) updatePort(response http.ResponseWriter, request *http.Request
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.UpdatePort(request.Context(), namespace, accountNamespace, tunnelID, port, body)
+	result, err := h.api.UpdatePort(request.Context(), namespace, tunnelID, port, body)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) deletePort(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, tunnelID, port, err := portContext(request)
+	namespace, tunnelID, port, err := portContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.DeletePort(request.Context(), namespace, accountNamespace, tunnelID, port)
+	result, err := h.api.DeletePort(request.Context(), namespace, tunnelID, port)
 	h.writeResult(response, result, err)
 }
 
 func (h *Handler) getLimits(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, err := requestContext(request)
+	_, accountNamespace, err := requestContext(request)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.GetLimits(request.Context(), namespace, accountNamespace)
+	result, err := h.api.GetLimits(request.Context(), accountNamespace)
 	h.writeResult(response, result, err)
 }
 
@@ -263,31 +263,37 @@ func requestContext(request *http.Request) (string, string, error) {
 	if strings.TrimSpace(accountNamespace) == "" {
 		return "", "", core.MissingHeader("X-Account-Namespace")
 	}
+	if !core.ValidIdentifier(namespace) {
+		return "", "", core.Invalid("X-Namespace is invalid")
+	}
+	if !core.ValidIdentifier(accountNamespace) {
+		return "", "", core.Invalid("X-Account-Namespace is invalid")
+	}
 	return namespace, accountNamespace, nil
 }
 
-func tunnelContext(request *http.Request) (string, string, string, error) {
-	namespace, accountNamespace, err := requestContext(request)
+func tunnelContext(request *http.Request) (string, string, error) {
+	namespace, _, err := requestContext(request)
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 	tunnelID := request.PathValue("tunnelId")
 	if !core.ValidTunnelID(tunnelID) {
-		return "", "", "", core.InvalidField("tunnelId", "is invalid")
+		return "", "", core.InvalidField("tunnelId", "is invalid")
 	}
-	return namespace, accountNamespace, tunnelID, nil
+	return namespace, tunnelID, nil
 }
 
-func portContext(request *http.Request) (string, string, string, uint16, error) {
-	namespace, accountNamespace, tunnelID, err := tunnelContext(request)
+func portContext(request *http.Request) (string, string, uint16, error) {
+	namespace, tunnelID, err := tunnelContext(request)
 	if err != nil {
-		return "", "", "", 0, err
+		return "", "", 0, err
 	}
 	port, err := strconv.ParseUint(request.PathValue("port"), 10, 16)
 	if err != nil || port == 0 {
-		return "", "", "", 0, core.NewError(http.StatusBadRequest, core.CodeTunnelPortInvalid, "tunnel port invalid")
+		return "", "", 0, core.NewError(http.StatusBadRequest, core.CodeTunnelPortInvalid, "tunnel port invalid")
 	}
-	return namespace, accountNamespace, tunnelID, uint16(port), nil
+	return namespace, tunnelID, uint16(port), nil
 }
 
 func decodeJSON(response http.ResponseWriter, request *http.Request, target any) error {

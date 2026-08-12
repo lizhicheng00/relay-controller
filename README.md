@@ -68,11 +68,11 @@ Required environment variables:
 | `SERVER_SSL_TRUST_STORE_BASE64` | Base64 PKCS12 client CA trust store |
 | `SERVER_SSL_TRUST_STORE_PASSWORD` | Trust store password |
 
-`SERVER_PORT` is the only optional deployment setting and defaults to `8443`.
+The HTTPS server listens on port `8443`.
 
 The key store must be PKCS12 and contain the server key and certificate chain. The trust store must be PKCS12 and contain the accepted client CA. TLS 1.2 and 1.3 are enabled, and a trusted client certificate is mandatory.
 
-Secrets must reach the process already decrypted. Values beginning with `ENC(` are rejected so a ciphertext cannot accidentally be used as a database password or private key. Base64 is encoding, not encryption.
+Secrets must reach the process already decrypted. Base64 is encoding, not encryption.
 
 ## Build And Run
 
@@ -81,7 +81,7 @@ Go 1.24 or newer is required.
 ```bash
 go test ./...
 go vet ./...
-go build -trimpath -ldflags '-s -w -X main.version=1.0.0' -o bin/relay-controller ./cmd/relay-controller
+go build -trimpath -ldflags '-s -w' -o bin/relay-controller ./cmd/relay-controller
 ./bin/relay-controller
 ```
 

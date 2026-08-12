@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lizhicheng00/relay-controller/internal/core"
 )
@@ -21,7 +20,7 @@ func TestJWTSignerProducesExpectedClaimsAndSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer, err := NewJWTSigner(base64.StdEncoding.EncodeToString(der), "devbridge", "relay-gateway", "1", time.Hour)
+	signer, err := NewJWTSigner(base64.StdEncoding.EncodeToString(der))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +53,7 @@ func TestJWTSignerProducesExpectedClaimsAndSignature(t *testing.T) {
 	if len(claims) != 8 || claims["tunnelId"] != "aaaadysa" || claims["clusterId"] != "cluster-a" || claims["scp"] != "connect" {
 		t.Fatalf("unexpected claims: %#v", claims)
 	}
-	if issued.Lifetime != 3600 || issued.Expiration != 4600 {
+	if issued.Lifetime != 86400 || issued.Expiration != 87400 {
 		t.Fatalf("unexpected token timing: %#v", issued)
 	}
 }
@@ -62,7 +61,7 @@ func TestJWTSignerProducesExpectedClaimsAndSignature(t *testing.T) {
 func TestJWTSignerCreatesUniqueTokens(t *testing.T) {
 	privateKey := testPrivateKey(t, 2048)
 	der, _ := x509.MarshalPKCS8PrivateKey(privateKey)
-	signer, err := NewJWTSigner(base64.StdEncoding.EncodeToString(der), "devbridge", "relay-gateway", "1", time.Hour)
+	signer, err := NewJWTSigner(base64.StdEncoding.EncodeToString(der))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +76,7 @@ func TestJWTSignerCreatesUniqueTokens(t *testing.T) {
 func TestJWTSignerRejectsWeakKey(t *testing.T) {
 	privateKey := testPrivateKey(t, 1024)
 	der, _ := x509.MarshalPKCS8PrivateKey(privateKey)
-	if _, err := NewJWTSigner(base64.StdEncoding.EncodeToString(der), "devbridge", "relay-gateway", "1", time.Hour); err == nil {
+	if _, err := NewJWTSigner(base64.StdEncoding.EncodeToString(der)); err == nil {
 		t.Fatal("expected a 1024-bit key to be rejected")
 	}
 }

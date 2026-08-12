@@ -7,17 +7,13 @@ import (
 	"github.com/lizhicheng00/relay-controller/internal/store"
 )
 
-func (s *Service) GetLimits(ctx context.Context, namespace, accountNamespace string) (core.LimitsResponse, error) {
-	_, accountNamespace, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.LimitsResponse{}, err
-	}
+func (s *Service) GetLimits(ctx context.Context, accountNamespace string) (core.LimitsResponse, error) {
 	now := s.now().Unix()
 	var response core.LimitsResponse
 	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
 		return core.LimitsResponse{}, internal("create billing account", err)
 	}
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
+	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		account, err := tx.LockAccountByNamespace(ctx, accountNamespace)
 		if err != nil {
 			return internal("lock billing account", err)

@@ -36,10 +36,6 @@ func New(store *store.Store, signer *security.JWTSigner, domain, region string, 
 }
 
 func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace string, request core.CreateTunnelRequest) (core.TunnelResponse, error) {
-	namespace, accountNamespace, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelResponse{}, err
-	}
 	tunnelType, err := validateCreateTunnel(request)
 	if err != nil {
 		return core.TunnelResponse{}, err
@@ -70,7 +66,7 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 		if err != nil {
 			return internal("count active tunnels", err)
 		}
-		if plan.MaxTunnels > 0 && activeTunnels >= uint64(plan.MaxTunnels) {
+		if activeTunnels >= uint64(plan.MaxTunnels) {
 			return core.NewError(http.StatusTooManyRequests, core.CodeTunnelQuotaExceeded,
 				fmt.Sprintf("active tunnel quota exceeded: max=%d", plan.MaxTunnels))
 		}
@@ -101,11 +97,7 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 	return tunnel.Response(nil), nil
 }
 
-func (s *Service) ListTunnels(ctx context.Context, namespace, accountNamespace, clusterID string) ([]core.TunnelListItem, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) ListTunnels(ctx context.Context, namespace, clusterID string) ([]core.TunnelListItem, error) {
 	if clusterID != "" {
 		if err := s.requireLocalCluster(ctx, clusterID); err != nil {
 			return nil, err
@@ -122,11 +114,7 @@ func (s *Service) ListTunnels(ctx context.Context, namespace, accountNamespace, 
 	return response, nil
 }
 
-func (s *Service) GetTunnel(ctx context.Context, namespace, accountNamespace, tunnelID string) (core.TunnelResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelResponse{}, err
-	}
+func (s *Service) GetTunnel(ctx context.Context, namespace, tunnelID string) (core.TunnelResponse, error) {
 	tunnel, err := s.findOwnedTunnel(ctx, namespace, tunnelID, true)
 	if err != nil {
 		return core.TunnelResponse{}, err
@@ -138,16 +126,12 @@ func (s *Service) GetTunnel(ctx context.Context, namespace, accountNamespace, tu
 	return tunnel.Response(status), nil
 }
 
-func (s *Service) UpdateTunnel(ctx context.Context, namespace, accountNamespace, tunnelID string, request core.UpdateTunnelRequest) (bool, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return false, err
-	}
+func (s *Service) UpdateTunnel(ctx context.Context, namespace, tunnelID string, request core.UpdateTunnelRequest) (bool, error) {
 	if err := validateUpdateTunnel(request); err != nil {
 		return false, err
 	}
 	now := s.now().Unix()
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
+	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		tunnel, err := s.lockOwnedTunnel(ctx, tx, namespace, tunnelID, true)
 		if err != nil {
 			return err
@@ -186,12 +170,8 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, accountNamespace,
 	return true, nil
 }
 
-func (s *Service) DeleteTunnel(ctx context.Context, namespace, accountNamespace, tunnelID string) (bool, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return false, err
-	}
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
+func (s *Service) DeleteTunnel(ctx context.Context, namespace, tunnelID string) (bool, error) {
+	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		tunnel, err := s.lockOwnedTunnel(ctx, tx, namespace, tunnelID, false)
 		if err != nil {
 			return err
@@ -208,13 +188,9 @@ func (s *Service) DeleteTunnel(ctx context.Context, namespace, accountNamespace,
 	return true, nil
 }
 
-func (s *Service) DeleteTunnels(ctx context.Context, namespace, accountNamespace string) (bool, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return false, err
-	}
+func (s *Service) DeleteTunnels(ctx context.Context, namespace string) (bool, error) {
 	deleted := 0
-	err = s.store.InTx(ctx, func(tx *store.Store) error {
+	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		tunnels, err := tx.LockNamespaceTunnels(ctx, namespace, s.region)
 		if err != nil {
 			return internal("lock namespace tunnels", err)
@@ -234,11 +210,7 @@ func (s *Service) DeleteTunnels(ctx context.Context, namespace, accountNamespace
 	return true, nil
 }
 
-func (s *Service) IssueTunnelToken(ctx context.Context, namespace, accountNamespace, tunnelID, scope string) (core.TunnelTokenResponse, error) {
-	namespace, _, err := requireContext(namespace, accountNamespace)
-	if err != nil {
-		return core.TunnelTokenResponse{}, err
-	}
+func (s *Service) IssueTunnelToken(ctx context.Context, namespace, tunnelID, scope string) (core.TunnelTokenResponse, error) {
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if scope != "host" && scope != "connect" {
 		return core.TunnelTokenResponse{}, core.Invalid("scope must be host or connect")
@@ -255,7 +227,7 @@ func (s *Service) IssueTunnelToken(ctx context.Context, namespace, accountNamesp
 
 func (s *Service) requireLocalCluster(ctx context.Context, clusterID string) error {
 	if !core.ValidIdentifier(clusterID) {
-		return core.Invalid("clusterId is invalid")
+		return core.InvalidField("clusterId", "is invalid")
 	}
 	exists, err := s.store.ClusterExists(ctx, clusterID, s.region)
 	if err != nil {
@@ -357,22 +329,6 @@ func ensurePeriod(ctx context.Context, tx *store.Store, accountID uint64, plan c
 	return period, nil
 }
 
-func requireContext(namespace, accountNamespace string) (string, string, error) {
-	if strings.TrimSpace(namespace) == "" {
-		return "", "", core.MissingHeader("X-Namespace")
-	}
-	if !core.ValidIdentifier(namespace) {
-		return "", "", core.Invalid("X-Namespace is invalid")
-	}
-	if strings.TrimSpace(accountNamespace) == "" {
-		return "", "", core.MissingHeader("X-Account-Namespace")
-	}
-	if !core.ValidIdentifier(accountNamespace) {
-		return "", "", core.Invalid("X-Account-Namespace is invalid")
-	}
-	return namespace, accountNamespace, nil
-}
-
 func validateCreateTunnel(request core.CreateTunnelRequest) (string, error) {
 	if strings.TrimSpace(request.Name) == "" {
 		return "", core.InvalidField("name", "must not be blank")
@@ -382,12 +338,6 @@ func validateCreateTunnel(request core.CreateTunnelRequest) (string, error) {
 	}
 	if request.Description != nil && utf8.RuneCountInString(*request.Description) > 512 {
 		return "", core.InvalidField("description", "must not exceed 512 characters")
-	}
-	if !core.ValidIdentifier(request.ClusterID) {
-		return "", core.InvalidField("clusterId", "is invalid")
-	}
-	if request.Expiration != nil && (*request.Expiration < 1 || *request.Expiration > 720) {
-		return "", core.InvalidField("expiration", "must be between 1 and 720")
 	}
 	if request.Type == nil || strings.TrimSpace(*request.Type) == "" {
 		return "bridge", nil
@@ -401,9 +351,6 @@ func validateUpdateTunnel(request core.UpdateTunnelRequest) error {
 	}
 	if request.Description != nil && utf8.RuneCountInString(*request.Description) > 512 {
 		return core.InvalidField("description", "must not exceed 512 characters")
-	}
-	if request.Expiration != nil && (*request.Expiration < 1 || *request.Expiration > 720) {
-		return core.InvalidField("expiration", "must be between 1 and 720")
 	}
 	if request.Type != nil {
 		_, err := core.NormalizeTunnelType(*request.Type)

@@ -42,7 +42,7 @@ func TestMissingNamespaceReturnsStructured401(t *testing.T) {
 }
 
 func TestIssueTokenPreventsCaching(t *testing.T) {
-	api := stubAPI{issueToken: func(context.Context, string, string, string, string) (core.TunnelTokenResponse, error) {
+	api := stubAPI{issueToken: func(context.Context, string, string, string) (core.TunnelTokenResponse, error) {
 		return core.TunnelTokenResponse{TunnelID: "aaaadysa", Scope: "host", Lifetime: 3600, Expiration: 4600, Token: "token"}, nil
 	}}
 	response := serve(t, api, http.MethodPost, apiBase+"/tunnels/aaaadysa/token?scope=host", "", true)
@@ -71,7 +71,7 @@ func TestInvalidJSONMediaTypeIsRejected(t *testing.T) {
 }
 
 func TestInternalErrorDoesNotLeakCause(t *testing.T) {
-	api := stubAPI{getTunnel: func(context.Context, string, string, string) (core.TunnelResponse, error) {
+	api := stubAPI{getTunnel: func(context.Context, string, string) (core.TunnelResponse, error) {
 		return core.TunnelResponse{}, errors.New("database password leaked")
 	}}
 	response := serve(t, api, http.MethodGet, apiBase+"/tunnels/aaaadysa", "", true)
@@ -121,8 +121,8 @@ func testLogger() *slog.Logger {
 
 type stubAPI struct {
 	createTunnel func(context.Context, string, string, core.CreateTunnelRequest) (core.TunnelResponse, error)
-	getTunnel    func(context.Context, string, string, string) (core.TunnelResponse, error)
-	issueToken   func(context.Context, string, string, string, string) (core.TunnelTokenResponse, error)
+	getTunnel    func(context.Context, string, string) (core.TunnelResponse, error)
+	issueToken   func(context.Context, string, string, string) (core.TunnelTokenResponse, error)
 }
 
 func (s stubAPI) CreateTunnel(ctx context.Context, namespace, account string, request core.CreateTunnelRequest) (core.TunnelResponse, error) {
@@ -131,41 +131,41 @@ func (s stubAPI) CreateTunnel(ctx context.Context, namespace, account string, re
 	}
 	return core.TunnelResponse{}, nil
 }
-func (stubAPI) ListTunnels(context.Context, string, string, string) ([]core.TunnelListItem, error) {
+func (stubAPI) ListTunnels(context.Context, string, string) ([]core.TunnelListItem, error) {
 	return []core.TunnelListItem{}, nil
 }
-func (s stubAPI) GetTunnel(ctx context.Context, namespace, account, tunnelID string) (core.TunnelResponse, error) {
+func (s stubAPI) GetTunnel(ctx context.Context, namespace, tunnelID string) (core.TunnelResponse, error) {
 	if s.getTunnel != nil {
-		return s.getTunnel(ctx, namespace, account, tunnelID)
+		return s.getTunnel(ctx, namespace, tunnelID)
 	}
 	return core.TunnelResponse{}, nil
 }
-func (stubAPI) UpdateTunnel(context.Context, string, string, string, core.UpdateTunnelRequest) (bool, error) {
+func (stubAPI) UpdateTunnel(context.Context, string, string, core.UpdateTunnelRequest) (bool, error) {
 	return true, nil
 }
-func (stubAPI) DeleteTunnel(context.Context, string, string, string) (bool, error) { return true, nil }
-func (stubAPI) DeleteTunnels(context.Context, string, string) (bool, error)        { return true, nil }
-func (s stubAPI) IssueTunnelToken(ctx context.Context, namespace, account, tunnelID, scope string) (core.TunnelTokenResponse, error) {
+func (stubAPI) DeleteTunnel(context.Context, string, string) (bool, error) { return true, nil }
+func (stubAPI) DeleteTunnels(context.Context, string) (bool, error)        { return true, nil }
+func (s stubAPI) IssueTunnelToken(ctx context.Context, namespace, tunnelID, scope string) (core.TunnelTokenResponse, error) {
 	if s.issueToken != nil {
-		return s.issueToken(ctx, namespace, account, tunnelID, scope)
+		return s.issueToken(ctx, namespace, tunnelID, scope)
 	}
 	return core.TunnelTokenResponse{}, nil
 }
-func (stubAPI) CreatePort(context.Context, string, string, string, core.CreateTunnelPortRequest) (core.TunnelPortResponse, error) {
+func (stubAPI) CreatePort(context.Context, string, string, core.CreateTunnelPortRequest) (core.TunnelPortResponse, error) {
 	return core.TunnelPortResponse{}, nil
 }
-func (stubAPI) ListPorts(context.Context, string, string, string) ([]core.TunnelPortResponse, error) {
+func (stubAPI) ListPorts(context.Context, string, string) ([]core.TunnelPortResponse, error) {
 	return []core.TunnelPortResponse{}, nil
 }
-func (stubAPI) GetPort(context.Context, string, string, string, uint16) (core.TunnelPortResponse, error) {
+func (stubAPI) GetPort(context.Context, string, string, uint16) (core.TunnelPortResponse, error) {
 	return core.TunnelPortResponse{}, nil
 }
-func (stubAPI) UpdatePort(context.Context, string, string, string, uint16, core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error) {
+func (stubAPI) UpdatePort(context.Context, string, string, uint16, core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error) {
 	return core.TunnelPortResponse{}, nil
 }
-func (stubAPI) DeletePort(context.Context, string, string, string, uint16) (bool, error) {
+func (stubAPI) DeletePort(context.Context, string, string, uint16) (bool, error) {
 	return true, nil
 }
-func (stubAPI) GetLimits(context.Context, string, string) (core.LimitsResponse, error) {
+func (stubAPI) GetLimits(context.Context, string) (core.LimitsResponse, error) {
 	return core.LimitsResponse{}, nil
 }
