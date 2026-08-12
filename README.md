@@ -102,7 +102,7 @@ export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 go run ./cmd/relay-controller
 ```
 
-The service does not create or migrate the shared database. Provision the existing Relay Controller schema before startup. The empty `migrations` directory is reserved for deployment-managed schema changes.
+Provision the Relay Controller schema before startup. The service only runs one idempotent schema cleanup: it drops the obsolete `shedlock` table if present. It does not keep migration history; the empty `migrations` directory remains reserved for deployment-managed schema changes.
 
 ## Security Boundary
 
