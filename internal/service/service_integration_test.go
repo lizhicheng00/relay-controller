@@ -1,3 +1,5 @@
+//go:build integration
+
 package service
 
 import (
@@ -34,12 +36,19 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer func() {
+		if err := database.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	der, _ := x509.MarshalPKCS8PrivateKey(privateKey)
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	signer, err := security.NewJWTSigner(base64.StdEncoding.EncodeToString(der))
 	if err != nil {
 		t.Fatal(err)
