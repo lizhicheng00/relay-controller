@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-
-	"relay-controller/internal/secret"
 )
 
 type Config struct {
@@ -39,48 +37,23 @@ func Load() (Config, error) {
 	if err != nil || requestsPerMinute < 1 {
 		return Config{}, fmt.Errorf("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE must be a positive integer")
 	}
-	key := os.Getenv(secret.KeyEnvironment)
-	databasePassword, err := loadSecret("DATASOURCE_PASSWORD", key)
-	if err != nil {
-		return Config{}, err
-	}
-	jwtPrivateKey, err := loadSecret("RELAY_JWT_PRIVATE_KEY", key)
-	if err != nil {
-		return Config{}, err
-	}
-	keyStorePassword, err := loadSecret("SERVER_SSL_KEY_STORE_PASSWORD", key)
-	if err != nil {
-		return Config{}, err
-	}
-	trustStorePassword, err := loadSecret("SERVER_SSL_TRUST_STORE_PASSWORD", key)
-	if err != nil {
-		return Config{}, err
-	}
 	return Config{
 		Database: Database{
 			URL:      os.Getenv("DATASOURCE_URL"),
 			Username: os.Getenv("DATASOURCE_USERNAME"),
-			Password: databasePassword,
+			Password: os.Getenv("DATASOURCE_PASSWORD"),
 		},
 		Relay: Relay{
 			Domain:            os.Getenv("RELAY_DOMAIN"),
 			Region:            os.Getenv("RELAY_REGION"),
 			RequestsPerMinute: requestsPerMinute,
-			JWTPrivateKey:     jwtPrivateKey,
+			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
 		},
 		TLS: TLS{
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
-			KeyStorePassword:   keyStorePassword,
+			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
 			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),
-			TrustStorePassword: trustStorePassword,
+			TrustStorePassword: os.Getenv("SERVER_SSL_TRUST_STORE_PASSWORD"),
 		},
 	}, nil
-}
-
-func loadSecret(name, key string) (string, error) {
-	value, err := secret.Resolve(name, os.Getenv(name), key)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", name, err)
-	}
-	return value, nil
 }

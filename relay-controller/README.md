@@ -67,20 +67,12 @@ Required environment variables:
 | `SERVER_SSL_KEY_STORE_PASSWORD` | Server key store password |
 | `SERVER_SSL_TRUST_STORE_BASE64` | Base64 PKCS12 client CA trust store |
 | `SERVER_SSL_TRUST_STORE_PASSWORD` | Trust store password |
-| `RELAY_CONFIG_DECRYPTION_KEY` | Base64 32-byte key; required when an encrypted value is used |
 
 The HTTPS server listens on port `8443`.
 
 The key store must be PKCS12 and contain the server key and certificate chain. The trust store must be PKCS12 and contain the accepted client CA. TLS 1.2 and 1.3 are enabled, and a trusted client certificate is mandatory.
 
-`DATASOURCE_PASSWORD`, `RELAY_JWT_PRIVATE_KEY`, and both TLS passwords accept either plaintext or an authenticated value in `ENC(v1.<nonce>.<ciphertext>)` format. Production should inject encrypted values and supply `RELAY_CONFIG_DECRYPTION_KEY` separately. Generate and retain the key in a secret manager:
-
-```bash
-export RELAY_CONFIG_DECRYPTION_KEY="$(openssl rand -base64 32)"
-printf %s '<secret>' | go run ./cmd encrypt-secret DATASOURCE_PASSWORD
-```
-
-The command prints the value to assign to the named configuration. Repeat it with the corresponding configuration name for each secret. AES-256-GCM binds ciphertext to that name, so encrypted values cannot be exchanged between fields. Do not store the decryption key beside the encrypted configuration; Base64 alone is not encryption.
+Secrets must reach the process already decrypted. Base64 is encoding, not encryption.
 
 ## Build And Run
 
