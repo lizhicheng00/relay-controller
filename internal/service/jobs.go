@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -21,7 +20,7 @@ const (
 	cleanupInterval       = time.Hour
 	partitionInitialDelay = time.Minute
 	partitionInterval     = time.Hour
-	partitionLock         = "meteringPartitions"
+	partitionLock         = "relay-controller:metering-partitions"
 	hourSeconds           = int64(3600)
 	retentionSeconds      = 7 * 24 * hourSeconds
 	futureHours           = 2
@@ -169,16 +168,15 @@ func (s *Service) CleanupAgedTunnels(ctx context.Context, now int64) (int, error
 }
 
 func (s *Service) MaintainPartitions(ctx context.Context, now int64) error {
-	owner := schedulerOwner()
-	locked, err := s.store.TrySchedulerLock(ctx, partitionLock, owner, 30*time.Minute)
+	lock, err := s.store.TryNamedLock(ctx, partitionLock)
 	if err != nil {
 		return internal("acquire partition lock", err)
 	}
-	if !locked {
+	if lock == nil {
 		return nil
 	}
 	defer func() {
-		if err := s.store.ReleaseSchedulerLock(context.Background(), partitionLock, owner); err != nil {
+		if err := lock.Release(); err != nil {
 			s.log.Error("failed to release partition lock", "error", err)
 		}
 	}()
@@ -290,12 +288,4 @@ func partitionBoundaries(latest *int64, currentHour int64) []int64 {
 
 func partitionName(boundary int64) string {
 	return "p_" + time.Unix(boundary-hourSeconds, 0).UTC().Format("2006010215")
-}
-
-func schedulerOwner() string {
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		hostname = "relay-controller"
-	}
-	return fmt.Sprintf("%s-%d", hostname, os.Getpid())
 }

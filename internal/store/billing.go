@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/lizhicheng00/relay-controller/internal/core"
 )
@@ -116,35 +115,6 @@ func (s *Store) MarkMeteringSettled(ctx context.Context, records []core.Metering
 		return 0, err
 	}
 	return result.RowsAffected()
-}
-
-func (s *Store) TrySchedulerLock(ctx context.Context, name, owner string, duration time.Duration) (bool, error) {
-	seconds := max(1, int(duration.Seconds()))
-	result, err := s.exec.ExecContext(ctx, `UPDATE shedlock
-		SET lock_until = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL ? SECOND),
-			locked_at = UTC_TIMESTAMP(3), locked_by = ?
-		WHERE name = ? AND lock_until <= UTC_TIMESTAMP(3)`, seconds, owner, name)
-	if err != nil {
-		return false, err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil || rows == 1 {
-		return rows == 1, err
-	}
-	result, err = s.exec.ExecContext(ctx, `INSERT IGNORE INTO shedlock
-		(name, lock_until, locked_at, locked_by)
-		VALUES (?, DATE_ADD(UTC_TIMESTAMP(3), INTERVAL ? SECOND), UTC_TIMESTAMP(3), ?)`, name, seconds, owner)
-	if err != nil {
-		return false, err
-	}
-	rows, err = result.RowsAffected()
-	return rows == 1, err
-}
-
-func (s *Store) ReleaseSchedulerLock(ctx context.Context, name, owner string) error {
-	_, err := s.exec.ExecContext(ctx, `UPDATE shedlock SET lock_until = UTC_TIMESTAMP(3)
-		WHERE name = ? AND locked_by = ?`, name, owner)
-	return err
 }
 
 type Partition struct {

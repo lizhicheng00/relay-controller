@@ -23,6 +23,11 @@ type Store struct {
 	exec executor
 }
 
+type NamedLock struct {
+	conn *sql.Conn
+	name string
+}
+
 const (
 	maxOpenConnections = 20
 	maxIdleConnections = 10
@@ -50,6 +55,33 @@ func Open(ctx context.Context, cfg config.Database) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) DB() *sql.DB { return s.db }
+
+func (s *Store) TryNamedLock(ctx context.Context, name string) (*NamedLock, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var acquired bool
+	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, 0)", name).Scan(&acquired); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if !acquired {
+		_ = conn.Close()
+		return nil, nil
+	}
+	return &NamedLock{conn: conn, name: name}, nil
+}
+
+func (l *NamedLock) Release() error {
+	var released bool
+	err := l.conn.QueryRowContext(context.Background(), "SELECT RELEASE_LOCK(?)", l.name).Scan(&released)
+	closeErr := l.conn.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
+}
 
 func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
