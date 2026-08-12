@@ -16,16 +16,40 @@ import (
 
 	"relay-controller/internal/config"
 	"relay-controller/internal/httpapi"
+	"relay-controller/internal/secret"
 	"relay-controller/internal/security"
 	"relay-controller/internal/service"
 	"relay-controller/internal/store"
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		if err := runCommand(os.Args[1:]); err != nil {
+			slog.Error("command failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		slog.Error("relay controller stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func runCommand(arguments []string) error {
+	if len(arguments) != 2 || arguments[0] != "encrypt-secret" {
+		return fmt.Errorf("usage: relay-controller encrypt-secret CONFIG_NAME")
+	}
+	plaintext, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("read secret: %w", err)
+	}
+	encrypted, err := secret.Encrypt(arguments[1], string(plaintext), os.Getenv(secret.KeyEnvironment))
+	if err != nil {
+		return err
+	}
+	fmt.Println(encrypted)
+	return nil
 }
 
 func run() error {
