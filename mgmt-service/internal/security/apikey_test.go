@@ -1,4 +1,4 @@
-package apikey
+package security
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestCodecGeneratesBase36Key(t *testing.T) {
-	codec := NewCodec("01234567890123456789012345678901")
+	codec := NewAPIKeyCodec("01234567890123456789012345678901")
 	seen := make(map[string]struct{})
 	for range 100 {
 		value, mask, digest, err := codec.Generate()
@@ -35,7 +35,7 @@ func TestCodecGeneratesBase36Key(t *testing.T) {
 }
 
 func TestCodecRejectsMalformedKeys(t *testing.T) {
-	codec := NewCodec("01234567890123456789012345678901")
+	codec := NewAPIKeyCodec("01234567890123456789012345678901")
 	for _, value := range []string{
 		"", strings.Repeat("a", 31), strings.Repeat("a", 33),
 		strings.Repeat("A", 32), strings.Repeat("-", 32),
@@ -48,8 +48,8 @@ func TestCodecRejectsMalformedKeys(t *testing.T) {
 
 func TestCodecPepperSeparatesDigests(t *testing.T) {
 	value := strings.Repeat("a", 32)
-	first, _ := NewCodec(strings.Repeat("1", 32)).Digest(value)
-	second, _ := NewCodec(strings.Repeat("2", 32)).Digest(value)
+	first, _ := NewAPIKeyCodec(strings.Repeat("1", 32)).Digest(value)
+	second, _ := NewAPIKeyCodec(strings.Repeat("2", 32)).Digest(value)
 	if bytes.Equal(first, second) {
 		t.Fatal("different peppers produced the same digest")
 	}

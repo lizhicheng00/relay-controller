@@ -34,11 +34,11 @@ The OpenAPI document is available at `/openapi.yaml`. Business APIs use `X-API-K
 ## Structure
 
 ```text
-cmd/mgmt-service     process startup and graceful shutdown
-cmd/migrate          database migration command
-cmd/mgmtctl          existing namespace binding command
+cmd                  process startup and graceful shutdown
+internal/core        business models and application errors
 internal/httpapi     HTTP routes, authentication, errors, and OpenAPI
 internal/service     namespace, login, and API key workflows
+internal/security    API key hashing and random identifiers
 internal/store       MySQL persistence
 internal/session     one-time Redis login sessions
 migrations           base database schema
@@ -54,24 +54,10 @@ migrations           base database schema
 | `REDIS_ADDRESS` | no | Redis address, default `localhost:6379` |
 | `REDIS_PASSWORD` | no | Redis password |
 | `SERVER_ADDRESS` | no | HTTP listen address, default `:8080` |
-| `MIGRATIONS_PATH` | no | Migration directory, default `migrations` |
-
-Run the base migration before starting the service:
+Apply the SQL migration with the deployment database migration tool, then start the service:
 
 ```bash
-go run ./cmd/migrate
-go run ./cmd/mgmt-service
-```
-
-Existing namespace mappings can be bound before their first IAM login:
-
-```bash
-go run ./cmd/mgmtctl bind-namespace \
-  --iam-domain-id domain-id \
-  --iam-user-id user-id \
-  --iam-user-name user-name \
-  --account-namespace ns-existing-account \
-  --namespace ns-existing-user
+go run ./cmd
 ```
 
 ## Checks
@@ -79,5 +65,5 @@ go run ./cmd/mgmtctl bind-namespace \
 ```bash
 go test ./...
 go vet ./...
-go build ./cmd/...
+go build ./cmd
 ```

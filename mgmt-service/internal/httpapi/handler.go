@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,37 +14,39 @@ import (
 	"strings"
 	"time"
 
-	"mgmt-service/internal/domain"
-	"mgmt-service/internal/idgen"
-	"mgmt-service/internal/service"
+	"mgmt-service/internal/core"
+	"mgmt-service/internal/security"
 )
 
 const maxRequestBody = 1 << 20
 
+//go:embed openapi.yaml
+var openAPISpec []byte
+
 type authContextKey struct{}
 
-type Application interface {
-	LoginIAM(context.Context, domain.IAMIdentity) (domain.LoginSession, error)
-	IssueLoginAPIKey(context.Context, string, string, string) (domain.IssuedAPIKey, error)
-	Authenticate(context.Context, string) (domain.AuthContext, error)
+type API interface {
+	LoginIAM(context.Context, core.IAMIdentity) (core.LoginSession, error)
+	IssueLoginAPIKey(context.Context, string, string, string) (core.IssuedAPIKey, error)
+	Authenticate(context.Context, string) (core.AuthContext, error)
 
-	ListAPIKeys(context.Context, domain.Identity, string) ([]domain.APIKey, error)
-	CreateAPIKey(context.Context, domain.Identity, string, string, string) (domain.IssuedAPIKey, error)
-	DeleteAPIKey(context.Context, domain.Identity, string, string) error
+	ListAPIKeys(context.Context, core.Identity, string) ([]core.APIKey, error)
+	CreateAPIKey(context.Context, core.Identity, string, string, string) (core.IssuedAPIKey, error)
+	DeleteAPIKey(context.Context, core.Identity, string, string) error
 
-	CreateNamespace(context.Context, domain.Identity, string) (domain.Namespace, error)
-	GetNamespace(context.Context, domain.Identity, string) (domain.Namespace, error)
-	ListNamespaces(context.Context, domain.Identity) ([]domain.Namespace, error)
-	UpdateNamespace(context.Context, domain.Identity, string, string) (domain.Namespace, error)
-	DeleteNamespace(context.Context, domain.Identity, string) error
+	CreateNamespace(context.Context, core.Identity, string) (core.Namespace, error)
+	GetNamespace(context.Context, core.Identity, string) (core.Namespace, error)
+	ListNamespaces(context.Context, core.Identity) ([]core.Namespace, error)
+	UpdateNamespace(context.Context, core.Identity, string, string) (core.Namespace, error)
+	DeleteNamespace(context.Context, core.Identity, string) error
 }
 
 type Readiness interface {
 	Ping(context.Context) error
 }
 
-type Server struct {
-	service           Application
+type Handler struct {
+	api               API
 	dependencies      []Readiness
 	trustedProxyToken string
 	logger            *slog.Logger
@@ -69,25 +72,25 @@ type errorBody struct {
 	Target  string `json:"target,omitempty"`
 }
 
-func NewServer(
-	application Application,
+func New(
+	application API,
 	dependencies []Readiness,
 	trustedProxyToken string,
 	logger *slog.Logger,
-) *Server {
-	server := &Server{
-		service: application, dependencies: dependencies,
+) *Handler {
+	handler := &Handler{
+		api: application, dependencies: dependencies,
 		trustedProxyToken: trustedProxyToken, logger: logger,
 	}
-	server.handler = server.routes()
-	return server
+	handler.handler = handler.routes()
+	return handler
 }
 
-func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	s.handler.ServeHTTP(response, request)
 }
 
-func (s *Server) routes() http.Handler {
+func (s *Handler) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
@@ -95,24 +98,24 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/iam/login", s.loginIAM)
 	mux.HandleFunc("POST /v1/auth/api-key", s.issueLoginAPIKey)
 
-	mux.Handle("GET /v1/me", s.authenticate(domain.PermissionRead, http.HandlerFunc(s.me)))
-	mux.Handle("GET /v1/namespaces", s.authenticate(domain.PermissionRead, http.HandlerFunc(s.listNamespaces)))
-	mux.Handle("POST /v1/namespaces", s.authenticate(domain.PermissionWrite, http.HandlerFunc(s.createNamespace)))
-	mux.Handle("GET /v1/namespaces/{namespaceId}", s.authenticate(domain.PermissionRead, http.HandlerFunc(s.getNamespace)))
-	mux.Handle("PATCH /v1/namespaces/{namespaceId}", s.authenticate(domain.PermissionWrite, http.HandlerFunc(s.updateNamespace)))
-	mux.Handle("DELETE /v1/namespaces/{namespaceId}", s.authenticate(domain.PermissionWrite, http.HandlerFunc(s.deleteNamespace)))
-	mux.Handle("GET /v1/namespaces/{namespaceId}/api-keys", s.authenticate(domain.PermissionRead, http.HandlerFunc(s.listAPIKeys)))
-	mux.Handle("POST /v1/namespaces/{namespaceId}/api-keys", s.authenticate(domain.PermissionWrite, http.HandlerFunc(s.createAPIKey)))
-	mux.Handle("DELETE /v1/namespaces/{namespaceId}/api-keys/{keyId}", s.authenticate(domain.PermissionWrite, http.HandlerFunc(s.deleteAPIKey)))
+	mux.Handle("GET /v1/me", s.authenticate(core.PermissionRead, http.HandlerFunc(s.me)))
+	mux.Handle("GET /v1/namespaces", s.authenticate(core.PermissionRead, http.HandlerFunc(s.listNamespaces)))
+	mux.Handle("POST /v1/namespaces", s.authenticate(core.PermissionWrite, http.HandlerFunc(s.createNamespace)))
+	mux.Handle("GET /v1/namespaces/{namespaceId}", s.authenticate(core.PermissionRead, http.HandlerFunc(s.getNamespace)))
+	mux.Handle("PATCH /v1/namespaces/{namespaceId}", s.authenticate(core.PermissionWrite, http.HandlerFunc(s.updateNamespace)))
+	mux.Handle("DELETE /v1/namespaces/{namespaceId}", s.authenticate(core.PermissionWrite, http.HandlerFunc(s.deleteNamespace)))
+	mux.Handle("GET /v1/namespaces/{namespaceId}/api-keys", s.authenticate(core.PermissionRead, http.HandlerFunc(s.listAPIKeys)))
+	mux.Handle("POST /v1/namespaces/{namespaceId}/api-keys", s.authenticate(core.PermissionWrite, http.HandlerFunc(s.createAPIKey)))
+	mux.Handle("DELETE /v1/namespaces/{namespaceId}/api-keys/{keyId}", s.authenticate(core.PermissionWrite, http.HandlerFunc(s.deleteAPIKey)))
 	return s.recoverPanic(s.requestContext(mux))
 }
 
-func (s *Server) loginIAM(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) loginIAM(response http.ResponseWriter, request *http.Request) {
 	if !constantTimeEqual(request.Header.Get("X-DevBridge-Proxy-Token"), s.trustedProxyToken) {
 		writeError(response, http.StatusUnauthorized, "UNAUTHORIZED", "authentication failed", "")
 		return
 	}
-	result, err := s.service.LoginIAM(request.Context(), domain.IAMIdentity{
+	result, err := s.api.LoginIAM(request.Context(), core.IAMIdentity{
 		DomainID: request.Header.Get("X-IAM-Domain-Id"),
 		UserID:   request.Header.Get("X-IAM-User-Id"),
 		UserName: request.Header.Get("X-IAM-User-Name"),
@@ -125,13 +128,13 @@ func (s *Server) loginIAM(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, result)
 }
 
-func (s *Server) issueLoginAPIKey(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) issueLoginAPIKey(response http.ResponseWriter, request *http.Request) {
 	var input keyRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "PARAM_INVALID", err.Error(), "body")
 		return
 	}
-	key, err := s.service.IssueLoginAPIKey(
+	key, err := s.api.IssueLoginAPIKey(
 		request.Context(), bearerToken(request.Header.Get("Authorization")),
 		input.Name, input.Permission)
 	if err != nil {
@@ -142,12 +145,12 @@ func (s *Server) issueLoginAPIKey(response http.ResponseWriter, request *http.Re
 	writeJSON(response, http.StatusCreated, key)
 }
 
-func (s *Server) me(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) me(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, authFromContext(request.Context()))
 }
 
-func (s *Server) listNamespaces(response http.ResponseWriter, request *http.Request) {
-	values, err := s.service.ListNamespaces(request.Context(), identityFromContext(request.Context()))
+func (s *Handler) listNamespaces(response http.ResponseWriter, request *http.Request) {
+	values, err := s.api.ListNamespaces(request.Context(), identityFromContext(request.Context()))
 	if err != nil {
 		s.handleError(response, request, err)
 		return
@@ -155,13 +158,13 @@ func (s *Server) listNamespaces(response http.ResponseWriter, request *http.Requ
 	writeJSON(response, http.StatusOK, values)
 }
 
-func (s *Server) createNamespace(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) createNamespace(response http.ResponseWriter, request *http.Request) {
 	var input namespaceRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "PARAM_INVALID", err.Error(), "body")
 		return
 	}
-	value, err := s.service.CreateNamespace(
+	value, err := s.api.CreateNamespace(
 		request.Context(), identityFromContext(request.Context()), input.DisplayName)
 	if err != nil {
 		s.handleError(response, request, err)
@@ -170,8 +173,8 @@ func (s *Server) createNamespace(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusCreated, value)
 }
 
-func (s *Server) getNamespace(response http.ResponseWriter, request *http.Request) {
-	value, err := s.service.GetNamespace(
+func (s *Handler) getNamespace(response http.ResponseWriter, request *http.Request) {
+	value, err := s.api.GetNamespace(
 		request.Context(), identityFromContext(request.Context()), request.PathValue("namespaceId"))
 	if err != nil {
 		s.handleError(response, request, err)
@@ -180,13 +183,13 @@ func (s *Server) getNamespace(response http.ResponseWriter, request *http.Reques
 	writeJSON(response, http.StatusOK, value)
 }
 
-func (s *Server) updateNamespace(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) updateNamespace(response http.ResponseWriter, request *http.Request) {
 	var input namespaceRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "PARAM_INVALID", err.Error(), "body")
 		return
 	}
-	value, err := s.service.UpdateNamespace(
+	value, err := s.api.UpdateNamespace(
 		request.Context(), identityFromContext(request.Context()),
 		request.PathValue("namespaceId"), input.DisplayName)
 	if err != nil {
@@ -196,8 +199,8 @@ func (s *Server) updateNamespace(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, value)
 }
 
-func (s *Server) deleteNamespace(response http.ResponseWriter, request *http.Request) {
-	err := s.service.DeleteNamespace(
+func (s *Handler) deleteNamespace(response http.ResponseWriter, request *http.Request) {
+	err := s.api.DeleteNamespace(
 		request.Context(), identityFromContext(request.Context()), request.PathValue("namespaceId"))
 	if err != nil {
 		s.handleError(response, request, err)
@@ -206,8 +209,8 @@ func (s *Server) deleteNamespace(response http.ResponseWriter, request *http.Req
 	response.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) listAPIKeys(response http.ResponseWriter, request *http.Request) {
-	keys, err := s.service.ListAPIKeys(
+func (s *Handler) listAPIKeys(response http.ResponseWriter, request *http.Request) {
+	keys, err := s.api.ListAPIKeys(
 		request.Context(), identityFromContext(request.Context()), request.PathValue("namespaceId"))
 	if err != nil {
 		s.handleError(response, request, err)
@@ -216,13 +219,13 @@ func (s *Server) listAPIKeys(response http.ResponseWriter, request *http.Request
 	writeJSON(response, http.StatusOK, keys)
 }
 
-func (s *Server) createAPIKey(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) createAPIKey(response http.ResponseWriter, request *http.Request) {
 	var input keyRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "PARAM_INVALID", err.Error(), "body")
 		return
 	}
-	key, err := s.service.CreateAPIKey(
+	key, err := s.api.CreateAPIKey(
 		request.Context(), identityFromContext(request.Context()),
 		request.PathValue("namespaceId"), input.Name, input.Permission)
 	if err != nil {
@@ -232,8 +235,8 @@ func (s *Server) createAPIKey(response http.ResponseWriter, request *http.Reques
 	writeJSON(response, http.StatusCreated, key)
 }
 
-func (s *Server) deleteAPIKey(response http.ResponseWriter, request *http.Request) {
-	err := s.service.DeleteAPIKey(
+func (s *Handler) deleteAPIKey(response http.ResponseWriter, request *http.Request) {
+	err := s.api.DeleteAPIKey(
 		request.Context(), identityFromContext(request.Context()),
 		request.PathValue("namespaceId"), request.PathValue("keyId"))
 	if err != nil {
@@ -243,11 +246,11 @@ func (s *Server) deleteAPIKey(response http.ResponseWriter, request *http.Reques
 	response.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) health(response http.ResponseWriter, _ *http.Request) {
+func (s *Handler) health(response http.ResponseWriter, _ *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) ready(response http.ResponseWriter, request *http.Request) {
+func (s *Handler) ready(response http.ResponseWriter, request *http.Request) {
 	ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
 	defer cancel()
 	for _, dependency := range s.dependencies {
@@ -259,21 +262,21 @@ func (s *Server) ready(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]string{"status": "ready"})
 }
 
-func (s *Server) openapi(response http.ResponseWriter, _ *http.Request) {
+func (s *Handler) openapi(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	response.Header().Set("Cache-Control", "public, max-age=300")
 	response.WriteHeader(http.StatusOK)
 	_, _ = response.Write(openAPISpec)
 }
 
-func (s *Server) authenticate(required string, next http.Handler) http.Handler {
+func (s *Handler) authenticate(required string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		auth, err := s.service.Authenticate(request.Context(), request.Header.Get("X-API-Key"))
+		auth, err := s.api.Authenticate(request.Context(), request.Header.Get("X-API-Key"))
 		if err != nil {
 			s.handleError(response, request, err)
 			return
 		}
-		if required == domain.PermissionWrite && auth.Permission != domain.PermissionWrite {
+		if required == core.PermissionWrite && auth.Permission != core.PermissionWrite {
 			writeError(response, http.StatusForbidden, "FORBIDDEN", "write permission is required", "X-API-Key")
 			return
 		}
@@ -283,9 +286,9 @@ func (s *Server) authenticate(required string, next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) requestContext(next http.Handler) http.Handler {
+func (s *Handler) requestContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		requestID, err := idgen.New("req_")
+		requestID, err := security.NewID("req_")
 		if err != nil {
 			requestID = "unavailable"
 		}
@@ -295,7 +298,7 @@ func (s *Server) requestContext(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) recoverPanic(next http.Handler) http.Handler {
+func (s *Handler) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
@@ -310,34 +313,15 @@ func (s *Server) recoverPanic(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) handleError(response http.ResponseWriter, request *http.Request, err error) {
-	var applicationError *service.Error
-	if !errors.As(err, &applicationError) {
-		s.logger.Error("unhandled request error",
-			"method", request.Method, "path", request.URL.Path, "error", err)
-		writeError(response, http.StatusInternalServerError,
-			"INTERNAL_ERROR", "internal server error", "")
-		return
-	}
-	status := http.StatusInternalServerError
-	switch applicationError.Kind {
-	case service.KindInvalid:
-		status = http.StatusBadRequest
-	case service.KindUnauthorized:
-		status = http.StatusUnauthorized
-	case service.KindNotFound:
-		status = http.StatusNotFound
-	case service.KindConflict:
-		status = http.StatusConflict
-	case service.KindInternal:
+func (s *Handler) handleError(response http.ResponseWriter, request *http.Request, err error) {
+	applicationError := core.AsAppError(err)
+	message := applicationError.Message
+	if applicationError.Status >= http.StatusInternalServerError {
 		s.logger.Error("request failed",
 			"method", request.Method, "path", request.URL.Path, "error", err)
-	}
-	message := applicationError.Message
-	if applicationError.Kind == service.KindInternal {
 		message = "internal server error"
 	}
-	writeError(response, status, applicationError.Code, message, applicationError.Target)
+	writeError(response, applicationError.Status, applicationError.Code, message, applicationError.Target)
 }
 
 func decodeJSON(response http.ResponseWriter, request *http.Request, target any) error {
@@ -365,12 +349,12 @@ func writeError(response http.ResponseWriter, status int, code, message, target 
 	}})
 }
 
-func authFromContext(ctx context.Context) domain.AuthContext {
-	auth, _ := ctx.Value(authContextKey{}).(domain.AuthContext)
+func authFromContext(ctx context.Context) core.AuthContext {
+	auth, _ := ctx.Value(authContextKey{}).(core.AuthContext)
 	return auth
 }
 
-func identityFromContext(ctx context.Context) domain.Identity {
+func identityFromContext(ctx context.Context) core.Identity {
 	return authFromContext(ctx).Identity
 }
 

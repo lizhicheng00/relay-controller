@@ -1,4 +1,4 @@
-package apikey
+package security
 
 import (
 	"crypto/hmac"
@@ -16,15 +16,15 @@ const (
 
 var ErrInvalid = errors.New("invalid API key")
 
-type Codec struct {
+type APIKeyCodec struct {
 	pepper []byte
 }
 
-func NewCodec(pepper string) Codec {
-	return Codec{pepper: []byte(pepper)}
+func NewAPIKeyCodec(pepper string) APIKeyCodec {
+	return APIKeyCodec{pepper: []byte(pepper)}
 }
 
-func (c Codec) Generate() (value string, mask string, hash []byte, err error) {
+func (c APIKeyCodec) Generate() (value string, mask string, hash []byte, err error) {
 	key := make([]byte, keyLength)
 	buffer := make([]byte, keyLength)
 	for index := 0; index < len(key); {
@@ -46,7 +46,7 @@ func (c Codec) Generate() (value string, mask string, hash []byte, err error) {
 	return value, value[:2] + "..." + value[len(value)-4:], c.digest(value), nil
 }
 
-func (c Codec) Digest(value string) ([]byte, error) {
+func (c APIKeyCodec) Digest(value string) ([]byte, error) {
 	if len(value) != keyLength {
 		return nil, ErrInvalid
 	}
@@ -60,7 +60,7 @@ func (c Codec) Digest(value string) ([]byte, error) {
 	return c.digest(value), nil
 }
 
-func (c Codec) digest(value string) []byte {
+func (c APIKeyCodec) digest(value string) []byte {
 	mac := hmac.New(sha256.New, c.pepper)
 	_, _ = mac.Write([]byte(value))
 	return mac.Sum(nil)

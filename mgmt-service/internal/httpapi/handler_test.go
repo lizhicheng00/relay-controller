@@ -12,66 +12,65 @@ import (
 	"testing"
 	"time"
 
-	"mgmt-service/internal/domain"
-	"mgmt-service/internal/service"
+	"mgmt-service/internal/core"
 )
 
 type fakeApplication struct {
-	loginResult domain.LoginSession
-	issueResult domain.IssuedAPIKey
-	auth        domain.AuthContext
+	loginResult core.LoginSession
+	issueResult core.IssuedAPIKey
+	auth        core.AuthContext
 	authError   error
 	issueToken  string
 }
 
 func (f *fakeApplication) LoginIAM(
-	context.Context, domain.IAMIdentity,
-) (domain.LoginSession, error) {
+	context.Context, core.IAMIdentity,
+) (core.LoginSession, error) {
 	return f.loginResult, nil
 }
 func (f *fakeApplication) IssueLoginAPIKey(
 	_ context.Context, token, _, _ string,
-) (domain.IssuedAPIKey, error) {
+) (core.IssuedAPIKey, error) {
 	f.issueToken = token
 	return f.issueResult, nil
 }
-func (f *fakeApplication) Authenticate(context.Context, string) (domain.AuthContext, error) {
+func (f *fakeApplication) Authenticate(context.Context, string) (core.AuthContext, error) {
 	return f.auth, f.authError
 }
 func (f *fakeApplication) ListAPIKeys(
-	context.Context, domain.Identity, string,
-) ([]domain.APIKey, error) {
-	return []domain.APIKey{}, nil
+	context.Context, core.Identity, string,
+) ([]core.APIKey, error) {
+	return []core.APIKey{}, nil
 }
 func (f *fakeApplication) CreateAPIKey(
-	context.Context, domain.Identity, string, string, string,
-) (domain.IssuedAPIKey, error) {
-	return domain.IssuedAPIKey{}, nil
+	context.Context, core.Identity, string, string, string,
+) (core.IssuedAPIKey, error) {
+	return core.IssuedAPIKey{}, nil
 }
-func (f *fakeApplication) DeleteAPIKey(context.Context, domain.Identity, string, string) error {
+func (f *fakeApplication) DeleteAPIKey(context.Context, core.Identity, string, string) error {
 	return nil
 }
 func (f *fakeApplication) CreateNamespace(
-	context.Context, domain.Identity, string,
-) (domain.Namespace, error) {
-	return domain.Namespace{ID: "nsp_new", Name: "ns-u-new", DisplayName: "New"}, nil
+	context.Context, core.Identity, string,
+) (core.Namespace, error) {
+	return core.Namespace{ID: "nsp_new", Name: "ns-u-new", DisplayName: "New"}, nil
 }
 func (f *fakeApplication) GetNamespace(
-	context.Context, domain.Identity, string,
-) (domain.Namespace, error) {
-	return domain.Namespace{}, nil
+	context.Context, core.Identity, string,
+) (core.Namespace, error) {
+	return core.Namespace{}, nil
 }
 func (f *fakeApplication) ListNamespaces(
-	context.Context, domain.Identity,
-) ([]domain.Namespace, error) {
-	return []domain.Namespace{}, nil
+	context.Context, core.Identity,
+) ([]core.Namespace, error) {
+	return []core.Namespace{}, nil
 }
 func (f *fakeApplication) UpdateNamespace(
-	context.Context, domain.Identity, string, string,
-) (domain.Namespace, error) {
-	return domain.Namespace{}, nil
+	context.Context, core.Identity, string, string,
+) (core.Namespace, error) {
+	return core.Namespace{}, nil
 }
-func (f *fakeApplication) DeleteNamespace(context.Context, domain.Identity, string) error {
+func (f *fakeApplication) DeleteNamespace(context.Context, core.Identity, string) error {
 	return nil
 }
 
@@ -95,10 +94,10 @@ func TestLoginRejectsUntrustedIdentityHeaders(t *testing.T) {
 }
 
 func TestLoginReturnsOnlyTemporaryCredential(t *testing.T) {
-	application := &fakeApplication{loginResult: domain.LoginSession{
+	application := &fakeApplication{loginResult: core.LoginSession{
 		LoginToken: strings.Repeat("l", 43),
 		ExpiresAt:  time.Date(2026, 8, 11, 8, 5, 0, 0, time.UTC),
-		Identity: domain.Identity{
+		Identity: core.Identity{
 			AccountNamespace: "ns-account", PrincipalID: "prn-test",
 			NamespaceID: "nsp-test", Namespace: "ns-user",
 		},
@@ -125,8 +124,8 @@ func TestLoginReturnsOnlyTemporaryCredential(t *testing.T) {
 }
 
 func TestLoginTokenIsExchangedSeparately(t *testing.T) {
-	application := &fakeApplication{issueResult: domain.IssuedAPIKey{
-		APIKey: domain.APIKey{
+	application := &fakeApplication{issueResult: core.IssuedAPIKey{
+		APIKey: core.APIKey{
 			ID: "key-test", Name: "default", Mask: "ab...1234", Permission: "write",
 		},
 		Value: strings.Repeat("a", 32),
@@ -148,8 +147,8 @@ func TestLoginTokenIsExchangedSeparately(t *testing.T) {
 }
 
 func TestReadKeyCannotMutateNamespace(t *testing.T) {
-	application := &fakeApplication{auth: domain.AuthContext{
-		Identity: domain.Identity{PrincipalID: "prn-test"}, Permission: domain.PermissionRead,
+	application := &fakeApplication{auth: core.AuthContext{
+		Identity: core.Identity{PrincipalID: "prn-test"}, Permission: core.PermissionRead,
 	}}
 	server := newTestServer(application)
 	request := httptest.NewRequest(http.MethodPost, "/v1/namespaces",
@@ -166,10 +165,7 @@ func TestReadKeyCannotMutateNamespace(t *testing.T) {
 }
 
 func TestAuthenticatedEndpointUsesAPIKeyMiddleware(t *testing.T) {
-	application := &fakeApplication{authError: &service.Error{
-		Kind: service.KindUnauthorized, Code: "UNAUTHORIZED",
-		Message: "authentication failed", Target: "X-API-Key",
-	}}
+	application := &fakeApplication{authError: core.Unauthorized("X-API-Key")}
 	server := newTestServer(application)
 	request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
 	response := httptest.NewRecorder()
@@ -184,7 +180,7 @@ func TestAuthenticatedEndpointUsesAPIKeyMiddleware(t *testing.T) {
 
 func TestReadyReportsDependencyFailure(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewServer(&fakeApplication{}, []Readiness{
+	server := New(&fakeApplication{}, []Readiness{
 		readyStore{}, readyStore{err: errors.New("down")},
 	}, strings.Repeat("t", 32), logger)
 	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
@@ -198,9 +194,9 @@ func TestReadyReportsDependencyFailure(t *testing.T) {
 	assertErrorCode(t, response, "NOT_READY")
 }
 
-func newTestServer(application Application) *Server {
+func newTestServer(application API) *Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewServer(application, []Readiness{readyStore{}}, strings.Repeat("t", 32), logger)
+	return New(application, []Readiness{readyStore{}}, strings.Repeat("t", 32), logger)
 }
 
 func assertErrorCode(t *testing.T, response *httptest.ResponseRecorder, expected string) {

@@ -1,4 +1,4 @@
-package redisstore
+package session
 
 import (
 	"context"
@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"mgmt-service/internal/domain"
-	"mgmt-service/internal/session"
+	"mgmt-service/internal/core"
 )
 
 func TestLoginSessionIsOpaqueAndSingleUse(t *testing.T) {
@@ -17,14 +16,14 @@ func TestLoginSessionIsOpaqueAndSingleUse(t *testing.T) {
 	if address == "" {
 		t.Skip("TEST_REDIS_ADDRESS is not configured")
 	}
-	store := Open(address, "")
+	store, err := Open(context.Background(), address, "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
 	defer store.Close()
 	ctx := context.Background()
-	if err := store.Ping(ctx); err != nil {
-		t.Fatalf("Ping() error = %v", err)
-	}
 
-	identity := domain.Identity{
+	identity := core.Identity{
 		AccountID: "acc-test", PrincipalID: "prn-test",
 		NamespaceID: "nsp-test", Namespace: "ns-test",
 	}
@@ -54,7 +53,7 @@ func TestLoginSessionIsOpaqueAndSingleUse(t *testing.T) {
 		consumed.PrincipalID != identity.PrincipalID {
 		t.Fatalf("Consume() = %#v, %v", consumed, err)
 	}
-	if _, err := store.Consume(ctx, token); !errors.Is(err, session.ErrNotFound) {
+	if _, err := store.Consume(ctx, token); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second Consume() error = %v", err)
 	}
 }

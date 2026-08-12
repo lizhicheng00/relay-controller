@@ -8,9 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"mgmt-service/internal/apikey"
-	"mgmt-service/internal/domain"
-	"mgmt-service/internal/idgen"
+	"mgmt-service/internal/core"
+	"mgmt-service/internal/security"
 	"mgmt-service/internal/session"
 	"mgmt-service/internal/store"
 )
@@ -23,98 +22,117 @@ const (
 )
 
 type Service struct {
-	store    store.Store
-	sessions session.Store
-	codec    apikey.Codec
+	store    repository
+	sessions sessionStore
+	keys     security.APIKeyCodec
 	now      func() time.Time
 	logger   *slog.Logger
 }
 
+type repository interface {
+	ResolveIdentity(context.Context, core.IAMIdentity, core.IdentitySeed) (core.Identity, error)
+	CreateAPIKey(context.Context, string, core.NewAPIKey, int) (core.APIKey, error)
+	DeleteAPIKey(context.Context, string, string, string) error
+	ListAPIKeys(context.Context, string, string) ([]core.APIKey, error)
+	FindCredential(context.Context, []byte) (core.Credential, error)
+	TouchAPIKey(context.Context, string, time.Time) error
+	CreateNamespace(context.Context, core.NewNamespace) (core.Namespace, error)
+	GetNamespace(context.Context, string, string) (core.Namespace, error)
+	ListNamespaces(context.Context, string) ([]core.Namespace, error)
+	UpdateNamespace(context.Context, string, string, string) (core.Namespace, error)
+	DeleteNamespace(context.Context, string, string) error
+}
+
+type sessionStore interface {
+	Create(context.Context, core.Identity, time.Duration) (string, time.Time, error)
+	Consume(context.Context, string) (core.Identity, error)
+}
+
 func New(
-	repository store.Store,
-	sessions session.Store,
-	codec apikey.Codec,
+	repository repository,
+	sessions sessionStore,
+	keys security.APIKeyCodec,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
-		store: repository, sessions: sessions, codec: codec, now: time.Now, logger: logger,
+		store: repository, sessions: sessions, keys: keys, now: time.Now, logger: logger,
 	}
 }
 
 func (s *Service) LoginIAM(
 	ctx context.Context,
-	iam domain.IAMIdentity,
-) (domain.LoginSession, error) {
+	iam core.IAMIdentity,
+) (core.LoginSession, error) {
 	if err := validateIAMIdentity(iam); err != nil {
-		return domain.LoginSession{}, err
+		return core.LoginSession{}, err
 	}
 	seed, err := newIdentitySeed(iam.UserName)
 	if err != nil {
-		return domain.LoginSession{}, internal("failed to generate identity", err)
+		return core.LoginSession{}, core.Internal("failed to generate identity", err)
 	}
 	identity, err := s.store.ResolveIdentity(ctx, iam, seed)
 	if err != nil {
-		return domain.LoginSession{}, s.mapStoreError("failed to resolve IAM identity", err)
+		return core.LoginSession{}, s.mapStoreError("failed to resolve IAM identity", err)
 	}
 	token, expiresAt, err := s.sessions.Create(ctx, identity, loginSessionTTL)
 	if err != nil {
-		return domain.LoginSession{}, internal("failed to create login session", err)
+		return core.LoginSession{}, core.Internal("failed to create login session", err)
 	}
-	return domain.LoginSession{LoginToken: token, ExpiresAt: expiresAt, Identity: identity}, nil
+	return core.LoginSession{LoginToken: token, ExpiresAt: expiresAt, Identity: identity}, nil
 }
 
 func (s *Service) IssueLoginAPIKey(
 	ctx context.Context,
 	loginToken, name, permission string,
-) (domain.IssuedAPIKey, error) {
+) (core.IssuedAPIKey, error) {
 	loginToken = strings.TrimSpace(loginToken)
 	if len(loginToken) < 32 || len(loginToken) > 256 || containsControl(loginToken) {
-		return domain.IssuedAPIKey{}, unauthorizedTarget("Authorization")
+		return core.IssuedAPIKey{}, core.Unauthorized("Authorization")
 	}
 	name, permission, err := validateKeyInput(name, permission)
 	if err != nil {
-		return domain.IssuedAPIKey{}, err
+		return core.IssuedAPIKey{}, err
 	}
 	identity, err := s.sessions.Consume(ctx, loginToken)
 	if err != nil {
 		if errors.Is(err, session.ErrNotFound) {
-			return domain.IssuedAPIKey{}, unauthorizedTarget("Authorization")
+			return core.IssuedAPIKey{}, core.Unauthorized("Authorization")
 		}
-		return domain.IssuedAPIKey{}, internal("failed to consume login session", err)
+		return core.IssuedAPIKey{}, core.Internal("failed to consume login session", err)
 	}
 	return s.issueKey(ctx, identity, identity.NamespaceID, name, permission)
 }
 
-func (s *Service) Authenticate(ctx context.Context, rawKey string) (domain.AuthContext, error) {
-	digest, err := s.codec.Digest(strings.TrimSpace(rawKey))
+func (s *Service) Authenticate(ctx context.Context, rawKey string) (core.AuthContext, error) {
+	digest, err := s.keys.Digest(strings.TrimSpace(rawKey))
 	if err != nil {
-		return domain.AuthContext{}, unauthorizedTarget("X-API-Key")
+		return core.AuthContext{}, core.Unauthorized("X-API-Key")
 	}
 	credential, err := s.store.FindCredential(ctx, digest)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return domain.AuthContext{}, unauthorizedTarget("X-API-Key")
+			return core.AuthContext{}, core.Unauthorized("X-API-Key")
 		}
-		return domain.AuthContext{}, internal("failed to authenticate API key", err)
+		return core.AuthContext{}, core.Internal("failed to authenticate API key", err)
 	}
-	if credential.Permission != domain.PermissionRead && credential.Permission != domain.PermissionWrite {
-		return domain.AuthContext{}, unauthorizedTarget("X-API-Key")
+	if credential.Permission != core.PermissionRead && credential.Permission != core.PermissionWrite {
+		return core.AuthContext{}, core.Unauthorized("X-API-Key")
 	}
 	if err := s.store.TouchAPIKey(ctx, credential.APIKeyID, s.now().UTC()); err != nil {
 		s.logger.Debug("failed to update API key usage", "keyId", credential.APIKeyID, "error", err)
 	}
-	return domain.AuthContext{
+	return core.AuthContext{
 		Identity: credential.Identity, Permission: credential.Permission,
 	}, nil
 }
 
 func (s *Service) ListAPIKeys(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID string,
-) ([]domain.APIKey, error) {
+) ([]core.APIKey, error) {
 	if !validIdentifier(namespaceID, 32) {
-		return nil, invalid("namespaceId", "namespaceId is invalid")
+		return nil, core.Invalid("namespaceId", "namespaceId is invalid")
 	}
 	keys, err := s.store.ListAPIKeys(ctx, identity.PrincipalID, namespaceID)
 	if err != nil {
@@ -125,29 +143,29 @@ func (s *Service) ListAPIKeys(
 
 func (s *Service) CreateAPIKey(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID, name, permission string,
-) (domain.IssuedAPIKey, error) {
+) (core.IssuedAPIKey, error) {
 	if !validIdentifier(namespaceID, 32) {
-		return domain.IssuedAPIKey{}, invalid("namespaceId", "namespaceId is invalid")
+		return core.IssuedAPIKey{}, core.Invalid("namespaceId", "namespaceId is invalid")
 	}
 	name, permission, err := validateKeyInput(name, permission)
 	if err != nil {
-		return domain.IssuedAPIKey{}, err
+		return core.IssuedAPIKey{}, err
 	}
 	return s.issueKey(ctx, identity, namespaceID, name, permission)
 }
 
 func (s *Service) DeleteAPIKey(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID, keyID string,
 ) error {
 	if !validIdentifier(namespaceID, 32) {
-		return invalid("namespaceId", "namespaceId is invalid")
+		return core.Invalid("namespaceId", "namespaceId is invalid")
 	}
 	if !validIdentifier(keyID, 32) {
-		return invalid("keyId", "keyId is invalid")
+		return core.Invalid("keyId", "keyId is invalid")
 	}
 	if err := s.store.DeleteAPIKey(ctx, identity.PrincipalID, namespaceID, keyID); err != nil {
 		return s.mapStoreError("failed to delete API key", err)
@@ -157,83 +175,83 @@ func (s *Service) DeleteAPIKey(
 
 func (s *Service) CreateNamespace(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	displayName string,
-) (domain.Namespace, error) {
+) (core.Namespace, error) {
 	displayName, err := validateDisplayName(displayName)
 	if err != nil {
-		return domain.Namespace{}, err
+		return core.Namespace{}, err
 	}
-	id, err := idgen.New("nsp_")
+	id, err := security.NewID("nsp_")
 	if err != nil {
-		return domain.Namespace{}, internal("failed to generate namespace", err)
+		return core.Namespace{}, core.Internal("failed to generate namespace", err)
 	}
-	name, err := idgen.New("ns-u-")
+	name, err := security.NewID("ns-u-")
 	if err != nil {
-		return domain.Namespace{}, internal("failed to generate namespace", err)
+		return core.Namespace{}, core.Internal("failed to generate namespace", err)
 	}
-	created, err := s.store.CreateNamespace(ctx, domain.NewNamespace{
+	created, err := s.store.CreateNamespace(ctx, core.NewNamespace{
 		ID: id, AccountID: identity.AccountID, PrincipalID: identity.PrincipalID,
 		Name: name, DisplayName: displayName,
 	})
 	if err != nil {
-		return domain.Namespace{}, s.mapStoreError("failed to create namespace", err)
+		return core.Namespace{}, s.mapStoreError("failed to create namespace", err)
 	}
 	return created, nil
 }
 
 func (s *Service) GetNamespace(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID string,
-) (domain.Namespace, error) {
+) (core.Namespace, error) {
 	if !validIdentifier(namespaceID, 32) {
-		return domain.Namespace{}, invalid("namespaceId", "namespaceId is invalid")
+		return core.Namespace{}, core.Invalid("namespaceId", "namespaceId is invalid")
 	}
 	value, err := s.store.GetNamespace(ctx, identity.PrincipalID, namespaceID)
 	if err != nil {
-		return domain.Namespace{}, s.mapStoreError("failed to get namespace", err)
+		return core.Namespace{}, s.mapStoreError("failed to get namespace", err)
 	}
 	return value, nil
 }
 
 func (s *Service) ListNamespaces(
 	ctx context.Context,
-	identity domain.Identity,
-) ([]domain.Namespace, error) {
+	identity core.Identity,
+) ([]core.Namespace, error) {
 	values, err := s.store.ListNamespaces(ctx, identity.PrincipalID)
 	if err != nil {
-		return nil, internal("failed to list namespaces", err)
+		return nil, core.Internal("failed to list namespaces", err)
 	}
 	return values, nil
 }
 
 func (s *Service) UpdateNamespace(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID, displayName string,
-) (domain.Namespace, error) {
+) (core.Namespace, error) {
 	if !validIdentifier(namespaceID, 32) {
-		return domain.Namespace{}, invalid("namespaceId", "namespaceId is invalid")
+		return core.Namespace{}, core.Invalid("namespaceId", "namespaceId is invalid")
 	}
 	displayName, err := validateDisplayName(displayName)
 	if err != nil {
-		return domain.Namespace{}, err
+		return core.Namespace{}, err
 	}
 	value, err := s.store.UpdateNamespace(ctx, identity.PrincipalID, namespaceID, displayName)
 	if err != nil {
-		return domain.Namespace{}, s.mapStoreError("failed to update namespace", err)
+		return core.Namespace{}, s.mapStoreError("failed to update namespace", err)
 	}
 	return value, nil
 }
 
 func (s *Service) DeleteNamespace(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID string,
 ) error {
 	if !validIdentifier(namespaceID, 32) {
-		return invalid("namespaceId", "namespaceId is invalid")
+		return core.Invalid("namespaceId", "namespaceId is invalid")
 	}
 	if err := s.store.DeleteNamespace(ctx, identity.PrincipalID, namespaceID); err != nil {
 		return s.mapStoreError("failed to delete namespace", err)
@@ -243,76 +261,69 @@ func (s *Service) DeleteNamespace(
 
 func (s *Service) issueKey(
 	ctx context.Context,
-	identity domain.Identity,
+	identity core.Identity,
 	namespaceID, name, permission string,
-) (domain.IssuedAPIKey, error) {
-	id, err := idgen.New("key_")
+) (core.IssuedAPIKey, error) {
+	id, err := security.NewID("key_")
 	if err != nil {
-		return domain.IssuedAPIKey{}, internal("failed to generate API key", err)
+		return core.IssuedAPIKey{}, core.Internal("failed to generate API key", err)
 	}
-	value, mask, digest, err := s.codec.Generate()
+	value, mask, digest, err := s.keys.Generate()
 	if err != nil {
-		return domain.IssuedAPIKey{}, internal("failed to generate API key", err)
+		return core.IssuedAPIKey{}, core.Internal("failed to generate API key", err)
 	}
-	created, err := s.store.CreateAPIKey(ctx, identity.PrincipalID, domain.NewAPIKey{
+	created, err := s.store.CreateAPIKey(ctx, identity.PrincipalID, core.NewAPIKey{
 		ID: id, NamespaceID: namespaceID, Name: name, Mask: mask,
 		SecretHash: digest, Permission: permission,
 	}, maxKeysPerNamespace)
 	if err != nil {
 		if errors.Is(err, store.ErrConflict) {
-			return domain.IssuedAPIKey{}, &Error{
-				Kind: KindConflict, Code: "API_KEY_NAME_CONFLICT",
-				Message: "an API key with this name already exists in the namespace", Target: "name",
-			}
+			return core.IssuedAPIKey{}, core.Conflict("API_KEY_NAME_CONFLICT",
+				"an API key with this name already exists in the namespace", "name")
 		}
-		return domain.IssuedAPIKey{}, s.mapStoreError("failed to issue API key", err)
+		return core.IssuedAPIKey{}, s.mapStoreError("failed to issue API key", err)
 	}
-	return domain.IssuedAPIKey{APIKey: created, Value: value}, nil
+	return core.IssuedAPIKey{APIKey: created, Value: value}, nil
 }
 
 func (s *Service) mapStoreError(operation string, err error) error {
 	switch {
 	case errors.Is(err, store.ErrUnauthorized):
-		return unauthorizedTarget("X-API-Key")
+		return core.Unauthorized("X-API-Key")
 	case errors.Is(err, store.ErrNotFound):
-		return &Error{Kind: KindNotFound, Code: "NOT_FOUND", Message: "resource not found"}
+		return core.NotFound()
 	case errors.Is(err, store.ErrConflict):
-		return &Error{Kind: KindConflict, Code: "RESOURCE_CONFLICT", Message: "resource conflicts with existing data"}
+		return core.Conflict("RESOURCE_CONFLICT", "resource conflicts with existing data", "")
 	case errors.Is(err, store.ErrKeyLimit):
-		return &Error{
-			Kind: KindConflict, Code: "API_KEY_LIMIT",
-			Message: "a namespace can have at most 5 API keys",
-		}
+		return core.Conflict("API_KEY_LIMIT", "a namespace can have at most 5 API keys", "")
 	case errors.Is(err, store.ErrDefaultNamespace):
-		return &Error{
-			Kind: KindConflict, Code: "DEFAULT_NAMESPACE",
-			Message: "the default namespace cannot be deleted", Target: "namespaceId",
-		}
+		return core.Conflict("DEFAULT_NAMESPACE",
+			"the default namespace cannot be deleted", "namespaceId")
 	default:
-		return internal(operation, err)
+		return core.Internal(operation, err)
 	}
 }
 
-func newIdentitySeed(userName string) (domain.IdentitySeed, error) {
-	accountID, err := idgen.New("acc_")
+func newIdentitySeed(userName string) (core.IdentitySeed, error) {
+	accountID, err := security.NewID("acc_")
 	if err != nil {
-		return domain.IdentitySeed{}, err
+		return core.IdentitySeed{}, err
 	}
-	accountNamespace, err := idgen.New("ns-a-")
+	accountNamespace, err := security.NewID("ns-a-")
 	if err != nil {
-		return domain.IdentitySeed{}, err
+		return core.IdentitySeed{}, err
 	}
-	principalID, err := idgen.New("prn_")
+	principalID, err := security.NewID("prn_")
 	if err != nil {
-		return domain.IdentitySeed{}, err
+		return core.IdentitySeed{}, err
 	}
-	namespaceID, err := idgen.New("nsp_")
+	namespaceID, err := security.NewID("nsp_")
 	if err != nil {
-		return domain.IdentitySeed{}, err
+		return core.IdentitySeed{}, err
 	}
-	namespace, err := idgen.New("ns-u-")
+	namespace, err := security.NewID("ns-u-")
 	if err != nil {
-		return domain.IdentitySeed{}, err
+		return core.IdentitySeed{}, err
 	}
 	displayName := strings.TrimSpace(userName)
 	if displayName == "" {
@@ -320,22 +331,22 @@ func newIdentitySeed(userName string) (domain.IdentitySeed, error) {
 	} else if runes := []rune(displayName); len(runes) > 64 {
 		displayName = string(runes[:64])
 	}
-	return domain.IdentitySeed{
+	return core.IdentitySeed{
 		AccountID: accountID, AccountNamespace: accountNamespace, PrincipalID: principalID,
 		NamespaceID: namespaceID, Namespace: namespace, DisplayName: displayName,
 	}, nil
 }
 
-func validateIAMIdentity(identity domain.IAMIdentity) error {
+func validateIAMIdentity(identity core.IAMIdentity) error {
 	if !validIdentifier(identity.DomainID, 128) {
-		return invalid("X-IAM-Domain-Id", "IAM domain ID is invalid")
+		return core.Invalid("X-IAM-Domain-Id", "IAM domain ID is invalid")
 	}
 	if !validIdentifier(identity.UserID, 128) {
-		return invalid("X-IAM-User-Id", "IAM user ID is invalid")
+		return core.Invalid("X-IAM-User-Id", "IAM user ID is invalid")
 	}
 	if !utf8.ValidString(identity.UserName) || utf8.RuneCountInString(identity.UserName) > 128 ||
 		containsControl(identity.UserName) {
-		return invalid("X-IAM-User-Name", "IAM user name is invalid")
+		return core.Invalid("X-IAM-User-Name", "IAM user name is invalid")
 	}
 	return nil
 }
@@ -346,14 +357,14 @@ func validateKeyInput(name, permission string) (string, string, error) {
 		name = defaultKeyName
 	}
 	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > 64 || containsControl(name) {
-		return "", "", invalid("name", "name is invalid")
+		return "", "", core.Invalid("name", "name is invalid")
 	}
 	permission = strings.ToLower(strings.TrimSpace(permission))
 	if permission == "" {
-		permission = domain.PermissionWrite
+		permission = core.PermissionWrite
 	}
-	if permission != domain.PermissionRead && permission != domain.PermissionWrite {
-		return "", "", invalid("permission", "permission must be read or write")
+	if permission != core.PermissionRead && permission != core.PermissionWrite {
+		return "", "", core.Invalid("permission", "permission must be read or write")
 	}
 	return name, permission, nil
 }
@@ -362,7 +373,7 @@ func validateDisplayName(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > 64 ||
 		containsControl(value) {
-		return "", invalid("displayName", "displayName is invalid")
+		return "", core.Invalid("displayName", "displayName is invalid")
 	}
 	return value, nil
 }

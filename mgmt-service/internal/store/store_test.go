@@ -1,4 +1,4 @@
-package mysqlstore
+package store
 
 import (
 	"bytes"
@@ -11,8 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"mgmt-service/internal/domain"
-	"mgmt-service/internal/store"
+	"mgmt-service/internal/core"
 )
 
 func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
@@ -20,7 +19,7 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_DSN is not configured")
 	}
-	repository, err := Open(dsn)
+	repository, err := Open(context.Background(), dsn)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -31,10 +30,10 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	}
 
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
-	iam := domain.IAMIdentity{
+	iam := core.IAMIdentity{
 		DomainID: "domain-" + suffix, UserID: "user-" + suffix, UserName: "integration-user",
 	}
-	seed := domain.IdentitySeed{
+	seed := core.IdentitySeed{
 		AccountID: "acc_" + suffix, AccountNamespace: "ns-a-" + suffix,
 		PrincipalID: "prn_" + suffix, NamespaceID: "nsp_" + suffix,
 		Namespace: "ns-u-" + suffix, DisplayName: "Default",
@@ -43,7 +42,7 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveIdentity() error = %v", err)
 	}
-	repeated, err := repository.ResolveIdentity(ctx, iam, domain.IdentitySeed{
+	repeated, err := repository.ResolveIdentity(ctx, iam, core.IdentitySeed{
 		AccountID: "acc_unused", AccountNamespace: "ns-a-unused-" + suffix,
 		PrincipalID: "prn_unused", NamespaceID: "nsp_unused",
 		Namespace: "ns-u-unused-" + suffix, DisplayName: "Unused",
@@ -59,7 +58,7 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	if err != nil || !defaultNamespace.Default {
 		t.Fatalf("GetNamespace(default) = %#v, %v", defaultNamespace, err)
 	}
-	secondary, err := repository.CreateNamespace(ctx, domain.NewNamespace{
+	secondary, err := repository.CreateNamespace(ctx, core.NewNamespace{
 		ID: "nsp_s_" + suffix, AccountID: identity.AccountID, PrincipalID: identity.PrincipalID,
 		Name: "ns-u-s-" + suffix, DisplayName: "Staging",
 	})
@@ -74,7 +73,7 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	if err != nil || len(namespaces) != 2 || !namespaces[0].Default {
 		t.Fatalf("ListNamespaces() = %#v, %v", namespaces, err)
 	}
-	if err := repository.DeleteNamespace(ctx, identity.PrincipalID, identity.NamespaceID); !errors.Is(err, store.ErrDefaultNamespace) {
+	if err := repository.DeleteNamespace(ctx, identity.PrincipalID, identity.NamespaceID); !errors.Is(err, ErrDefaultNamespace) {
 		t.Fatalf("DeleteNamespace(default) error = %v", err)
 	}
 
@@ -88,20 +87,20 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatalf("FindCredential() error = %v", err)
 	}
 	if credential.APIKeyID != created.ID || credential.NamespaceID != secondary.ID ||
-		credential.Permission != domain.PermissionWrite {
+		credential.Permission != core.PermissionWrite {
 		t.Fatalf("FindCredential() = %#v", credential)
 	}
 	duplicate := integrationKey("key_b_"+suffix, secondary.ID, first.Name, 2)
-	if _, err := repository.CreateAPIKey(ctx, identity.PrincipalID, duplicate, 2); !errors.Is(err, store.ErrConflict) {
+	if _, err := repository.CreateAPIKey(ctx, identity.PrincipalID, duplicate, 2); !errors.Is(err, ErrConflict) {
 		t.Fatalf("CreateAPIKey(duplicate name) error = %v", err)
 	}
 	second := integrationKey("key_c_"+suffix, secondary.ID, "read-only", 3)
-	second.Permission = domain.PermissionRead
+	second.Permission = core.PermissionRead
 	if _, err := repository.CreateAPIKey(ctx, identity.PrincipalID, second, 2); err != nil {
 		t.Fatalf("CreateAPIKey(second) error = %v", err)
 	}
 	third := integrationKey("key_d_"+suffix, secondary.ID, "third", 4)
-	if _, err := repository.CreateAPIKey(ctx, identity.PrincipalID, third, 2); !errors.Is(err, store.ErrKeyLimit) {
+	if _, err := repository.CreateAPIKey(ctx, identity.PrincipalID, third, 2); !errors.Is(err, ErrKeyLimit) {
 		t.Fatalf("CreateAPIKey(over limit) error = %v", err)
 	}
 	keys, err := repository.ListAPIKeys(ctx, identity.PrincipalID, secondary.ID)
@@ -114,17 +113,17 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	if err := repository.DeleteAPIKey(ctx, identity.PrincipalID, secondary.ID, first.ID); err != nil {
 		t.Fatalf("DeleteAPIKey() error = %v", err)
 	}
-	if _, err := repository.FindCredential(ctx, first.SecretHash); !errors.Is(err, store.ErrNotFound) {
+	if _, err := repository.FindCredential(ctx, first.SecretHash); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("FindCredential(deleted) error = %v", err)
 	}
 	if err := repository.DeleteNamespace(ctx, identity.PrincipalID, secondary.ID); err != nil {
 		t.Fatalf("DeleteNamespace() error = %v", err)
 	}
-	if _, err := repository.GetNamespace(ctx, identity.PrincipalID, secondary.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := repository.GetNamespace(ctx, identity.PrincipalID, secondary.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetNamespace(deleted) error = %v", err)
 	}
 
-	concurrent, err := repository.CreateNamespace(ctx, domain.NewNamespace{
+	concurrent, err := repository.CreateNamespace(ctx, core.NewNamespace{
 		ID: "nsp_c_" + suffix, AccountID: identity.AccountID, PrincipalID: identity.PrincipalID,
 		Name: "ns-u-c-" + suffix, DisplayName: "Concurrent",
 	})
@@ -137,18 +136,18 @@ func TestStoreIdentityNamespaceAndAPIKeyLifecycle(t *testing.T) {
 	}
 }
 
-func integrationKey(id, namespaceID, name string, hashByte byte) domain.NewAPIKey {
-	return domain.NewAPIKey{
+func integrationKey(id, namespaceID, name string, hashByte byte) core.NewAPIKey {
+	return core.NewAPIKey{
 		ID: id, NamespaceID: namespaceID, Name: name, Mask: "ab...1234",
-		SecretHash: bytes.Repeat([]byte{hashByte}, 32), Permission: domain.PermissionWrite,
+		SecretHash: bytes.Repeat([]byte{hashByte}, 32), Permission: core.PermissionWrite,
 	}
 }
 
 func assertConcurrentKeyLimit(
 	t *testing.T,
 	repository *Store,
-	identity domain.Identity,
-	namespace domain.Namespace,
+	identity core.Identity,
+	namespace core.Namespace,
 	suffix string,
 ) {
 	t.Helper()
@@ -172,7 +171,7 @@ func assertConcurrentKeyLimit(
 				context.Background(), identity.PrincipalID, key, 5,
 			); err == nil {
 				successes.Add(1)
-			} else if !errors.Is(err, store.ErrKeyLimit) {
+			} else if !errors.Is(err, ErrKeyLimit) {
 				errorsFound <- err
 			}
 		}()
