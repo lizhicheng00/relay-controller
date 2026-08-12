@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
+	"relay-controller/internal/core"
 )
 
 func (s *Store) CreateAccountIfAbsent(ctx context.Context, namespace, planCode string) error {

@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/config"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/security"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/store"
+	"relay-controller/internal/config"
+	"relay-controller/internal/core"
+	"relay-controller/internal/security"
+	"relay-controller/internal/store"
 )
 
 func TestServiceAgainstMariaDB(t *testing.T) {

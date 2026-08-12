@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
+	"relay-controller/internal/core"
 )
 
 const tunnelColumns = `t._id, t.name, t.tunnel_id, t.tunnel_code, t.cluster_id,

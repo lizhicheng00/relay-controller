@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/config"
+	"relay-controller/internal/config"
 )
 
 func TestDataSourceNameIgnoresJDBCParameters(t *testing.T) {

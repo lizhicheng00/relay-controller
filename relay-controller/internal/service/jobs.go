@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/store"
+	"relay-controller/internal/core"
+	"relay-controller/internal/store"
 )
 
 const (

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/config"
+	"relay-controller/internal/config"
 )
 
 type executor interface {

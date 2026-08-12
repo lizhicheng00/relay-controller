@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/security"
-	"github.com/lizhicheng00/relay-controller/relay-controller/internal/store"
+	"relay-controller/internal/core"
+	"relay-controller/internal/security"
+	"relay-controller/internal/store"
 )
 
 const (
