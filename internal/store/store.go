@@ -107,6 +107,7 @@ func IsDuplicate(err error) bool {
 func dataSourceName(cfg config.Database) string {
 	address := strings.TrimPrefix(cfg.URL, "jdbc:mariadb://")
 	address = strings.TrimPrefix(address, "jdbc:mysql://")
+	address, _, _ = strings.Cut(address, "?")
 	address, database, _ := strings.Cut(address, "/")
 
 	driverConfig := mysql.NewConfig()
