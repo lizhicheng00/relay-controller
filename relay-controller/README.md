@@ -39,7 +39,7 @@ GET    /limits
 ## Structure
 
 ```text
-cmd/relay-controller   process startup and graceful shutdown
+cmd                    process startup and graceful shutdown
 internal/httpapi       HTTP routing, JSON errors, recovery, rate limiting
 internal/service       tunnel, port, token, billing, cleanup workflows
 internal/core          business models and deterministic rules
@@ -81,7 +81,7 @@ Go 1.24 or newer is required.
 ```bash
 go test ./...
 go vet ./...
-go build -trimpath -ldflags '-s -w' -o bin/relay-controller ./cmd/relay-controller
+go build -trimpath -ldflags '-s -w' -o bin/relay-controller ./cmd
 ./bin/relay-controller
 ```
 
@@ -99,7 +99,7 @@ export SERVER_SSL_KEY_STORE_BASE64='<Base64 PKCS12>'
 export SERVER_SSL_KEY_STORE_PASSWORD='<secret>'
 export SERVER_SSL_TRUST_STORE_BASE64='<Base64 PKCS12>'
 export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
-go run ./cmd/relay-controller
+go run ./cmd
 ```
 
 The service does not create or migrate the shared database. Provision the Relay Controller schema before startup. The empty `migrations` directory remains reserved for deployment-managed schema changes.
