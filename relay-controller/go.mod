@@ -1,4 +1,4 @@
-module github.com/lizhicheng00/relay-controller
+module github.com/lizhicheng00/relay-controller/relay-controller
 
 go 1.24.0
 

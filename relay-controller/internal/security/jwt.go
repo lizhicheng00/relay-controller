@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/lizhicheng00/relay-controller/internal/core"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
 )
 
 type JWTSigner struct {

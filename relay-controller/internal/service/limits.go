@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"github.com/lizhicheng00/relay-controller/internal/core"
-	"github.com/lizhicheng00/relay-controller/internal/store"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/store"
 )
 
 func (s *Service) GetLimits(ctx context.Context, accountNamespace string) (core.LimitsResponse, error) {

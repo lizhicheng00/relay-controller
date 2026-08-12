@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lizhicheng00/relay-controller/internal/core"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/lizhicheng00/relay-controller/internal/config"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/config"
 	"software.sslmate.com/src/go-pkcs12"
 )
 

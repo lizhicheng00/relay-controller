@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lizhicheng00/relay-controller/internal/core"
-	"github.com/lizhicheng00/relay-controller/internal/store"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/store"
 )
 
 func (s *Service) CreatePort(ctx context.Context, namespace, tunnelID string, request core.CreateTunnelPortRequest) (core.TunnelPortResponse, error) {

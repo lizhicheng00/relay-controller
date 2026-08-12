@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lizhicheng00/relay-controller/internal/core"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
 )
 
 func TestJWTSignerProducesExpectedClaims(t *testing.T) {

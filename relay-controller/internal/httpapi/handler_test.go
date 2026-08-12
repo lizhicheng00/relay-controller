@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lizhicheng00/relay-controller/internal/core"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/core"
 )
 
 func TestCreateTunnelReturnsDirectResponse(t *testing.T) {

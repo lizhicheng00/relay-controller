@@ -14,11 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lizhicheng00/relay-controller/internal/config"
-	"github.com/lizhicheng00/relay-controller/internal/httpapi"
-	"github.com/lizhicheng00/relay-controller/internal/security"
-	"github.com/lizhicheng00/relay-controller/internal/service"
-	"github.com/lizhicheng00/relay-controller/internal/store"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/config"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/httpapi"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/security"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/service"
+	"github.com/lizhicheng00/relay-controller/relay-controller/internal/store"
 )
 
 func main() {
