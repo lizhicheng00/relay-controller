@@ -8,11 +8,10 @@ servers:
 paths:
   /v1/api-key:
     post:
-      summary: Get the API key for a cloud user
+      summary: Get a cloud user's default API key
       description: >-
-        The trusted identity layer calls this endpoint after browser login. The same domain and
-        user always receive the same API key and namespace. Users in one domain share an account
-        namespace. Clients must not call this endpoint directly.
+        Called by the trusted identity layer after browser login. The service creates the
+        user's namespace on first use and returns the same default API key on later calls.
       security:
         - trustedIdentityProxy: []
       parameters:
@@ -20,12 +19,10 @@ paths:
         - $ref: '#/components/parameters/UserId'
       responses:
         '200':
-          description: User namespace and API key
+          description: User identity, namespaces, and default API key
           headers:
             Cache-Control:
-              schema:
-                type: string
-                example: no-store
+              $ref: '#/components/headers/NoStore'
           content:
             application/json:
               schema:
@@ -50,6 +47,83 @@ paths:
                 $ref: '#/components/schemas/Identity'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/api-keys:
+    get:
+      summary: List API keys for the current namespace
+      description: Returns metadata and masks only. Complete API key values are never listed.
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: API keys ordered with the default key first
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 5
+                items:
+                  $ref: '#/components/schemas/APIKey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      summary: Create an additional API key
+      description: >-
+        Creates one of at most four additional API keys. The complete value is returned only
+        in this response and cannot be retrieved later.
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyRequest'
+      responses:
+        '201':
+          description: Additional API key created
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedAPIKey'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/api-keys/{keyId}:
+    delete:
+      summary: Delete an additional API key
+      description: The default API key cannot be deleted.
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^key_[a-z2-7]{26}$'
+      responses:
+        '204':
+          description: API key deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
 components:
@@ -80,6 +154,11 @@ components:
         type: string
         minLength: 1
         maxLength: 128
+  headers:
+    NoStore:
+      schema:
+        type: string
+        example: no-store
   schemas:
     Identity:
       type: object
@@ -100,8 +179,44 @@ components:
           required: [apiKey]
           properties:
             apiKey:
-              type: string
-              pattern: '^[a-z0-9]{32}$'
+              $ref: '#/components/schemas/APIKeyValue'
+    APIKey:
+      type: object
+      required: [id, name, mask, isDefault, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mask:
+          type: string
+          example: abcd...1234
+        isDefault:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    IssuedAPIKey:
+      allOf:
+        - $ref: '#/components/schemas/APIKey'
+        - type: object
+          required: [apiKey]
+          properties:
+            apiKey:
+              $ref: '#/components/schemas/APIKeyValue'
+    APIKeyValue:
+      type: string
+      pattern: '^[a-z0-9]{32}$'
+    CreateAPIKeyRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: A client or usage-scenario label. The name `default` is reserved.
     ErrorResponse:
       type: object
       required: [error]
@@ -118,13 +233,25 @@ components:
               type: string
   responses:
     BadRequest:
-      description: Invalid domain or user identity
+      description: Invalid request
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
       description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: API key not found in the current namespace
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: API key name, limit, or default-key conflict
       content:
         application/json:
           schema:

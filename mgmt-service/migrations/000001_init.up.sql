@@ -8,19 +8,35 @@ CREATE TABLE domain_account (
     PRIMARY KEY (id),
     UNIQUE KEY uk_domain_account_domain (domain_id),
     UNIQUE KEY uk_domain_account_namespace (account_namespace)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE user_identity (
     account_id VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
     user_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
-    api_key_hash BINARY(32) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'active',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (account_id, user_id),
     UNIQUE KEY uk_user_identity_namespace (namespace),
-    UNIQUE KEY uk_user_identity_api_key (api_key_hash),
     CONSTRAINT fk_user_identity_account
         FOREIGN KEY (account_id) REFERENCES domain_account (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE api_key (
+    id VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
+    namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
+    slot TINYINT UNSIGNED NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    key_mask VARCHAR(16) NOT NULL,
+    key_hash BINARY(32) NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_api_key_namespace_slot (namespace, slot),
+    UNIQUE KEY uk_api_key_namespace_name (namespace, name),
+    UNIQUE KEY uk_api_key_hash (key_hash),
+    CONSTRAINT chk_api_key_slot CHECK (slot <= 4),
+    CONSTRAINT fk_api_key_identity
+        FOREIGN KEY (namespace) REFERENCES user_identity (namespace)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

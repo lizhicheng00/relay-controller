@@ -8,9 +8,9 @@ import (
 
 func TestAPIKeyIsStablePerIdentity(t *testing.T) {
 	keys := NewAPIKeys(strings.Repeat("s", 32))
-	first, firstDigest := keys.For("domain-1", "user-1")
-	second, secondDigest := keys.For("domain-1", "user-1")
-	other, _ := keys.For("domain-1", "user-2")
+	first, firstDigest := keys.DefaultFor("domain-1", "user-1")
+	second, secondDigest := keys.DefaultFor("domain-1", "user-1")
+	other, _ := keys.DefaultFor("domain-1", "user-2")
 
 	if first != second || !bytes.Equal(firstDigest, secondDigest) {
 		t.Fatal("same identity produced different API keys")
@@ -22,6 +22,28 @@ func TestAPIKeyIsStablePerIdentity(t *testing.T) {
 	parsed, err := DigestAPIKey(first)
 	if err != nil || !bytes.Equal(parsed, firstDigest) {
 		t.Fatalf("DigestAPIKey() = %x, %v", parsed, err)
+	}
+}
+
+func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
+	keys := NewAPIKeys(strings.Repeat("s", 32))
+	first, firstDigest, err := keys.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := keys.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second || len(first) != apiKeyLength {
+		t.Fatalf("random API keys = %q, %q", first, second)
+	}
+	parsed, err := DigestAPIKey(first)
+	if err != nil || !bytes.Equal(parsed, firstDigest) {
+		t.Fatalf("DigestAPIKey() = %x, %v", parsed, err)
+	}
+	if mask := MaskAPIKey(first); mask != first[:4]+"..."+first[len(first)-4:] {
+		t.Fatalf("MaskAPIKey() = %q", mask)
 	}
 }
 

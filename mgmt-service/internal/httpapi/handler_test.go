@@ -17,8 +17,15 @@ import (
 type fakeAPI struct {
 	provisioned core.ProvisionedCredential
 	identity    core.Identity
+	keys        []core.APIKey
+	issued      core.IssuedAPIKey
 	assertion   core.IdentityAssertion
+	createdName string
+	deletedID   string
 	authError   error
+	listError   error
+	createError error
+	deleteError error
 }
 
 func (f *fakeAPI) ProvisionAPIKey(
@@ -31,6 +38,24 @@ func (f *fakeAPI) ProvisionAPIKey(
 
 func (f *fakeAPI) Authenticate(context.Context, string) (core.Identity, error) {
 	return f.identity, f.authError
+}
+
+func (f *fakeAPI) ListAPIKeys(context.Context, core.Identity) ([]core.APIKey, error) {
+	return f.keys, f.listError
+}
+
+func (f *fakeAPI) CreateAPIKey(
+	_ context.Context,
+	_ core.Identity,
+	name string,
+) (core.IssuedAPIKey, error) {
+	f.createdName = name
+	return f.issued, f.createError
+}
+
+func (f *fakeAPI) DeleteAPIKey(_ context.Context, _ core.Identity, keyID string) error {
+	f.deletedID = keyID
+	return f.deleteError
 }
 
 type readyStore struct{ err error }
@@ -100,6 +125,62 @@ func TestMeUsesAPIKeyIdentity(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result != identity {
 		t.Fatalf("identity = %#v, %v", result, err)
 	}
+}
+
+func TestAPIKeyManagementRoutes(t *testing.T) {
+	identity := core.Identity{Namespace: "ns-u-test"}
+	application := &fakeAPI{
+		identity: identity,
+		keys:     []core.APIKey{{ID: "key_default", Name: "default", Default: true}},
+		issued: core.IssuedAPIKey{
+			APIKey: core.APIKey{ID: "key_created", Name: "local-cli"},
+			Value:  strings.Repeat("a", 32),
+		},
+	}
+	server := newTestServer(application)
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/v1/api-keys", nil)
+	listRequest.Header.Set("X-API-Key", strings.Repeat("a", 32))
+	listResponse := httptest.NewRecorder()
+	server.ServeHTTP(listResponse, listRequest)
+	if listResponse.Code != http.StatusOK || !strings.Contains(listResponse.Body.String(), "key_default") {
+		t.Fatalf("list status = %d, body = %s", listResponse.Code, listResponse.Body)
+	}
+
+	createRequest := httptest.NewRequest(http.MethodPost, "/v1/api-keys",
+		strings.NewReader(`{"name":"local-cli"}`))
+	createRequest.Header.Set("X-API-Key", strings.Repeat("a", 32))
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse := httptest.NewRecorder()
+	server.ServeHTTP(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated || application.createdName != "local-cli" ||
+		!strings.Contains(createResponse.Body.String(), strings.Repeat("a", 32)) {
+		t.Fatalf("create status = %d, name = %q, body = %s",
+			createResponse.Code, application.createdName, createResponse.Body)
+	}
+
+	deleteRequest := httptest.NewRequest(http.MethodDelete, "/v1/api-keys/key_created", nil)
+	deleteRequest.Header.Set("X-API-Key", strings.Repeat("a", 32))
+	deleteResponse := httptest.NewRecorder()
+	server.ServeHTTP(deleteResponse, deleteRequest)
+	if deleteResponse.Code != http.StatusNoContent || application.deletedID != "key_created" {
+		t.Fatalf("delete status = %d, key = %q", deleteResponse.Code, application.deletedID)
+	}
+}
+
+func TestCreateAPIKeyRejectsInvalidJSON(t *testing.T) {
+	server := newTestServer(&fakeAPI{})
+	request := httptest.NewRequest(http.MethodPost, "/v1/api-keys",
+		strings.NewReader(`{"name":"cli","unknown":true}`))
+	request.Header.Set("X-API-Key", strings.Repeat("a", 32))
+	response := httptest.NewRecorder()
+
+	server.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
+	}
+	assertErrorCode(t, response, "PARAM_INVALID")
 }
 
 func TestReadyReportsDependencyFailure(t *testing.T) {

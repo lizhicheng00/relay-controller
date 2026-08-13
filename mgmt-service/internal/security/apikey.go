@@ -2,6 +2,7 @@ package security
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"math/big"
@@ -9,6 +10,8 @@ import (
 )
 
 const apiKeyLength = 32
+
+const base36Alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 var ErrInvalidAPIKey = errors.New("invalid API key")
 
@@ -20,7 +23,7 @@ func NewAPIKeys(secret string) APIKeys {
 	return APIKeys{secret: []byte(secret)}
 }
 
-func (k APIKeys) For(domainID, userID string) (string, []byte) {
+func (k APIKeys) DefaultFor(domainID, userID string) (string, []byte) {
 	mac := hmac.New(sha256.New, k.secret)
 	_, _ = mac.Write([]byte("devbridge-api-key\x00"))
 	_, _ = mac.Write([]byte(domainID))
@@ -32,6 +35,34 @@ func (k APIKeys) For(domainID, userID string) (string, []byte) {
 	}
 	value := encoded[len(encoded)-apiKeyLength:]
 	return value, apiKeyDigest(value)
+}
+
+func (APIKeys) New() (string, []byte, error) {
+	value := make([]byte, apiKeyLength)
+	random := make([]byte, apiKeyLength*2)
+	for index := 0; index < len(value); {
+		if _, err := rand.Read(random); err != nil {
+			return "", nil, err
+		}
+		for _, number := range random {
+			if number >= 252 {
+				continue
+			}
+			value[index] = base36Alphabet[int(number)%len(base36Alphabet)]
+			index++
+			if index == len(value) {
+				break
+			}
+		}
+	}
+	return string(value), apiKeyDigest(string(value)), nil
+}
+
+func MaskAPIKey(value string) string {
+	if len(value) < 8 {
+		return "********"
+	}
+	return value[:4] + "..." + value[len(value)-4:]
 }
 
 func DigestAPIKey(value string) ([]byte, error) {

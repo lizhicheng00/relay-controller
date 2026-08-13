@@ -1,5 +1,12 @@
 package core
 
+import "time"
+
+const (
+	DefaultAPIKeyName    = "default"
+	MaxAdditionalAPIKeys = 4
+)
+
 type IdentityAssertion struct {
 	DomainID string
 	UserID   string
@@ -21,4 +28,24 @@ type Identity struct {
 type ProvisionedCredential struct {
 	Identity
 	APIKey string `json:"apiKey"`
+}
+
+type NewAPIKey struct {
+	ID     string
+	Name   string
+	Mask   string
+	Digest []byte
+}
+
+type APIKey struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Mask      string    `json:"mask"`
+	Default   bool      `json:"isDefault"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type IssuedAPIKey struct {
+	APIKey
+	Value string `json:"apiKey"`
 }

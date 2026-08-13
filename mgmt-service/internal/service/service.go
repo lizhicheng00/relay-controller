@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"mgmt-service/internal/core"
 	"mgmt-service/internal/security"
@@ -11,8 +13,11 @@ import (
 )
 
 type repository interface {
-	Provision(context.Context, core.IdentityAssertion, core.IdentitySeed, []byte) (core.Identity, error)
+	Provision(context.Context, core.IdentityAssertion, core.IdentitySeed, core.NewAPIKey) (core.Identity, error)
 	FindIdentity(context.Context, []byte) (core.Identity, error)
+	ListAPIKeys(context.Context, string) ([]core.APIKey, error)
+	CreateAPIKey(context.Context, string, core.NewAPIKey) (core.APIKey, error)
+	DeleteAPIKey(context.Context, string, string) error
 }
 
 type Service struct {
@@ -35,8 +40,14 @@ func (s *Service) ProvisionAPIKey(
 	if err != nil {
 		return core.ProvisionedCredential{}, core.Internal("generate identity", err)
 	}
-	value, digest := s.keys.For(assertion.DomainID, assertion.UserID)
-	identity, err := s.store.Provision(ctx, assertion, seed, digest)
+	keyID, err := security.NewID("key_")
+	if err != nil {
+		return core.ProvisionedCredential{}, core.Internal("generate default API key ID", err)
+	}
+	value, digest := s.keys.DefaultFor(assertion.DomainID, assertion.UserID)
+	identity, err := s.store.Provision(ctx, assertion, seed, core.NewAPIKey{
+		ID: keyID, Name: core.DefaultAPIKeyName, Mask: security.MaskAPIKey(value), Digest: digest,
+	})
 	if err != nil {
 		return core.ProvisionedCredential{}, mapStoreError("provision identity", "X-User-Id", err)
 	}
@@ -53,6 +64,50 @@ func (s *Service) Authenticate(ctx context.Context, value string) (core.Identity
 		return core.Identity{}, mapStoreError("authenticate API key", "X-API-Key", err)
 	}
 	return identity, nil
+}
+
+func (s *Service) ListAPIKeys(ctx context.Context, identity core.Identity) ([]core.APIKey, error) {
+	keys, err := s.store.ListAPIKeys(ctx, identity.Namespace)
+	if err != nil {
+		return nil, mapStoreError("list API keys", "X-API-Key", err)
+	}
+	return keys, nil
+}
+
+func (s *Service) CreateAPIKey(
+	ctx context.Context,
+	identity core.Identity,
+	name string,
+) (core.IssuedAPIKey, error) {
+	name, err := validateAPIKeyName(name)
+	if err != nil {
+		return core.IssuedAPIKey{}, err
+	}
+	keyID, err := security.NewID("key_")
+	if err != nil {
+		return core.IssuedAPIKey{}, core.Internal("generate API key ID", err)
+	}
+	value, digest, err := s.keys.New()
+	if err != nil {
+		return core.IssuedAPIKey{}, core.Internal("generate API key", err)
+	}
+	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
+		ID: keyID, Name: name, Mask: security.MaskAPIKey(value), Digest: digest,
+	})
+	if err != nil {
+		return core.IssuedAPIKey{}, mapAPIKeyStoreError("create API key", err)
+	}
+	return core.IssuedAPIKey{APIKey: key, Value: value}, nil
+}
+
+func (s *Service) DeleteAPIKey(ctx context.Context, identity core.Identity, keyID string) error {
+	if !validKeyID(keyID) {
+		return core.Invalid("keyId", "keyId is invalid")
+	}
+	if err := s.store.DeleteAPIKey(ctx, identity.Namespace, keyID); err != nil {
+		return mapAPIKeyStoreError("delete API key", err)
+	}
+	return nil
 }
 
 func newIdentitySeed() (core.IdentitySeed, error) {
@@ -83,6 +138,22 @@ func validateIdentity(assertion core.IdentityAssertion) error {
 	return nil
 }
 
+func validateAPIKeyName(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > 64 {
+		return "", core.Invalid("name", "name must contain 1 to 64 characters")
+	}
+	for _, char := range value {
+		if unicode.IsControl(char) {
+			return "", core.Invalid("name", "name contains an invalid character")
+		}
+	}
+	if strings.EqualFold(value, core.DefaultAPIKeyName) {
+		return "", core.Invalid("name", "name is reserved")
+	}
+	return value, nil
+}
+
 func validIdentifier(value string) bool {
 	if len(value) == 0 || len(value) > 128 {
 		return false
@@ -97,9 +168,40 @@ func validIdentifier(value string) bool {
 	return true
 }
 
+func validKeyID(value string) bool {
+	if len(value) != 30 || !strings.HasPrefix(value, "key_") {
+		return false
+	}
+	for _, char := range value[4:] {
+		if char < 'a' || char > 'z' {
+			if char < '2' || char > '7' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func mapStoreError(operation, target string, err error) error {
 	if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrNotFound) {
 		return core.Unauthorized(target)
 	}
 	return core.Internal(operation, err)
+}
+
+func mapAPIKeyStoreError(operation string, err error) error {
+	switch {
+	case errors.Is(err, store.ErrKeyLimit):
+		return core.Conflict("API_KEY_LIMIT_REACHED", "apiKeys", "a namespace can have at most four additional API keys")
+	case errors.Is(err, store.ErrNameConflict):
+		return core.Conflict("API_KEY_NAME_CONFLICT", "name", "an API key with this name already exists")
+	case errors.Is(err, store.ErrDefaultKey):
+		return core.Conflict("DEFAULT_API_KEY", "keyId", "the default API key cannot be deleted")
+	case errors.Is(err, store.ErrNotFound):
+		return core.NotFound("keyId", "API key not found")
+	case errors.Is(err, store.ErrUnauthorized):
+		return core.Unauthorized("X-API-Key")
+	default:
+		return core.Internal(operation, err)
+	}
 }
