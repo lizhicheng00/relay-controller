@@ -1,46 +1,35 @@
 # Management Service
 
-Management Service maps authenticated Huawei IAM identities to DevBridge namespaces and manages permanent API keys. Relay Controller and Relay Gateway remain responsible for tunnels, ports, tokens, metering, quotas, and data-plane behavior.
+Management Service maps trusted cloud identities to DevBridge namespaces and API keys. Browser login and Huawei Cloud authentication are owned by the client and the upper identity layer; this service never handles login credentials or redirects.
 
 ## Business Rules
 
-- One Huawei IAM domain maps to one DevBridge account namespace.
-- One IAM user maps to one principal and one non-deletable default namespace.
-- A principal may create additional namespaces and rename their display names.
-- API keys belong to a namespace. Each namespace supports at most five keys.
-- API keys are permanent, have `read` or `write` permission, and are returned only when created.
-- The server stores only HMAC-SHA256 API key digests. A five-minute Redis login token separates IAM login from API key creation and can be consumed once.
+- One cloud domain maps to one shared `accountNamespace`.
+- One `(domainId, userId)` maps to one `namespace` and one permanent API key.
+- Callers never submit or select a namespace.
+- Repeated provisioning for the same user returns the same namespace and API key.
+- API keys are 32 lowercase Base36 characters. MySQL stores only their SHA-256 digests.
+- API key values are derived with HMAC-SHA256 from `API_KEY_SECRET`. All replicas must use the same secret; changing it is a coordinated rotation completed as each user provisions again.
 
 ## API
 
 ```text
-POST   /v1/auth/iam/login
-POST   /v1/auth/api-key
-
-GET    /v1/me
-GET    /v1/namespaces
-POST   /v1/namespaces
-GET    /v1/namespaces/{namespaceId}
-PATCH  /v1/namespaces/{namespaceId}
-DELETE /v1/namespaces/{namespaceId}
-
-GET    /v1/namespaces/{namespaceId}/api-keys
-POST   /v1/namespaces/{namespaceId}/api-keys
-DELETE /v1/namespaces/{namespaceId}/api-keys/{keyId}
+POST /v1/api-key   trusted identity layer provisions or retrieves a user's API key
+GET  /v1/me        API key resolves its domain, user, and namespaces
 ```
 
-The OpenAPI document is available at `/openapi.yaml`. Business APIs use `X-API-Key`. IAM login is restricted to the trusted gateway by `X-DevBridge-Proxy-Token`; the gateway supplies the authenticated IAM identity headers.
+`POST /v1/api-key` requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, and `X-User-Id`. `GET /v1/me` requires `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
 
 ## Structure
 
 ```text
 cmd                  process startup and graceful shutdown
-internal/core        business models and application errors
-internal/httpapi     HTTP routes, authentication, errors, and OpenAPI
-internal/service     namespace, login, and API key workflows
-internal/security    API key hashing and random identifiers
+internal/config      environment configuration
+internal/core        identity models and application errors
+internal/httpapi     HTTP routes and OpenAPI
+internal/security    API key derivation and random namespace identifiers
+internal/service     identity provisioning and authentication
 internal/store       MySQL persistence
-internal/session     one-time Redis login sessions
 migrations           base database schema
 ```
 
@@ -49,12 +38,11 @@ migrations           base database schema
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `DATABASE_DSN` | yes | MySQL DSN |
-| `API_KEY_PEPPER` | yes | API key HMAC secret, at least 32 characters |
-| `IAM_TRUSTED_PROXY_TOKEN` | yes | Trusted IAM gateway secret, at least 32 characters |
-| `REDIS_ADDRESS` | no | Redis address, default `localhost:6379` |
-| `REDIS_PASSWORD` | no | Redis password |
+| `API_KEY_SECRET` | yes | API key derivation secret, at least 32 characters |
+| `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
 | `SERVER_ADDRESS` | no | HTTP listen address, default `:8080` |
-Apply the SQL migration with the deployment database migration tool, then start the service:
+
+Apply the SQL migration with the deployment migration tool, then start the service:
 
 ```bash
 go run ./cmd

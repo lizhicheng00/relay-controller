@@ -15,7 +15,6 @@ import (
 	"mgmt-service/internal/httpapi"
 	"mgmt-service/internal/security"
 	"mgmt-service/internal/service"
-	"mgmt-service/internal/session"
 	"mgmt-service/internal/store"
 )
 
@@ -41,16 +40,10 @@ func run() error {
 		return err
 	}
 	defer func() { _ = repository.Close() }()
-	sessions, err := session.Open(ctx, cfg.RedisAddress, cfg.RedisPassword)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sessions.Close() }()
-
-	application := service.New(repository, sessions, security.NewAPIKeyCodec(cfg.APIKeyPepper), logger)
+	application := service.New(repository, security.NewAPIKeys(cfg.APIKeySecret))
 	server := &http.Server{
 		Addr: cfg.Address,
-		Handler: httpapi.New(application, []httpapi.Readiness{repository, sessions},
+		Handler: httpapi.New(application, []httpapi.Readiness{repository},
 			cfg.TrustedProxyToken, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

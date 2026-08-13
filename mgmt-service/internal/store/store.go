@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -12,17 +13,14 @@ import (
 	"mgmt-service/internal/core"
 )
 
+var (
+	ErrNotFound     = errors.New("not found")
+	ErrUnauthorized = errors.New("unauthorized")
+)
+
 type Store struct {
 	db *sql.DB
 }
-
-var (
-	ErrNotFound         = errors.New("not found")
-	ErrConflict         = errors.New("conflict")
-	ErrKeyLimit         = errors.New("API key limit reached")
-	ErrDefaultNamespace = errors.New("default namespace cannot be deleted")
-	ErrUnauthorized     = errors.New("unauthorized")
-)
 
 func Open(ctx context.Context, dsn string) (*Store, error) {
 	cfg, err := mysqldriver.ParseDSN(dsn)
@@ -60,404 +58,100 @@ func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) Close() error {
-	return s.db.Close()
-}
+func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) ResolveIdentity(
+func (s *Store) Provision(
 	ctx context.Context,
-	iam core.IAMIdentity,
+	assertion core.IdentityAssertion,
 	seed core.IdentitySeed,
+	apiKeyHash []byte,
 ) (core.Identity, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return core.Identity{}, fmt.Errorf("begin identity transaction: %w", err)
+		return core.Identity{}, fmt.Errorf("begin provision transaction: %w", err)
 	}
 	defer rollback(tx)
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO iam_account (id, iam_domain_id, account_namespace)
+		INSERT INTO domain_account (id, domain_id, account_namespace)
 		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE id = id`,
-		seed.AccountID, iam.DomainID, seed.AccountNamespace)
+		seed.AccountID, assertion.DomainID, seed.AccountNamespace)
 	if err != nil {
-		return core.Identity{}, mapWriteError("upsert IAM account", err)
+		return core.Identity{}, fmt.Errorf("create domain account: %w", err)
 	}
 
 	var identity core.Identity
-	var accountStatus string
+	var accountID, accountStatus string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id, account_namespace, status
-		FROM iam_account
-		WHERE iam_domain_id = ?
-		FOR UPDATE`, iam.DomainID).Scan(
-		&identity.AccountID, &identity.AccountNamespace, &accountStatus)
+		SELECT id, domain_id, account_namespace, status
+		FROM domain_account
+		WHERE domain_id = ?
+		FOR UPDATE`, assertion.DomainID).Scan(
+		&accountID, &identity.DomainID, &identity.AccountNamespace, &accountStatus)
 	if err != nil {
-		return core.Identity{}, mapQueryError("load IAM account", err)
+		return core.Identity{}, mapQueryError("load domain account", err)
 	}
 	if accountStatus != "active" {
 		return core.Identity{}, ErrUnauthorized
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO iam_principal (id, account_id, iam_user_id, iam_user_name)
-		VALUES (?, ?, ?, NULLIF(?, ''))
-		ON DUPLICATE KEY UPDATE id = id`,
-		seed.PrincipalID, identity.AccountID, iam.UserID, iam.UserName)
+		INSERT INTO user_identity (account_id, user_id, namespace, api_key_hash)
+		VALUES (?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE account_id = account_id`,
+		accountID, assertion.UserID, seed.Namespace, apiKeyHash)
 	if err != nil {
-		return core.Identity{}, mapWriteError("upsert IAM principal", err)
+		return core.Identity{}, fmt.Errorf("create user identity: %w", err)
 	}
 
-	var principalStatus string
+	var storedHash []byte
+	var userStatus string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id, COALESCE(iam_user_name, ''), status
-		FROM iam_principal
-		WHERE account_id = ? AND iam_user_id = ?
-		FOR UPDATE`, identity.AccountID, iam.UserID).Scan(
-		&identity.PrincipalID, &identity.IAMUserName, &principalStatus)
+		SELECT user_id, namespace, api_key_hash, status
+		FROM user_identity
+		WHERE account_id = ? AND user_id = ?
+		FOR UPDATE`, accountID, assertion.UserID).Scan(
+		&identity.UserID, &identity.Namespace, &storedHash, &userStatus)
 	if err != nil {
-		return core.Identity{}, mapQueryError("load IAM principal", err)
+		return core.Identity{}, mapQueryError("load user identity", err)
 	}
-	if principalStatus != "active" {
+	if userStatus != "active" {
 		return core.Identity{}, ErrUnauthorized
 	}
-	if iam.UserName != "" && iam.UserName != identity.IAMUserName {
-		_, err = tx.ExecContext(ctx, `UPDATE iam_principal SET iam_user_name = ? WHERE id = ?`,
-			iam.UserName, identity.PrincipalID)
-		if err != nil {
-			return core.Identity{}, fmt.Errorf("update IAM user name: %w", err)
+	if !bytes.Equal(storedHash, apiKeyHash) {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE user_identity SET api_key_hash = ?
+			WHERE account_id = ? AND user_id = ?`,
+			apiKeyHash, accountID, assertion.UserID); err != nil {
+			return core.Identity{}, fmt.Errorf("rotate API key: %w", err)
 		}
-		identity.IAMUserName = iam.UserName
-	}
-
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO namespace (
-			id, account_id, owner_principal_id, name, display_name, is_default
-		) VALUES (?, ?, ?, ?, ?, 1)
-		ON DUPLICATE KEY UPDATE id = id`,
-		seed.NamespaceID, identity.AccountID, identity.PrincipalID,
-		seed.Namespace, seed.DisplayName)
-	if err != nil {
-		return core.Identity{}, mapWriteError("upsert default namespace", err)
-	}
-
-	var namespaceStatus string
-	err = tx.QueryRowContext(ctx, `
-		SELECT id, name, status
-		FROM namespace
-		WHERE owner_principal_id = ? AND is_default = 1
-		FOR UPDATE`, identity.PrincipalID).Scan(
-		&identity.NamespaceID, &identity.Namespace, &namespaceStatus)
-	if err != nil {
-		return core.Identity{}, mapQueryError("load default namespace", err)
-	}
-	if namespaceStatus != "active" {
-		return core.Identity{}, ErrUnauthorized
 	}
 
 	if err := tx.Commit(); err != nil {
-		return core.Identity{}, fmt.Errorf("commit identity transaction: %w", err)
+		return core.Identity{}, fmt.Errorf("commit provision transaction: %w", err)
 	}
 	return identity, nil
 }
 
-func (s *Store) CreateAPIKey(
-	ctx context.Context,
-	principalID string,
-	key core.NewAPIKey,
-	maxKeys int,
-) (core.APIKey, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return core.APIKey{}, fmt.Errorf("begin API key transaction: %w", err)
-	}
-	defer rollback(tx)
-
-	if err := lockNamespace(ctx, tx, principalID, key.NamespaceID); err != nil {
-		return core.APIKey{}, err
-	}
-	var count int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM api_key WHERE namespace_id = ?`, key.NamespaceID,
-	).Scan(&count); err != nil {
-		return core.APIKey{}, fmt.Errorf("count API keys: %w", err)
-	}
-	if count >= maxKeys {
-		return core.APIKey{}, ErrKeyLimit
-	}
-
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace_id, name, key_mask, secret_hash, permission)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		key.ID, key.NamespaceID, key.Name, key.Mask, key.SecretHash, key.Permission)
-	if err != nil {
-		return core.APIKey{}, mapWriteError("insert API key", err)
-	}
-	created, err := queryAPIKey(ctx, tx, key.ID)
-	if err != nil {
-		return core.APIKey{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return core.APIKey{}, fmt.Errorf("commit API key transaction: %w", err)
-	}
-	return created, nil
-}
-
-func (s *Store) DeleteAPIKey(
-	ctx context.Context,
-	principalID, namespaceID, keyID string,
-) error {
-	result, err := s.db.ExecContext(ctx, `
-		DELETE k FROM api_key k
-		JOIN namespace n ON n.id = k.namespace_id
-		WHERE k.id = ? AND k.namespace_id = ?
-		  AND n.owner_principal_id = ? AND n.status = 'active'`,
-		keyID, namespaceID, principalID)
-	if err != nil {
-		return fmt.Errorf("delete API key: %w", err)
-	}
-	return requireAffected(result)
-}
-
-func (s *Store) ListAPIKeys(
-	ctx context.Context,
-	principalID, namespaceID string,
-) ([]core.APIKey, error) {
-	if _, err := s.GetNamespace(ctx, principalID, namespaceID); err != nil {
-		return nil, err
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, key_mask, permission, last_used_at, created_at
-		FROM api_key
-		WHERE namespace_id = ?
-		ORDER BY created_at DESC`, namespaceID)
-	if err != nil {
-		return nil, fmt.Errorf("list API keys: %w", err)
-	}
-	defer rows.Close()
-
-	keys := make([]core.APIKey, 0)
-	for rows.Next() {
-		var key core.APIKey
-		if err := rows.Scan(
-			&key.ID, &key.Name, &key.Mask, &key.Permission, &key.LastUsedAt, &key.CreatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan API key: %w", err)
-		}
-		keys = append(keys, key)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate API keys: %w", err)
-	}
-	return keys, nil
-}
-
-func (s *Store) FindCredential(ctx context.Context, secretHash []byte) (core.Credential, error) {
-	var credential core.Credential
+func (s *Store) FindIdentity(ctx context.Context, apiKeyHash []byte) (core.Identity, error) {
+	var identity core.Identity
 	err := s.db.QueryRowContext(ctx, `
-		SELECT a.id, a.account_namespace, p.id, n.id, n.name,
-		       COALESCE(p.iam_user_name, ''), k.id, k.permission
-		FROM api_key k
-		JOIN namespace n ON n.id = k.namespace_id
-		JOIN iam_principal p ON p.id = n.owner_principal_id
-		JOIN iam_account a ON a.id = n.account_id
-		WHERE k.secret_hash = ?
+		SELECT a.domain_id, u.user_id, a.account_namespace, u.namespace
+		FROM user_identity u
+		JOIN domain_account a ON a.id = u.account_id
+		WHERE u.api_key_hash = ?
 		  AND a.status = 'active'
-		  AND p.status = 'active'
-		  AND n.status = 'active'`, secretHash).Scan(
-		&credential.AccountID,
-		&credential.AccountNamespace,
-		&credential.PrincipalID,
-		&credential.NamespaceID,
-		&credential.Namespace,
-		&credential.IAMUserName,
-		&credential.APIKeyID,
-		&credential.Permission,
+		  AND u.status = 'active'`, apiKeyHash).Scan(
+		&identity.DomainID,
+		&identity.UserID,
+		&identity.AccountNamespace,
+		&identity.Namespace,
 	)
 	if err != nil {
-		return core.Credential{}, mapQueryError("find API credential", err)
+		return core.Identity{}, mapQueryError("find identity", err)
 	}
-	return credential, nil
-}
-
-func (s *Store) TouchAPIKey(ctx context.Context, keyID string, now time.Time) error {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE api_key
-		SET last_used_at = ?
-		WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)`,
-		now.UTC(), keyID, now.UTC().Add(-time.Hour))
-	if err != nil {
-		return fmt.Errorf("touch API key: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) CreateNamespace(
-	ctx context.Context,
-	namespace core.NewNamespace,
-) (core.Namespace, error) {
-	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO namespace (
-			id, account_id, owner_principal_id, name, display_name, is_default
-		)
-		SELECT ?, p.account_id, p.id, ?, ?, 0
-		FROM iam_principal p
-		JOIN iam_account a ON a.id = p.account_id
-		WHERE p.id = ? AND p.account_id = ?
-		  AND p.status = 'active' AND a.status = 'active'`,
-		namespace.ID, namespace.Name, namespace.DisplayName,
-		namespace.PrincipalID, namespace.AccountID)
-	if err != nil {
-		return core.Namespace{}, mapWriteError("insert namespace", err)
-	}
-	if err := requireAffected(result); err != nil {
-		return core.Namespace{}, ErrUnauthorized
-	}
-	return s.GetNamespace(ctx, namespace.PrincipalID, namespace.ID)
-}
-
-func (s *Store) GetNamespace(
-	ctx context.Context,
-	principalID, namespaceID string,
-) (core.Namespace, error) {
-	return scanNamespace(s.db.QueryRowContext(ctx, `
-		SELECT id, name, display_name, is_default, created_at, updated_at
-		FROM namespace
-		WHERE id = ? AND owner_principal_id = ? AND status = 'active'`,
-		namespaceID, principalID))
-}
-
-func (s *Store) ListNamespaces(
-	ctx context.Context,
-	principalID string,
-) ([]core.Namespace, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, display_name, is_default, created_at, updated_at
-		FROM namespace
-		WHERE owner_principal_id = ? AND status = 'active'
-		ORDER BY is_default DESC, created_at ASC`, principalID)
-	if err != nil {
-		return nil, fmt.Errorf("list namespaces: %w", err)
-	}
-	defer rows.Close()
-
-	values := make([]core.Namespace, 0)
-	for rows.Next() {
-		value, err := scanNamespace(rows)
-		if err != nil {
-			return nil, err
-		}
-		values = append(values, value)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate namespaces: %w", err)
-	}
-	return values, nil
-}
-
-func (s *Store) UpdateNamespace(
-	ctx context.Context,
-	principalID, namespaceID, displayName string,
-) (core.Namespace, error) {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE namespace SET display_name = ?
-		WHERE id = ? AND owner_principal_id = ? AND status = 'active'`,
-		displayName, namespaceID, principalID)
-	if err != nil {
-		return core.Namespace{}, fmt.Errorf("update namespace: %w", err)
-	}
-	return s.GetNamespace(ctx, principalID, namespaceID)
-}
-
-func (s *Store) DeleteNamespace(ctx context.Context, principalID, namespaceID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin namespace deletion: %w", err)
-	}
-	defer rollback(tx)
-
-	var isDefault bool
-	err = tx.QueryRowContext(ctx, `
-		SELECT is_default FROM namespace
-		WHERE id = ? AND owner_principal_id = ? AND status = 'active'
-		FOR UPDATE`, namespaceID, principalID).Scan(&isDefault)
-	if err != nil {
-		return mapQueryError("load namespace for deletion", err)
-	}
-	if isDefault {
-		return ErrDefaultNamespace
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM api_key WHERE namespace_id = ?`, namespaceID); err != nil {
-		return fmt.Errorf("delete namespace API keys: %w", err)
-	}
-	result, err := tx.ExecContext(ctx, `
-		UPDATE namespace SET status = 'deleted'
-		WHERE id = ? AND owner_principal_id = ? AND status = 'active'`,
-		namespaceID, principalID)
-	if err != nil {
-		return fmt.Errorf("delete namespace: %w", err)
-	}
-	if err := requireAffected(result); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit namespace deletion: %w", err)
-	}
-	return nil
-}
-
-func lockNamespace(ctx context.Context, tx *sql.Tx, principalID, namespaceID string) error {
-	var status string
-	err := tx.QueryRowContext(ctx, `
-		SELECT status FROM namespace
-		WHERE id = ? AND owner_principal_id = ?
-		FOR UPDATE`, namespaceID, principalID).Scan(&status)
-	if err != nil {
-		return mapQueryError("lock namespace", err)
-	}
-	if status != "active" {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func queryAPIKey(ctx context.Context, tx *sql.Tx, keyID string) (core.APIKey, error) {
-	var key core.APIKey
-	err := tx.QueryRowContext(ctx, `
-		SELECT id, name, key_mask, permission, last_used_at, created_at
-		FROM api_key WHERE id = ?`, keyID).Scan(
-		&key.ID, &key.Name, &key.Mask, &key.Permission, &key.LastUsedAt, &key.CreatedAt,
-	)
-	if err != nil {
-		return core.APIKey{}, mapQueryError("load API key", err)
-	}
-	return key, nil
-}
-
-type scanner interface {
-	Scan(...any) error
-}
-
-func scanNamespace(row scanner) (core.Namespace, error) {
-	var value core.Namespace
-	if err := row.Scan(
-		&value.ID, &value.Name, &value.DisplayName, &value.Default,
-		&value.CreatedAt, &value.UpdatedAt,
-	); err != nil {
-		return core.Namespace{}, mapQueryError("load namespace", err)
-	}
-	return value, nil
-}
-
-func requireAffected(result sql.Result) error {
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("read affected rows: %w", err)
-	}
-	if rows == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return identity, nil
 }
 
 func mapQueryError(operation string, err error) error {
@@ -467,14 +161,4 @@ func mapQueryError(operation string, err error) error {
 	return fmt.Errorf("%s: %w", operation, err)
 }
 
-func mapWriteError(operation string, err error) error {
-	var mysqlErr *mysqldriver.MySQLError
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-		return ErrConflict
-	}
-	return fmt.Errorf("%s: %w", operation, err)
-}
-
-func rollback(tx *sql.Tx) {
-	_ = tx.Rollback()
-}
+func rollback(tx *sql.Tx) { _ = tx.Rollback() }

@@ -1,4 +1,2 @@
-DROP TABLE IF EXISTS api_key;
-DROP TABLE IF EXISTS namespace;
-DROP TABLE IF EXISTS iam_principal;
-DROP TABLE IF EXISTS iam_account;
+DROP TABLE IF EXISTS user_identity;
+DROP TABLE IF EXISTS domain_account;

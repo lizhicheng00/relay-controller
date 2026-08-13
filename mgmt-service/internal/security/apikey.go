@@ -2,66 +2,53 @@ package security
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"errors"
+	"math/big"
+	"strings"
 )
 
-const (
-	alphabet  = "abcdefghijklmnopqrstuvwxyz0123456789"
-	keyLength = 32
-	// 252 is the largest multiple of 36 below 256. Rejecting larger bytes avoids modulo bias.
-	maxByte = 252
-)
+const apiKeyLength = 32
 
-var ErrInvalid = errors.New("invalid API key")
+var ErrInvalidAPIKey = errors.New("invalid API key")
 
-type APIKeyCodec struct {
-	pepper []byte
+type APIKeys struct {
+	secret []byte
 }
 
-func NewAPIKeyCodec(pepper string) APIKeyCodec {
-	return APIKeyCodec{pepper: []byte(pepper)}
+func NewAPIKeys(secret string) APIKeys {
+	return APIKeys{secret: []byte(secret)}
 }
 
-func (c APIKeyCodec) Generate() (value string, mask string, hash []byte, err error) {
-	key := make([]byte, keyLength)
-	buffer := make([]byte, keyLength)
-	for index := 0; index < len(key); {
-		if _, err = rand.Read(buffer); err != nil {
-			return "", "", nil, err
-		}
-		for _, value := range buffer {
-			if value >= maxByte {
-				continue
-			}
-			key[index] = alphabet[int(value)%len(alphabet)]
-			index++
-			if index == len(key) {
-				break
-			}
-		}
+func (k APIKeys) For(domainID, userID string) (string, []byte) {
+	mac := hmac.New(sha256.New, k.secret)
+	_, _ = mac.Write([]byte("devbridge-api-key\x00"))
+	_, _ = mac.Write([]byte(domainID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(userID))
+	encoded := new(big.Int).SetBytes(mac.Sum(nil)).Text(36)
+	if len(encoded) < apiKeyLength {
+		encoded = strings.Repeat("0", apiKeyLength-len(encoded)) + encoded
 	}
-	value = string(key)
-	return value, value[:2] + "..." + value[len(value)-4:], c.digest(value), nil
+	value := encoded[len(encoded)-apiKeyLength:]
+	return value, apiKeyDigest(value)
 }
 
-func (c APIKeyCodec) Digest(value string) ([]byte, error) {
-	if len(value) != keyLength {
-		return nil, ErrInvalid
+func DigestAPIKey(value string) ([]byte, error) {
+	if len(value) != apiKeyLength {
+		return nil, ErrInvalidAPIKey
 	}
 	for _, char := range value {
 		if char < 'a' || char > 'z' {
 			if char < '0' || char > '9' {
-				return nil, ErrInvalid
+				return nil, ErrInvalidAPIKey
 			}
 		}
 	}
-	return c.digest(value), nil
+	return apiKeyDigest(value), nil
 }
 
-func (c APIKeyCodec) digest(value string) []byte {
-	mac := hmac.New(sha256.New, c.pepper)
-	_, _ = mac.Write([]byte(value))
-	return mac.Sum(nil)
+func apiKeyDigest(value string) []byte {
+	digest := sha256.Sum256([]byte(value))
+	return digest[:]
 }

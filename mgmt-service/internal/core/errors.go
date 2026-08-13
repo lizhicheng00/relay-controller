@@ -44,16 +44,6 @@ func Unauthorized(target string) *AppError {
 	}
 }
 
-func Conflict(code, message, target string) *AppError {
-	return &AppError{
-		Status: http.StatusConflict, Code: code, Message: message, Target: target,
-	}
-}
-
-func NotFound() *AppError {
-	return &AppError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "resource not found"}
-}
-
 func Internal(message string, cause error) *AppError {
 	return &AppError{
 		Status: http.StatusInternalServerError, Code: "INTERNAL_ERROR",
