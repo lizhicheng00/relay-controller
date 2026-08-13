@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"strings"
 )
@@ -15,28 +14,13 @@ type Config struct {
 	TrustedProxyToken string
 }
 
-func Load() (Config, error) {
-	cfg := Config{
+func Load() Config {
+	return Config{
 		Address:           valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		DatabaseDSN:       strings.TrimSpace(os.Getenv("DATABASE_DSN")),
 		APIKeySecret:      os.Getenv("API_KEY_SECRET"),
 		TrustedProxyToken: os.Getenv("IDENTITY_PROXY_TOKEN"),
 	}
-
-	var missing []string
-	if cfg.DatabaseDSN == "" {
-		missing = append(missing, "DATABASE_DSN")
-	}
-	if len(cfg.APIKeySecret) < 32 {
-		missing = append(missing, "API_KEY_SECRET (at least 32 characters)")
-	}
-	if len(cfg.TrustedProxyToken) < 32 {
-		missing = append(missing, "IDENTITY_PROXY_TOKEN (at least 32 characters)")
-	}
-	if len(missing) > 0 {
-		return Config{}, errors.New("missing or invalid configuration: " + strings.Join(missing, ", "))
-	}
-	return cfg, nil
 }
 
 func valueOrDefault(name, fallback string) string {

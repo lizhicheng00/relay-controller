@@ -132,11 +132,7 @@ func (h *Handler) authenticate(next http.Handler) http.Handler {
 
 func (h *Handler) requestContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		requestID, err := security.NewID("req_")
-		if err != nil {
-			requestID = "unavailable"
-		}
-		response.Header().Set("X-Request-Id", requestID)
+		response.Header().Set("X-Request-Id", security.NewID("req_"))
 		response.Header().Set("X-Content-Type-Options", "nosniff")
 		next.ServeHTTP(response, request)
 	})

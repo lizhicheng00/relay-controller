@@ -37,18 +37,12 @@ func (s *Service) ProvisionAPIKey(
 	if err := validateIdentity(assertion); err != nil {
 		return core.ProvisionedCredential{}, err
 	}
-	seed, err := newIdentitySeed()
-	if err != nil {
-		return core.ProvisionedCredential{}, core.Internal(err)
-	}
-	keyID, err := security.NewID("key_")
-	if err != nil {
-		return core.ProvisionedCredential{}, core.Internal(err)
-	}
+	seed := newIdentitySeed()
 	value, digest := s.keys.DefaultFor(assertion.DomainID, assertion.UserID)
 	identity, err := s.store.Provision(ctx, assertion, seed, core.NewAPIKey{
-		ID: keyID, Name: core.DefaultAPIKeyName, Scenario: core.APIKeyScenarioDevBridge,
-		Mask: security.MaskAPIKey(value), Digest: digest,
+		ID: security.NewID("key_"), Name: core.DefaultAPIKeyName,
+		Scenario: core.APIKeyScenarioDevBridge,
+		Mask:     security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
 		return core.ProvisionedCredential{}, mapStoreError("provision identity", "X-User-Id", err)
@@ -89,16 +83,9 @@ func (s *Service) CreateAPIKey(
 	if !security.ValidAPIKeyScenario(scenario) {
 		return core.IssuedAPIKey{}, core.Invalid("scenario", "scenario must be devbridge or devbox")
 	}
-	keyID, err := security.NewID("key_")
-	if err != nil {
-		return core.IssuedAPIKey{}, core.Internal(err)
-	}
-	value, digest, err := s.keys.New(scenario)
-	if err != nil {
-		return core.IssuedAPIKey{}, core.Internal(err)
-	}
+	value, digest := s.keys.New(scenario)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
-		ID: keyID, Name: name, Scenario: scenario,
+		ID: security.NewID("key_"), Name: name, Scenario: scenario,
 		Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
@@ -117,22 +104,11 @@ func (s *Service) DeleteAPIKey(ctx context.Context, identity core.Identity, keyI
 	return nil
 }
 
-func newIdentitySeed() (core.IdentitySeed, error) {
-	accountID, err := security.NewID("acc_")
-	if err != nil {
-		return core.IdentitySeed{}, err
-	}
-	accountNamespace, err := security.NewID("ns-a-")
-	if err != nil {
-		return core.IdentitySeed{}, err
-	}
-	namespace, err := security.NewID("ns-u-")
-	if err != nil {
-		return core.IdentitySeed{}, err
-	}
+func newIdentitySeed() core.IdentitySeed {
 	return core.IdentitySeed{
-		AccountID: accountID, AccountNamespace: accountNamespace, Namespace: namespace,
-	}, nil
+		AccountID: security.NewID("acc_"), AccountNamespace: security.NewID("ns-a-"),
+		Namespace: security.NewID("ns-u-"),
+	}
 }
 
 func validateIdentity(assertion core.IdentityAssertion) error {
@@ -147,7 +123,7 @@ func validateIdentity(assertion core.IdentityAssertion) error {
 
 func validateAPIKeyName(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > 64 {
+	if value == "" || utf8.RuneCountInString(value) > 64 {
 		return "", core.Invalid("name", "name must contain 1 to 64 characters")
 	}
 	for _, char := range value {

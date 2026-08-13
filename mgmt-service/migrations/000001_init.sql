@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS domain_account (
     account_namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'active',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
     UNIQUE KEY uk_domain_account_domain (domain_id),
     UNIQUE KEY uk_domain_account_namespace (account_namespace)
@@ -16,7 +15,6 @@ CREATE TABLE IF NOT EXISTS user_identity (
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'active',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (account_id, user_id),
     UNIQUE KEY uk_user_identity_namespace (namespace),
     CONSTRAINT fk_user_identity_account

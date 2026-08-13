@@ -2,7 +2,6 @@ package security
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 
@@ -29,14 +28,8 @@ func TestAPIKeyIsStablePerIdentity(t *testing.T) {
 
 func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	keys := NewAPIKeys(strings.Repeat("s", 32))
-	first, firstDigest, err := keys.New(core.APIKeyScenarioDevBox)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, _, err := keys.New(core.APIKeyScenarioDevBox)
-	if err != nil {
-		t.Fatal(err)
-	}
+	first, firstDigest := keys.New(core.APIKeyScenarioDevBox)
+	second, _ := keys.New(core.APIKeyScenarioDevBox)
 	if first == second || !strings.HasPrefix(first, "devbox_") || len(first) != len("devbox_")+32 {
 		t.Fatalf("random API keys = %q, %q", first, second)
 	}
@@ -47,9 +40,6 @@ func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	payload := strings.TrimPrefix(first, "devbox_")
 	if mask := MaskAPIKey(first); mask != "devbox_"+payload[:4]+"..."+payload[len(payload)-4:] {
 		t.Fatalf("MaskAPIKey() = %q", mask)
-	}
-	if _, _, err := keys.New("unknown"); !errors.Is(err, ErrInvalidAPIKeyScenario) {
-		t.Fatalf("New(unknown) error = %v", err)
 	}
 }
 

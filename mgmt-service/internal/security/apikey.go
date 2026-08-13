@@ -17,8 +17,7 @@ const (
 )
 
 var (
-	ErrInvalidAPIKey         = errors.New("invalid API key")
-	ErrInvalidAPIKeyScenario = errors.New("invalid API key scenario")
+	ErrInvalidAPIKey = errors.New("invalid API key")
 )
 
 type APIKeys struct {
@@ -40,16 +39,13 @@ func (k APIKeys) DefaultFor(domainID, userID string) (string, []byte) {
 	return value, apiKeyDigest(value)
 }
 
-func (APIKeys) New(scenario core.APIKeyScenario) (string, []byte, error) {
-	if !ValidAPIKeyScenario(scenario) {
-		return "", nil, ErrInvalidAPIKeyScenario
-	}
+func (APIKeys) New(scenario core.APIKeyScenario) (string, []byte) {
 	random := make([]byte, apiKeyPayloadBytes)
 	if _, err := rand.Read(random); err != nil {
-		return "", nil, err
+		panic(err)
 	}
 	value := string(scenario) + "_" + base64.RawURLEncoding.EncodeToString(random)
-	return value, apiKeyDigest(value), nil
+	return value, apiKeyDigest(value)
 }
 
 func ValidAPIKeyScenario(scenario core.APIKeyScenario) bool {
@@ -57,11 +53,8 @@ func ValidAPIKeyScenario(scenario core.APIKeyScenario) bool {
 }
 
 func MaskAPIKey(value string) string {
-	scenario, payload, ok := splitAPIKey(value)
-	if !ok {
-		return "********"
-	}
-	return string(scenario) + "_" + payload[:4] + "..." + payload[len(payload)-4:]
+	prefix, payload, _ := strings.Cut(value, "_")
+	return prefix + "_" + payload[:4] + "..." + payload[len(payload)-4:]
 }
 
 func DigestAPIKey(value string) ([]byte, error) {

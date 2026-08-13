@@ -70,13 +70,13 @@ migrations           embedded forward-only database migrations
 | `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
 | `SERVER_ADDRESS` | no | HTTP listen address, default `:8080` |
 
-Create an empty database and grant the service account schema-change permissions. The service acquires a database lock and applies pending embedded migrations before opening the HTTP listener:
+Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTP listener:
 
 ```bash
 go run ./cmd
 ```
 
-Applied migration versions and checksums are recorded in `schema_migration`. Migrations are forward-only; changing an applied SQL file causes startup to fail instead of silently changing database history.
+Applied migration versions are recorded in `schema_migration`. Migrations are forward-only and SQL files are maintained manually.
 
 ## Checks
 

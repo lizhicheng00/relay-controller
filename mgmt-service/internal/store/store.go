@@ -202,30 +202,9 @@ func (s *Store) CreateAPIKey(
 	if err := lockIdentity(ctx, tx, namespace); err != nil {
 		return core.APIKey{}, err
 	}
-	var existing int
-	err = tx.QueryRowContext(ctx, `
-		SELECT 1 FROM api_key WHERE namespace = ? AND name = ? FOR UPDATE`,
-		namespace, key.Name).Scan(&existing)
-	if err == nil {
-		return core.APIKey{}, ErrNameConflict
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return core.APIKey{}, fmt.Errorf("check API key name: %w", err)
-	}
-
-	occupied, err := occupiedSlots(ctx, tx, namespace)
+	slot, err := availableSlot(ctx, tx, namespace, key.Name)
 	if err != nil {
 		return core.APIKey{}, err
-	}
-	slot := 0
-	for candidate := 1; candidate <= core.MaxAdditionalAPIKeys; candidate++ {
-		if !occupied[candidate] {
-			slot = candidate
-			break
-		}
-	}
-	if slot == 0 {
-		return core.APIKey{}, ErrKeyLimit
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -233,6 +212,10 @@ func (s *Store) CreateAPIKey(
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		key.ID, namespace, slot, key.Name, key.Scenario, key.Mask, key.Digest)
 	if err != nil {
+		var mysqlError *mysqldriver.MySQLError
+		if errors.As(err, &mysqlError) && mysqlError.Number == 1062 {
+			return core.APIKey{}, ErrNameConflict
+		}
 		return core.APIKey{}, fmt.Errorf("create API key: %w", err)
 	}
 	created, err := queryAPIKey(ctx, tx, namespace, key.ID)
@@ -291,31 +274,39 @@ func lockIdentity(ctx context.Context, tx *sql.Tx, namespace string) error {
 	return nil
 }
 
-func occupiedSlots(
+func availableSlot(
 	ctx context.Context,
 	tx *sql.Tx,
 	namespace string,
-) ([core.MaxAdditionalAPIKeys + 1]bool, error) {
+	name string,
+) (int, error) {
 	var occupied [core.MaxAdditionalAPIKeys + 1]bool
 	rows, err := tx.QueryContext(ctx, `
-		SELECT slot FROM api_key WHERE namespace = ? FOR UPDATE`, namespace)
+		SELECT slot, name FROM api_key WHERE namespace = ? FOR UPDATE`, namespace)
 	if err != nil {
-		return occupied, fmt.Errorf("list occupied API key slots: %w", err)
+		return 0, fmt.Errorf("list API key slots: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var slot int
-		if err := rows.Scan(&slot); err != nil {
-			return occupied, fmt.Errorf("scan API key slot: %w", err)
+		var existingName string
+		if err := rows.Scan(&slot, &existingName); err != nil {
+			return 0, fmt.Errorf("scan API key slot: %w", err)
 		}
-		if slot >= 0 && slot < len(occupied) {
-			occupied[slot] = true
+		if existingName == name {
+			return 0, ErrNameConflict
 		}
+		occupied[slot] = true
 	}
 	if err := rows.Err(); err != nil {
-		return occupied, fmt.Errorf("iterate API key slots: %w", err)
+		return 0, fmt.Errorf("iterate API key slots: %w", err)
 	}
-	return occupied, nil
+	for slot := 1; slot <= core.MaxAdditionalAPIKeys; slot++ {
+		if !occupied[slot] {
+			return slot, nil
+		}
+	}
+	return 0, ErrKeyLimit
 }
 
 func queryAPIKey(ctx context.Context, tx *sql.Tx, namespace, keyID string) (core.APIKey, error) {
