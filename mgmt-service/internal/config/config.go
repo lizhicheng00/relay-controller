@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const defaultAddress = ":8080"
+const defaultAddress = ":8443"
 
 type Config struct {
 	Address           string

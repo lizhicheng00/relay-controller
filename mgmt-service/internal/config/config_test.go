@@ -10,7 +10,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("SERVER_ADDRESS", "")
 
 	cfg := Load()
-	if cfg.Address != ":8080" {
+	if cfg.Address != ":8443" {
 		t.Fatalf("Load() defaults = %#v", cfg)
 	}
 }

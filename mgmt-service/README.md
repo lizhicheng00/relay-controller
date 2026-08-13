@@ -68,7 +68,7 @@ migrations           embedded forward-only database migrations
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `API_KEY_SECRET` | yes | API key derivation secret, at least 32 characters |
 | `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
-| `SERVER_ADDRESS` | no | HTTP listen address, default `:8080` |
+| `SERVER_ADDRESS` | no | HTTP listen address, default `:8443` |
 
 Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTP listener:
 
