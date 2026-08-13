@@ -7,7 +7,7 @@ relay-controller/   Relay Controller service
 mgmt-service/        Namespace and API key management service
 ```
 
-Run workspace checks from the repository root:1
+Run workspace checks from the repository root:
 
 ```bash
 go test ./relay-controller/...
