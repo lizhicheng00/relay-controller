@@ -52,7 +52,7 @@ The runtime uses the Go standard library where practical. The only direct depend
 
 ## Configuration
 
-Required environment variables:
+Environment variables:
 
 | Variable | Meaning |
 | --- | --- |
@@ -60,8 +60,8 @@ Required environment variables:
 | `DATASOURCE_USERNAME` | Database user |
 | `DATASOURCE_PASSWORD` | Database password |
 | `RELAY_REGION` | Region owned by this instance |
-| `RELAY_DOMAIN` | Tunnel DNS suffix |
-| `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute |
+| `RELAY_DOMAIN` | Tunnel DNS suffix, default `myhuaweicloud.com` |
+| `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute, default `120` |
 | `RELAY_JWT_PRIVATE_KEY` | PKCS8 RSA private key, PEM or Base64 DER, at least 2048 bits |
 | `SERVER_SSL_KEY_STORE_BASE64` | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | Server key store password |

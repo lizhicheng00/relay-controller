@@ -4,6 +4,12 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+)
+
+const (
+	defaultRelayDomain       = "myhuaweicloud.com"
+	defaultRequestsPerMinute = 120
 )
 
 type Config struct {
@@ -33,9 +39,13 @@ type TLS struct {
 }
 
 func Load() (Config, error) {
-	requestsPerMinute, err := strconv.Atoi(os.Getenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE"))
-	if err != nil || requestsPerMinute < 1 {
-		return Config{}, fmt.Errorf("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE must be a positive integer")
+	requestsPerMinute := defaultRequestsPerMinute
+	if value := strings.TrimSpace(os.Getenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 {
+			return Config{}, fmt.Errorf("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE must be a positive integer")
+		}
+		requestsPerMinute = parsed
 	}
 	return Config{
 		Database: Database{
@@ -44,7 +54,7 @@ func Load() (Config, error) {
 			Password: os.Getenv("DATASOURCE_PASSWORD"),
 		},
 		Relay: Relay{
-			Domain:            os.Getenv("RELAY_DOMAIN"),
+			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
 			Region:            os.Getenv("RELAY_REGION"),
 			RequestsPerMinute: requestsPerMinute,
 			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
@@ -56,4 +66,11 @@ func Load() (Config, error) {
 			TrustStorePassword: os.Getenv("SERVER_SSL_TRUST_STORE_PASSWORD"),
 		},
 	}, nil
+}
+
+func valueOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
 }
