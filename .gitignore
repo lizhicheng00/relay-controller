@@ -1,0 +1,21 @@
+bin/
+coverage.out
+.idea/
+.vscode/
+*.iml
+*.log
+.DS_Store
+
+# Local credentials and generated key material
+.env
+.env.*
+secrets/
+mtls/
+certs/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+**/http-client.private.env.json
