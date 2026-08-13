@@ -28,7 +28,8 @@ CREATE TABLE api_key (
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     slot TINYINT UNSIGNED NOT NULL,
     name VARCHAR(64) NOT NULL,
-    key_mask VARCHAR(16) NOT NULL,
+    scenario VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
+    key_mask VARCHAR(32) NOT NULL,
     key_hash BINARY(32) NOT NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
@@ -36,6 +37,7 @@ CREATE TABLE api_key (
     UNIQUE KEY uk_api_key_namespace_name (namespace, name),
     UNIQUE KEY uk_api_key_hash (key_hash),
     CONSTRAINT chk_api_key_slot CHECK (slot <= 4),
+    CONSTRAINT chk_api_key_scenario CHECK (scenario IN ('devbridge', 'devbox')),
     CONSTRAINT fk_api_key_identity
         FOREIGN KEY (namespace) REFERENCES user_identity (namespace)
         ON DELETE CASCADE

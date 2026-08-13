@@ -11,7 +11,8 @@ paths:
       summary: Get a cloud user's default API key
       description: >-
         Called by the trusted identity layer after browser login. The service creates the
-        user's namespace on first use and returns the same default API key on later calls.
+        user's namespace on first use and returns the same `devbridge` default API key on
+        later calls.
       security:
         - trustedIdentityProxy: []
       parameters:
@@ -73,7 +74,8 @@ paths:
       summary: Create an additional API key
       description: >-
         Creates one of at most four additional API keys. The complete value is returned only
-        in this response and cannot be retrieved later.
+        in this response and cannot be retrieved later. The requested scenario determines
+        whether the value starts with `devbridge_` or `devbox_`.
       security:
         - apiKeyAuth: []
       requestBody:
@@ -182,15 +184,17 @@ components:
               $ref: '#/components/schemas/APIKeyValue'
     APIKey:
       type: object
-      required: [id, name, mask, isDefault, createdAt]
+      required: [id, name, scenario, mask, isDefault, createdAt]
       properties:
         id:
           type: string
         name:
           type: string
+        scenario:
+          $ref: '#/components/schemas/APIKeyScenario'
         mask:
           type: string
-          example: abcd...1234
+          example: devbridge_abcd...1234
         isDefault:
           type: boolean
         createdAt:
@@ -206,10 +210,14 @@ components:
               $ref: '#/components/schemas/APIKeyValue'
     APIKeyValue:
       type: string
-      pattern: '^[a-z0-9]{32}$'
+      pattern: '^(devbridge|devbox)_[A-Za-z0-9_-]{32}$'
+      description: Scenario prefix followed by a 32-character unpadded Base64URL payload.
+    APIKeyScenario:
+      type: string
+      enum: [devbridge, devbox]
     CreateAPIKeyRequest:
       type: object
-      required: [name]
+      required: [name, scenario]
       additionalProperties: false
       properties:
         name:
@@ -217,6 +225,8 @@ components:
           minLength: 1
           maxLength: 64
           description: A client or usage-scenario label. The name `default` is reserved.
+        scenario:
+          $ref: '#/components/schemas/APIKeyScenario'
     ErrorResponse:
       type: object
       required: [error]

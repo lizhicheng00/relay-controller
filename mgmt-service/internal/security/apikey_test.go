@@ -2,8 +2,11 @@ package security
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
+
+	"mgmt-service/internal/core"
 )
 
 func TestAPIKeyIsStablePerIdentity(t *testing.T) {
@@ -15,8 +18,7 @@ func TestAPIKeyIsStablePerIdentity(t *testing.T) {
 	if first != second || !bytes.Equal(firstDigest, secondDigest) {
 		t.Fatal("same identity produced different API keys")
 	}
-	if first == other || len(first) != apiKeyLength ||
-		strings.Trim(first, "abcdefghijklmnopqrstuvwxyz0123456789") != "" {
+	if first == other || !strings.HasPrefix(first, "devbridge_") || len(first) != len("devbridge_")+32 {
 		t.Fatalf("invalid API key %q", first)
 	}
 	parsed, err := DigestAPIKey(first)
@@ -27,28 +29,37 @@ func TestAPIKeyIsStablePerIdentity(t *testing.T) {
 
 func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	keys := NewAPIKeys(strings.Repeat("s", 32))
-	first, firstDigest, err := keys.New()
+	first, firstDigest, err := keys.New(core.APIKeyScenarioDevBox)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, _, err := keys.New()
+	second, _, err := keys.New(core.APIKeyScenarioDevBox)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first == second || len(first) != apiKeyLength {
+	if first == second || !strings.HasPrefix(first, "devbox_") || len(first) != len("devbox_")+32 {
 		t.Fatalf("random API keys = %q, %q", first, second)
 	}
 	parsed, err := DigestAPIKey(first)
 	if err != nil || !bytes.Equal(parsed, firstDigest) {
 		t.Fatalf("DigestAPIKey() = %x, %v", parsed, err)
 	}
-	if mask := MaskAPIKey(first); mask != first[:4]+"..."+first[len(first)-4:] {
+	payload := strings.TrimPrefix(first, "devbox_")
+	if mask := MaskAPIKey(first); mask != "devbox_"+payload[:4]+"..."+payload[len(payload)-4:] {
 		t.Fatalf("MaskAPIKey() = %q", mask)
+	}
+	if _, _, err := keys.New("unknown"); !errors.Is(err, ErrInvalidAPIKeyScenario) {
+		t.Fatalf("New(unknown) error = %v", err)
 	}
 }
 
 func TestDigestAPIKeyRejectsMalformedValues(t *testing.T) {
-	for _, value := range []string{"short", strings.Repeat("A", apiKeyLength), strings.Repeat("-", apiKeyLength)} {
+	for _, value := range []string{
+		"short",
+		strings.Repeat("a", 32),
+		"unknown_" + strings.Repeat("a", 32),
+		"devbridge_" + strings.Repeat("+", 32),
+	} {
 		if _, err := DigestAPIKey(value); err == nil {
 			t.Fatalf("DigestAPIKey(%q) succeeded", value)
 		}

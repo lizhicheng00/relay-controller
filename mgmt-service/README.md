@@ -11,7 +11,9 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - The login flow retrieves the default API key. Repeated requests return the same default key.
 - The default API key cannot be deleted. Additional keys are intended for separate clients or usage scenarios.
 - Additional key names are unique within a namespace. All keys currently grant the same namespace access.
-- API keys are 32 lowercase Base36 characters. MySQL stores only their SHA-256 digests.
+- API key scenarios are `devbridge` and `devbox`. The default key uses `devbridge`; additional keys select a scenario when created.
+- Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
+- MySQL stores only API key metadata and SHA-256 digests.
 - The default key is derived with HMAC-SHA256 from `API_KEY_SECRET`; additional keys are generated randomly and returned only when created.
 - All replicas must use the same `API_KEY_SECRET`. Changing it is a coordinated default-key rotation completed as each user provisions again.
 
@@ -33,7 +35,7 @@ DELETE /v1/api-keys/{keyId}  delete an additional API key
 
 `POST /v1/api-key` requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, and `X-User-Id`. `GET /v1/me` requires `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
 
-The three management endpoints also require `X-API-Key`. They always operate on the namespace resolved from that key; a caller cannot submit another namespace. Lists contain metadata and masks only. A newly created additional key is returned once.
+The three management endpoints also require `X-API-Key`. They always operate on the namespace resolved from that key; a caller cannot submit another namespace. Lists contain metadata, scenarios, and masks only. Creating a key requires `name` and `scenario`; the complete value is returned once.
 
 ## Data Ownership
 

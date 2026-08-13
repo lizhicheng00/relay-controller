@@ -25,7 +25,7 @@ type API interface {
 	ProvisionAPIKey(context.Context, core.IdentityAssertion) (core.ProvisionedCredential, error)
 	Authenticate(context.Context, string) (core.Identity, error)
 	ListAPIKeys(context.Context, core.Identity) ([]core.APIKey, error)
-	CreateAPIKey(context.Context, core.Identity, string) (core.IssuedAPIKey, error)
+	CreateAPIKey(context.Context, core.Identity, string, core.APIKeyScenario) (core.IssuedAPIKey, error)
 	DeleteAPIKey(context.Context, core.Identity, string) error
 }
 
@@ -51,7 +51,8 @@ type errorBody struct {
 }
 
 type createAPIKeyRequest struct {
-	Name string `json:"name"`
+	Name     string              `json:"name"`
+	Scenario core.APIKeyScenario `json:"scenario"`
 }
 
 func New(api API, dependencies []Readiness, trustedProxyToken string, logger *slog.Logger) http.Handler {
@@ -107,7 +108,7 @@ func (h *Handler) createAPIKey(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	key, err := h.api.CreateAPIKey(
-		request.Context(), identityFromContext(request.Context()), input.Name)
+		request.Context(), identityFromContext(request.Context()), input.Name, input.Scenario)
 	if err != nil {
 		h.writeError(response, request, err)
 		return

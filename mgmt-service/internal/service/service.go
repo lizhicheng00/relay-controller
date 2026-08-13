@@ -46,7 +46,8 @@ func (s *Service) ProvisionAPIKey(
 	}
 	value, digest := s.keys.DefaultFor(assertion.DomainID, assertion.UserID)
 	identity, err := s.store.Provision(ctx, assertion, seed, core.NewAPIKey{
-		ID: keyID, Name: core.DefaultAPIKeyName, Mask: security.MaskAPIKey(value), Digest: digest,
+		ID: keyID, Name: core.DefaultAPIKeyName, Scenario: core.APIKeyScenarioDevBridge,
+		Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
 		return core.ProvisionedCredential{}, mapStoreError("provision identity", "X-User-Id", err)
@@ -78,21 +79,26 @@ func (s *Service) CreateAPIKey(
 	ctx context.Context,
 	identity core.Identity,
 	name string,
+	scenario core.APIKeyScenario,
 ) (core.IssuedAPIKey, error) {
 	name, err := validateAPIKeyName(name)
 	if err != nil {
 		return core.IssuedAPIKey{}, err
 	}
+	if !security.ValidAPIKeyScenario(scenario) {
+		return core.IssuedAPIKey{}, core.Invalid("scenario", "scenario must be devbridge or devbox")
+	}
 	keyID, err := security.NewID("key_")
 	if err != nil {
 		return core.IssuedAPIKey{}, core.Internal("generate API key ID", err)
 	}
-	value, digest, err := s.keys.New()
+	value, digest, err := s.keys.New(scenario)
 	if err != nil {
 		return core.IssuedAPIKey{}, core.Internal("generate API key", err)
 	}
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
-		ID: keyID, Name: name, Mask: security.MaskAPIKey(value), Digest: digest,
+		ID: keyID, Name: name, Scenario: scenario,
+		Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
 		return core.IssuedAPIKey{}, mapAPIKeyStoreError("create API key", err)

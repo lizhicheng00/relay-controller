@@ -79,7 +79,8 @@ func TestProvisionAPIKeyIsStable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second ProvisionAPIKey() error = %v", err)
 	}
-	if first.APIKey != second.APIKey || first.Identity != testIdentity || len(first.APIKey) != 32 {
+	if first.APIKey != second.APIKey || first.Identity != testIdentity ||
+		!strings.HasPrefix(first.APIKey, "devbridge_") {
 		t.Fatalf("credentials = %#v, %#v", first, second)
 	}
 	digest, _ := security.DigestAPIKey(first.APIKey)
@@ -105,17 +106,21 @@ func TestAuthenticateReturnsMappedIdentity(t *testing.T) {
 
 func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 	created := core.APIKey{
-		ID: "key_abcdefghijklmnopqrstuvwxyz", Name: "local-cli", Mask: "abcd...1234",
+		ID: "key_abcdefghijklmnopqrstuvwxyz", Name: "local-cli",
+		Scenario: core.APIKeyScenarioDevBox, Mask: "devbox_abcd...1234",
 		CreatedAt: time.Now(),
 	}
 	repository := &fakeRepository{created: created}
 	application := New(repository, security.NewAPIKeys(strings.Repeat("s", 32)))
 
-	issued, err := application.CreateAPIKey(context.Background(), testIdentity, " local-cli ")
+	issued, err := application.CreateAPIKey(
+		context.Background(), testIdentity, " local-cli ", core.APIKeyScenarioDevBox)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if issued.APIKey != created || len(issued.Value) != 32 || repository.createdKey.Name != "local-cli" {
+	if issued.APIKey != created || !strings.HasPrefix(issued.Value, "devbox_") ||
+		repository.createdKey.Name != "local-cli" ||
+		repository.createdKey.Scenario != core.APIKeyScenarioDevBox {
 		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKey)
 	}
 	digest, err := security.DigestAPIKey(issued.Value)
@@ -127,15 +132,21 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 	application := New(&fakeRepository{}, security.NewAPIKeys(strings.Repeat("s", 32)))
 	for _, name := range []string{"", "default", "bad\nname"} {
-		if _, err := application.CreateAPIKey(context.Background(), testIdentity, name); err == nil {
+		if _, err := application.CreateAPIKey(
+			context.Background(), testIdentity, name, core.APIKeyScenarioDevBridge,
+		); err == nil {
 			t.Fatalf("CreateAPIKey(%q) succeeded", name)
 		}
 	}
 
 	repository := &fakeRepository{createErr: store.ErrKeyLimit}
 	application = New(repository, security.NewAPIKeys(strings.Repeat("s", 32)))
-	_, err := application.CreateAPIKey(context.Background(), testIdentity, "fifth")
+	_, err := application.CreateAPIKey(
+		context.Background(), testIdentity, "fifth", core.APIKeyScenarioDevBridge)
 	assertAppError(t, err, 409, "API_KEY_LIMIT_REACHED")
+
+	_, err = application.CreateAPIKey(context.Background(), testIdentity, "invalid", "unknown")
+	assertAppError(t, err, 400, "PARAM_INVALID")
 
 	repository = &fakeRepository{deleteErr: store.ErrDefaultKey}
 	application = New(repository, security.NewAPIKeys(strings.Repeat("s", 32)))

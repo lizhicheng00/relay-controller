@@ -7,6 +7,13 @@ const (
 	MaxAdditionalAPIKeys = 4
 )
 
+type APIKeyScenario string
+
+const (
+	APIKeyScenarioDevBridge APIKeyScenario = "devbridge"
+	APIKeyScenarioDevBox    APIKeyScenario = "devbox"
+)
+
 type IdentityAssertion struct {
 	DomainID string
 	UserID   string
@@ -31,18 +38,20 @@ type ProvisionedCredential struct {
 }
 
 type NewAPIKey struct {
-	ID     string
-	Name   string
-	Mask   string
-	Digest []byte
+	ID       string
+	Name     string
+	Scenario APIKeyScenario
+	Mask     string
+	Digest   []byte
 }
 
 type APIKey struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Mask      string    `json:"mask"`
-	Default   bool      `json:"isDefault"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Scenario  APIKeyScenario `json:"scenario"`
+	Mask      string         `json:"mask"`
+	Default   bool           `json:"isDefault"`
+	CreatedAt time.Time      `json:"createdAt"`
 }
 
 type IssuedAPIKey struct {

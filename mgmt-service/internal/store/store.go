@@ -128,14 +128,15 @@ func (s *Store) Provision(
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, slot, name, key_mask, key_hash)
-			VALUES (?, ?, 0, ?, ?, ?)`,
+			INSERT INTO api_key (id, namespace, slot, name, scenario, key_mask, key_hash)
+			VALUES (?, ?, 0, ?, ?, ?, ?)`,
 			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
-			defaultKey.Mask, defaultKey.Digest)
+			defaultKey.Scenario, defaultKey.Mask, defaultKey.Digest)
 	case err == nil:
 		_, err = tx.ExecContext(ctx, `
-			UPDATE api_key SET name = ?, key_mask = ?, key_hash = ? WHERE id = ?`,
-			core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
+			UPDATE api_key SET name = ?, scenario = ?, key_mask = ?, key_hash = ? WHERE id = ?`,
+			core.DefaultAPIKeyName, defaultKey.Scenario,
+			defaultKey.Mask, defaultKey.Digest, existingDefaultID)
 	}
 	if err != nil {
 		return core.Identity{}, fmt.Errorf("store default API key: %w", err)
@@ -170,7 +171,7 @@ func (s *Store) FindIdentity(ctx context.Context, apiKeyHash []byte) (core.Ident
 
 func (s *Store) ListAPIKeys(ctx context.Context, namespace string) ([]core.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT k.id, k.name, k.key_mask, k.slot, k.created_at
+		SELECT k.id, k.name, k.scenario, k.key_mask, k.slot, k.created_at
 		FROM api_key k
 		JOIN user_identity u ON u.namespace = k.namespace
 		WHERE k.namespace = ? AND u.status = 'active'
@@ -235,9 +236,9 @@ func (s *Store) CreateAPIKey(
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, slot, name, key_mask, key_hash)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		key.ID, namespace, slot, key.Name, key.Mask, key.Digest)
+		INSERT INTO api_key (id, namespace, slot, name, scenario, key_mask, key_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		key.ID, namespace, slot, key.Name, key.Scenario, key.Mask, key.Digest)
 	if err != nil {
 		return core.APIKey{}, fmt.Errorf("create API key: %w", err)
 	}
@@ -326,7 +327,7 @@ func occupiedSlots(
 
 func queryAPIKey(ctx context.Context, tx *sql.Tx, namespace, keyID string) (core.APIKey, error) {
 	return scanAPIKey(tx.QueryRowContext(ctx, `
-		SELECT id, name, key_mask, slot, created_at
+		SELECT id, name, scenario, key_mask, slot, created_at
 		FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID))
 }
 
@@ -337,7 +338,9 @@ type scanner interface {
 func scanAPIKey(row scanner) (core.APIKey, error) {
 	var key core.APIKey
 	var slot int
-	if err := row.Scan(&key.ID, &key.Name, &key.Mask, &slot, &key.CreatedAt); err != nil {
+	if err := row.Scan(
+		&key.ID, &key.Name, &key.Scenario, &key.Mask, &slot, &key.CreatedAt,
+	); err != nil {
 		return core.APIKey{}, mapQueryError("load API key", err)
 	}
 	key.Default = slot == 0

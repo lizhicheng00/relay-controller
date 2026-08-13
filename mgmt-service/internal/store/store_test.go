@@ -86,6 +86,10 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	additional := make([]core.NewAPIKey, 0, core.MaxAdditionalAPIKeys)
 	for index := 1; index <= core.MaxAdditionalAPIKeys; index++ {
 		key := newTestKey(fmt.Sprintf("key_%d_%s", index, suffix), fmt.Sprintf("client-%d", index), byte(index+2))
+		if index == 1 {
+			key.Scenario = core.APIKeyScenarioDevBox
+			key.Mask = "devbox_test...mask"
+		}
 		created, err := repository.CreateAPIKey(ctx, identity.Namespace, key)
 		if err != nil || created.Default || created.Name != key.Name {
 			t.Fatalf("CreateAPIKey(%d) = %#v, %v", index, created, err)
@@ -98,14 +102,22 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	}
 
 	keys, err := repository.ListAPIKeys(ctx, identity.Namespace)
-	if err != nil || len(keys) != core.MaxAdditionalAPIKeys+1 || !keys[0].Default {
+	if err != nil || len(keys) != core.MaxAdditionalAPIKeys+1 || !keys[0].Default ||
+		keys[1].Scenario != core.APIKeyScenarioDevBox {
 		t.Fatalf("ListAPIKeys() = %#v, %v", keys, err)
 	}
 	if _, err := repository.db.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, slot, name, key_mask, key_hash)
-		VALUES (?, ?, 5, 'invalid-slot', 'test...mask', ?)`,
+		INSERT INTO api_key (id, namespace, slot, name, scenario, key_mask, key_hash)
+		VALUES (?, ?, 5, 'invalid-slot', 'devbridge', 'devbridge_test...mask', ?)`,
 		"key_invalid_"+suffix, identity.Namespace, bytes.Repeat([]byte{99}, 32)); err == nil {
 		t.Fatal("database accepted API key slot 5")
+	}
+	if _, err := repository.db.ExecContext(ctx, `
+		INSERT INTO api_key (id, namespace, slot, name, scenario, key_mask, key_hash)
+		VALUES (?, ?, 1, 'invalid-scenario', 'unknown', 'unknown_test...mask', ?)`,
+		"key_bad_scenario_"+suffix, secondIdentity.Namespace,
+		bytes.Repeat([]byte{98}, 32)); err == nil {
+		t.Fatal("database accepted an unknown API key scenario")
 	}
 	if _, err := repository.CreateAPIKey(ctx, identity.Namespace,
 		newTestKey("key_duplicate_"+suffix, additional[0].Name, 21)); !errors.Is(err, ErrNameConflict) {
@@ -205,6 +217,7 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 
 func newTestKey(id, name string, digestByte byte) core.NewAPIKey {
 	return core.NewAPIKey{
-		ID: id, Name: name, Mask: "test...mask", Digest: bytes.Repeat([]byte{digestByte}, 32),
+		ID: id, Name: name, Scenario: core.APIKeyScenarioDevBridge,
+		Mask: "devbridge_test...mask", Digest: bytes.Repeat([]byte{digestByte}, 32),
 	}
 }

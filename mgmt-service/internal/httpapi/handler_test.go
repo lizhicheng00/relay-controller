@@ -15,17 +15,18 @@ import (
 )
 
 type fakeAPI struct {
-	provisioned core.ProvisionedCredential
-	identity    core.Identity
-	keys        []core.APIKey
-	issued      core.IssuedAPIKey
-	assertion   core.IdentityAssertion
-	createdName string
-	deletedID   string
-	authError   error
-	listError   error
-	createError error
-	deleteError error
+	provisioned     core.ProvisionedCredential
+	identity        core.Identity
+	keys            []core.APIKey
+	issued          core.IssuedAPIKey
+	assertion       core.IdentityAssertion
+	createdName     string
+	createdScenario core.APIKeyScenario
+	deletedID       string
+	authError       error
+	listError       error
+	createError     error
+	deleteError     error
 }
 
 func (f *fakeAPI) ProvisionAPIKey(
@@ -48,8 +49,10 @@ func (f *fakeAPI) CreateAPIKey(
 	_ context.Context,
 	_ core.Identity,
 	name string,
+	scenario core.APIKeyScenario,
 ) (core.IssuedAPIKey, error) {
 	f.createdName = name
+	f.createdScenario = scenario
 	return f.issued, f.createError
 }
 
@@ -131,10 +134,15 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 	identity := core.Identity{Namespace: "ns-u-test"}
 	application := &fakeAPI{
 		identity: identity,
-		keys:     []core.APIKey{{ID: "key_default", Name: "default", Default: true}},
+		keys: []core.APIKey{{
+			ID: "key_default", Name: "default",
+			Scenario: core.APIKeyScenarioDevBridge, Default: true,
+		}},
 		issued: core.IssuedAPIKey{
-			APIKey: core.APIKey{ID: "key_created", Name: "local-cli"},
-			Value:  strings.Repeat("a", 32),
+			APIKey: core.APIKey{
+				ID: "key_created", Name: "local-cli", Scenario: core.APIKeyScenarioDevBox,
+			},
+			Value: "devbox_" + strings.Repeat("a", 32),
 		},
 	}
 	server := newTestServer(application)
@@ -148,13 +156,14 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 	}
 
 	createRequest := httptest.NewRequest(http.MethodPost, "/v1/api-keys",
-		strings.NewReader(`{"name":"local-cli"}`))
+		strings.NewReader(`{"name":"local-cli","scenario":"devbox"}`))
 	createRequest.Header.Set("X-API-Key", strings.Repeat("a", 32))
 	createRequest.Header.Set("Content-Type", "application/json")
 	createResponse := httptest.NewRecorder()
 	server.ServeHTTP(createResponse, createRequest)
 	if createResponse.Code != http.StatusCreated || application.createdName != "local-cli" ||
-		!strings.Contains(createResponse.Body.String(), strings.Repeat("a", 32)) {
+		application.createdScenario != core.APIKeyScenarioDevBox ||
+		!strings.Contains(createResponse.Body.String(), "devbox_"+strings.Repeat("a", 32)) {
 		t.Fatalf("create status = %d, name = %q, body = %s",
 			createResponse.Code, application.createdName, createResponse.Body)
 	}
@@ -171,7 +180,7 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 func TestCreateAPIKeyRejectsInvalidJSON(t *testing.T) {
 	server := newTestServer(&fakeAPI{})
 	request := httptest.NewRequest(http.MethodPost, "/v1/api-keys",
-		strings.NewReader(`{"name":"cli","unknown":true}`))
+		strings.NewReader(`{"name":"cli","scenario":"devbridge","unknown":true}`))
 	request.Header.Set("X-API-Key", strings.Repeat("a", 32))
 	response := httptest.NewRecorder()
 
