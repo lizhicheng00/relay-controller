@@ -12,12 +12,16 @@ import (
 	"time"
 
 	"mgmt-service/internal/core"
+	"mgmt-service/migrations"
 )
 
 func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_DSN is not configured")
+	}
+	if err := migrations.Run(context.Background(), dsn); err != nil {
+		t.Fatalf("migrations.Run() error = %v", err)
 	}
 	repository, err := Open(context.Background(), dsn)
 	if err != nil {
@@ -157,6 +161,9 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_DSN is not configured")
+	}
+	if err := migrations.Run(context.Background(), dsn); err != nil {
+		t.Fatalf("migrations.Run() error = %v", err)
 	}
 	repository, err := Open(context.Background(), dsn)
 	if err != nil {

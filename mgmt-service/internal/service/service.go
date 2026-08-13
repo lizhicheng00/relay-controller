@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -38,11 +39,11 @@ func (s *Service) ProvisionAPIKey(
 	}
 	seed, err := newIdentitySeed()
 	if err != nil {
-		return core.ProvisionedCredential{}, core.Internal("generate identity", err)
+		return core.ProvisionedCredential{}, core.Internal(err)
 	}
 	keyID, err := security.NewID("key_")
 	if err != nil {
-		return core.ProvisionedCredential{}, core.Internal("generate default API key ID", err)
+		return core.ProvisionedCredential{}, core.Internal(err)
 	}
 	value, digest := s.keys.DefaultFor(assertion.DomainID, assertion.UserID)
 	identity, err := s.store.Provision(ctx, assertion, seed, core.NewAPIKey{
@@ -90,11 +91,11 @@ func (s *Service) CreateAPIKey(
 	}
 	keyID, err := security.NewID("key_")
 	if err != nil {
-		return core.IssuedAPIKey{}, core.Internal("generate API key ID", err)
+		return core.IssuedAPIKey{}, core.Internal(err)
 	}
 	value, digest, err := s.keys.New(scenario)
 	if err != nil {
-		return core.IssuedAPIKey{}, core.Internal("generate API key", err)
+		return core.IssuedAPIKey{}, core.Internal(err)
 	}
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
 		ID: keyID, Name: name, Scenario: scenario,
@@ -192,22 +193,22 @@ func mapStoreError(operation, target string, err error) error {
 	if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrNotFound) {
 		return core.Unauthorized(target)
 	}
-	return core.Internal(operation, err)
+	return core.Internal(fmt.Errorf("%s: %w", operation, err))
 }
 
 func mapAPIKeyStoreError(operation string, err error) error {
 	switch {
 	case errors.Is(err, store.ErrKeyLimit):
-		return core.Conflict("API_KEY_LIMIT_REACHED", "apiKeys", "a namespace can have at most four additional API keys")
+		return core.Conflict(core.CodeAPIKeyLimitReached, "apiKeys", "a namespace can have at most four additional API keys")
 	case errors.Is(err, store.ErrNameConflict):
-		return core.Conflict("API_KEY_NAME_CONFLICT", "name", "an API key with this name already exists")
+		return core.Conflict(core.CodeAPIKeyNameConflict, "name", "an API key with this name already exists")
 	case errors.Is(err, store.ErrDefaultKey):
-		return core.Conflict("DEFAULT_API_KEY", "keyId", "the default API key cannot be deleted")
+		return core.Conflict(core.CodeDefaultAPIKey, "keyId", "the default API key cannot be deleted")
 	case errors.Is(err, store.ErrNotFound):
 		return core.NotFound("keyId", "API key not found")
 	case errors.Is(err, store.ErrUnauthorized):
 		return core.Unauthorized("X-API-Key")
 	default:
-		return core.Internal(operation, err)
+		return core.Internal(fmt.Errorf("%s: %w", operation, err))
 	}
 }

@@ -58,7 +58,7 @@ internal/httpapi     HTTP routes and OpenAPI
 internal/security    API key derivation and random namespace identifiers
 internal/service     identity provisioning and authentication
 internal/store       MySQL persistence
-migrations           base database schema
+migrations           embedded forward-only database migrations
 ```
 
 ## Configuration
@@ -70,11 +70,13 @@ migrations           base database schema
 | `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
 | `SERVER_ADDRESS` | no | HTTP listen address, default `:8080` |
 
-Apply the SQL migration with the deployment migration tool, then start the service:
+Create an empty database and grant the service account schema-change permissions. The service acquires a database lock and applies pending embedded migrations before opening the HTTP listener:
 
 ```bash
 go run ./cmd
 ```
+
+Applied migration versions and checksums are recorded in `schema_migration`. Migrations are forward-only; changing an applied SQL file causes startup to fail instead of silently changing database history.
 
 ## Checks
 

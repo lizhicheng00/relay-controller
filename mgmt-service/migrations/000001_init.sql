@@ -1,4 +1,4 @@
-CREATE TABLE domain_account (
+CREATE TABLE IF NOT EXISTS domain_account (
     id VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
     domain_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     account_namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE domain_account (
     UNIQUE KEY uk_domain_account_namespace (account_namespace)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE user_identity (
+CREATE TABLE IF NOT EXISTS user_identity (
     account_id VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
     user_id VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE user_identity (
         FOREIGN KEY (account_id) REFERENCES domain_account (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE api_key (
+CREATE TABLE IF NOT EXISTS api_key (
     id VARCHAR(32) COLLATE utf8mb4_bin NOT NULL,
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     slot TINYINT UNSIGNED NOT NULL,

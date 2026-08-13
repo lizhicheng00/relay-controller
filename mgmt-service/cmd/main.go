@@ -16,6 +16,7 @@ import (
 	"mgmt-service/internal/security"
 	"mgmt-service/internal/service"
 	"mgmt-service/internal/store"
+	"mgmt-service/migrations"
 )
 
 func main() {
@@ -35,6 +36,9 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if err := migrations.Run(ctx, cfg.DatabaseDSN); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
 	repository, err := store.Open(ctx, cfg.DatabaseDSN)
 	if err != nil {
 		return err
@@ -42,9 +46,8 @@ func run() error {
 	defer func() { _ = repository.Close() }()
 	application := service.New(repository, security.NewAPIKeys(cfg.APIKeySecret))
 	server := &http.Server{
-		Addr: cfg.Address,
-		Handler: httpapi.New(application, []httpapi.Readiness{repository},
-			cfg.TrustedProxyToken, logger),
+		Addr:              cfg.Address,
+		Handler:           httpapi.New(application, cfg.TrustedProxyToken, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,

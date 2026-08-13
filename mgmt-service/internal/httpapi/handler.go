@@ -8,9 +8,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"runtime/debug"
-	"time"
+	"strings"
 
 	"mgmt-service/internal/core"
 	"mgmt-service/internal/security"
@@ -29,25 +30,10 @@ type API interface {
 	DeleteAPIKey(context.Context, core.Identity, string) error
 }
 
-type Readiness interface {
-	Ping(context.Context) error
-}
-
 type Handler struct {
 	api               API
-	dependencies      []Readiness
 	trustedProxyToken string
 	log               *slog.Logger
-}
-
-type errorEnvelope struct {
-	Error errorBody `json:"error"`
-}
-
-type errorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Target  string `json:"target,omitempty"`
 }
 
 type createAPIKeyRequest struct {
@@ -55,13 +41,11 @@ type createAPIKeyRequest struct {
 	Scenario core.APIKeyScenario `json:"scenario"`
 }
 
-func New(api API, dependencies []Readiness, trustedProxyToken string, logger *slog.Logger) http.Handler {
+func New(api API, trustedProxyToken string, logger *slog.Logger) http.Handler {
 	handler := &Handler{
-		api: api, dependencies: dependencies, trustedProxyToken: trustedProxyToken, log: logger,
+		api: api, trustedProxyToken: trustedProxyToken, log: logger,
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handler.health)
-	mux.HandleFunc("GET /readyz", handler.ready)
 	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
 	mux.HandleFunc("POST /v1/api-key", handler.provisionAPIKey)
 	mux.Handle("GET /v1/me", handler.authenticate(http.HandlerFunc(handler.me)))
@@ -73,7 +57,7 @@ func New(api API, dependencies []Readiness, trustedProxyToken string, logger *sl
 
 func (h *Handler) provisionAPIKey(response http.ResponseWriter, request *http.Request) {
 	if !constantTimeEqual(request.Header.Get("X-DevBridge-Proxy-Token"), h.trustedProxyToken) {
-		writeError(response, core.Unauthorized("X-DevBridge-Proxy-Token"))
+		h.writeError(response, core.Unauthorized("X-DevBridge-Proxy-Token"))
 		return
 	}
 	result, err := h.api.ProvisionAPIKey(request.Context(), core.IdentityAssertion{
@@ -81,7 +65,7 @@ func (h *Handler) provisionAPIKey(response http.ResponseWriter, request *http.Re
 		UserID:   request.Header.Get("X-User-Id"),
 	})
 	if err != nil {
-		h.writeError(response, request, err)
+		h.writeError(response, err)
 		return
 	}
 	response.Header().Set("Cache-Control", "no-store")
@@ -95,7 +79,7 @@ func (h *Handler) me(response http.ResponseWriter, request *http.Request) {
 func (h *Handler) listAPIKeys(response http.ResponseWriter, request *http.Request) {
 	keys, err := h.api.ListAPIKeys(request.Context(), identityFromContext(request.Context()))
 	if err != nil {
-		h.writeError(response, request, err)
+		h.writeError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, keys)
@@ -104,13 +88,13 @@ func (h *Handler) listAPIKeys(response http.ResponseWriter, request *http.Reques
 func (h *Handler) createAPIKey(response http.ResponseWriter, request *http.Request) {
 	var input createAPIKeyRequest
 	if err := decodeJSON(response, request, &input); err != nil {
-		writeError(response, core.Invalid("body", "request body is invalid"))
+		h.writeError(response, err)
 		return
 	}
 	key, err := h.api.CreateAPIKey(
 		request.Context(), identityFromContext(request.Context()), input.Name, input.Scenario)
 	if err != nil {
-		h.writeError(response, request, err)
+		h.writeError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, key)
@@ -120,28 +104,10 @@ func (h *Handler) deleteAPIKey(response http.ResponseWriter, request *http.Reque
 	err := h.api.DeleteAPIKey(
 		request.Context(), identityFromContext(request.Context()), request.PathValue("keyId"))
 	if err != nil {
-		h.writeError(response, request, err)
+		h.writeError(response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
-}
-
-func (h *Handler) health(response http.ResponseWriter, _ *http.Request) {
-	writeJSON(response, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (h *Handler) ready(response http.ResponseWriter, request *http.Request) {
-	ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
-	defer cancel()
-	for _, dependency := range h.dependencies {
-		if err := dependency.Ping(ctx); err != nil {
-			writeError(response, &core.AppError{
-				Status: http.StatusServiceUnavailable, Code: "NOT_READY", Message: "service is not ready",
-			})
-			return
-		}
-	}
-	writeJSON(response, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (h *Handler) openapi(response http.ResponseWriter, _ *http.Request) {
@@ -155,7 +121,7 @@ func (h *Handler) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		identity, err := h.api.Authenticate(request.Context(), request.Header.Get("X-API-Key"))
 		if err != nil {
-			h.writeError(response, request, err)
+			h.writeError(response, err)
 			return
 		}
 		response.Header().Set("Cache-Control", "no-store")
@@ -182,29 +148,19 @@ func (h *Handler) recover(next http.Handler) http.Handler {
 			if recovered := recover(); recovered != nil {
 				h.log.Error("request panic", "method", request.Method, "path", request.URL.Path,
 					"error", recovered, "stack", string(debug.Stack()))
-				writeError(response, core.Internal("internal server error", nil))
+				writeJSON(response, http.StatusInternalServerError, core.Internal(nil).Response())
 			}
 		}()
 		next.ServeHTTP(response, request)
 	})
 }
 
-func (h *Handler) writeError(response http.ResponseWriter, request *http.Request, err error) {
+func (h *Handler) writeError(response http.ResponseWriter, err error) {
 	appError := core.AsAppError(err)
-	message := appError.Message
 	if appError.Status >= http.StatusInternalServerError {
-		h.log.Error("request failed", "method", request.Method, "path", request.URL.Path, "error", err)
-		message = "internal server error"
+		h.log.Error("request failed", "error", appError.Error(), "stack", string(debug.Stack()))
 	}
-	writeJSON(response, appError.Status, errorEnvelope{Error: errorBody{
-		Code: appError.Code, Message: message, Target: appError.Target,
-	}})
-}
-
-func writeError(response http.ResponseWriter, err *core.AppError) {
-	writeJSON(response, err.Status, errorEnvelope{Error: errorBody{
-		Code: err.Code, Message: err.Message, Target: err.Target,
-	}})
+	writeJSON(response, appError.Status, appError.Response())
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {
@@ -214,17 +170,26 @@ func writeJSON(response http.ResponseWriter, status int, value any) {
 }
 
 func decodeJSON(response http.ResponseWriter, request *http.Request, value any) error {
-	request.Body = http.MaxBytesReader(response, request.Body, 64<<10)
+	if contentType := request.Header.Get("Content-Type"); contentType != "" {
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil || !strings.EqualFold(mediaType, "application/json") {
+			return core.Invalid("requestBody", "request body is invalid")
+		}
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, 1<<20)
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return errors.New("request body contains multiple JSON values")
+		return &core.AppError{
+			Status: http.StatusBadRequest, Code: core.CodeParamInvalid,
+			Message: "request body is invalid", Target: "requestBody", Cause: err,
 		}
-		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return &core.AppError{
+			Status: http.StatusBadRequest, Code: core.CodeParamInvalid,
+			Message: "request body is invalid", Target: "requestBody", Cause: err,
+		}
 	}
 	return nil
 }

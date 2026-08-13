@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +23,7 @@ type fakeAPI struct {
 	createdScenario core.APIKeyScenario
 	deletedID       string
 	authError       error
+	provisionError  error
 	listError       error
 	createError     error
 	deleteError     error
@@ -34,7 +34,7 @@ func (f *fakeAPI) ProvisionAPIKey(
 	assertion core.IdentityAssertion,
 ) (core.ProvisionedCredential, error) {
 	f.assertion = assertion
-	return f.provisioned, nil
+	return f.provisioned, f.provisionError
 }
 
 func (f *fakeAPI) Authenticate(context.Context, string) (core.Identity, error) {
@@ -61,10 +61,6 @@ func (f *fakeAPI) DeleteAPIKey(_ context.Context, _ core.Identity, keyID string)
 	return f.deleteError
 }
 
-type readyStore struct{ err error }
-
-func (s readyStore) Ping(context.Context) error { return s.err }
-
 func TestProvisionRequiresTrustedProxy(t *testing.T) {
 	server := newTestServer(&fakeAPI{})
 	request := httptest.NewRequest(http.MethodPost, "/v1/api-key", nil)
@@ -77,7 +73,7 @@ func TestProvisionRequiresTrustedProxy(t *testing.T) {
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
 	}
-	assertErrorCode(t, response, "UNAUTHORIZED")
+	assertErrorCode(t, response, core.CodeUnauthorized)
 }
 
 func TestProvisionUsesDomainAndUser(t *testing.T) {
@@ -106,6 +102,24 @@ func TestProvisionUsesDomainAndUser(t *testing.T) {
 	var result core.ProvisionedCredential
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.APIKey == "" {
 		t.Fatalf("response = %#v, %v", result, err)
+	}
+}
+
+func TestValidationErrorUsesRelayFormat(t *testing.T) {
+	server := newTestServer(&fakeAPI{provisionError: core.Invalid("X-User-Id", "user ID is invalid")})
+	request := httptest.NewRequest(http.MethodPost, "/v1/api-key", nil)
+	request.Header.Set("X-DevBridge-Proxy-Token", strings.Repeat("t", 32))
+	response := httptest.NewRecorder()
+
+	server.ServeHTTP(response, request)
+
+	var result core.ErrorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusBadRequest || result.Error.Code != core.CodeParamInvalid ||
+		len(result.Error.Details) != 1 || result.Error.Details[0].Target != "X-User-Id" {
+		t.Fatalf("status = %d, response = %#v", response.Code, result)
 	}
 }
 
@@ -189,21 +203,22 @@ func TestCreateAPIKeyRejectsInvalidJSON(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
 	}
-	assertErrorCode(t, response, "PARAM_INVALID")
+	assertErrorCode(t, response, core.CodeParamInvalid)
 }
 
-func TestReadyReportsDependencyFailure(t *testing.T) {
-	server := New(&fakeAPI{}, []Readiness{readyStore{err: errors.New("down")}},
-		strings.Repeat("t", 32), testLogger())
-	response := httptest.NewRecorder()
-	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
+func TestHealthRoutesAreNotExposed(t *testing.T) {
+	server := newTestServer(&fakeAPI{})
+	for _, path := range []string{"/healthz", "/readyz"} {
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d", path, response.Code)
+		}
 	}
 }
 
 func newTestServer(api API) http.Handler {
-	return New(api, []Readiness{readyStore{}}, strings.Repeat("t", 32), testLogger())
+	return New(api, strings.Repeat("t", 32), testLogger())
 }
 
 func testLogger() *slog.Logger {

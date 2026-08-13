@@ -241,6 +241,20 @@ components:
               type: string
             target:
               type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+    ErrorDetail:
+      type: object
+      required: [code, target, message]
+      properties:
+        code:
+          type: string
+        target:
+          type: string
+        message:
+          type: string
   responses:
     BadRequest:
       description: Invalid request

@@ -143,15 +143,15 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 	application = New(repository, security.NewAPIKeys(strings.Repeat("s", 32)))
 	_, err := application.CreateAPIKey(
 		context.Background(), testIdentity, "fifth", core.APIKeyScenarioDevBridge)
-	assertAppError(t, err, 409, "API_KEY_LIMIT_REACHED")
+	assertAppError(t, err, 409, core.CodeAPIKeyLimitReached)
 
 	_, err = application.CreateAPIKey(context.Background(), testIdentity, "invalid", "unknown")
-	assertAppError(t, err, 400, "PARAM_INVALID")
+	assertAppError(t, err, 400, core.CodeParamInvalid)
 
 	repository = &fakeRepository{deleteErr: store.ErrDefaultKey}
 	application = New(repository, security.NewAPIKeys(strings.Repeat("s", 32)))
 	err = application.DeleteAPIKey(context.Background(), testIdentity, "key_abcdefghijklmnopqrstuvwxyz")
-	assertAppError(t, err, 409, "DEFAULT_API_KEY")
+	assertAppError(t, err, 409, core.CodeDefaultAPIKey)
 }
 
 func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
@@ -160,7 +160,8 @@ func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
 		DomainID: "invalid value", UserID: "user-1",
 	})
 	var appError *core.AppError
-	if !errors.As(err, &appError) || appError.Target != "X-Domain-Id" {
+	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
+		appError.Details[0].Target != "X-Domain-Id" {
 		t.Fatalf("ProvisionAPIKey() error = %#v", err)
 	}
 	if _, err := application.Authenticate(context.Background(), "invalid"); err == nil {
@@ -176,7 +177,7 @@ func TestMissingCredentialIsUnauthorized(t *testing.T) {
 		security.NewAPIKeys(strings.Repeat("s", 32)))
 	key, _ := application.keys.DefaultFor("domain-1", "user-1")
 	_, err := application.Authenticate(context.Background(), key)
-	assertAppError(t, err, 401, "UNAUTHORIZED")
+	assertAppError(t, err, 401, core.CodeUnauthorized)
 }
 
 func assertAppError(t *testing.T, err error, status int, code string) {
