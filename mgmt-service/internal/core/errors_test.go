@@ -6,9 +6,9 @@ import (
 )
 
 func TestInvalidResponse(t *testing.T) {
-	response := Invalid("type", "is invalid").Response()
+	response := Invalid("scope", "is invalid").Response()
 	if response.Error.Code != CodeParamInvalid || response.Error.Message != "request validation failed" ||
-		len(response.Error.Details) != 1 || response.Error.Details[0].Target != "type" {
+		len(response.Error.Details) != 1 || response.Error.Details[0].Target != "scope" {
 		t.Fatalf("response = %#v", response)
 	}
 }

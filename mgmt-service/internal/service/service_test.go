@@ -84,11 +84,11 @@ func TestIssueDefaultAPIKeyRotates(t *testing.T) {
 	application := New(repository)
 	assertion := testAssertion
 
-	first, err := application.IssueDefaultAPIKey(context.Background(), assertion, core.APIKeyTypeDevBridge)
+	first, err := application.IssueDefaultAPIKey(context.Background(), assertion, core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatalf("IssueDefaultAPIKey() error = %v", err)
 	}
-	second, err := application.IssueDefaultAPIKey(context.Background(), assertion, core.APIKeyTypeDevBridge)
+	second, err := application.IssueDefaultAPIKey(context.Background(), assertion, core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatalf("second IssueDefaultAPIKey() error = %v", err)
 	}
@@ -99,7 +99,7 @@ func TestIssueDefaultAPIKeyRotates(t *testing.T) {
 	digest, _ := security.DigestAPIKey(second.APIKey)
 	if !bytes.Equal(digest, repository.defaultKey.Digest) ||
 		repository.defaultKey.Name != core.DefaultAPIKeyName ||
-		repository.defaultKey.Type != core.APIKeyTypeDevBridge {
+		repository.defaultKey.Scope != core.APIKeyScopeDevBridge {
 		t.Fatalf("default key = %#v", repository.defaultKey)
 	}
 }
@@ -107,7 +107,7 @@ func TestIssueDefaultAPIKeyRotates(t *testing.T) {
 func TestCheckAPIKeyReturnsMappedIdentity(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity}
 	application := New(repository)
-	key, _ := security.NewAPIKey(core.APIKeyTypeDevBridge)
+	key, _ := security.NewAPIKey(core.APIKeyScopeDevBridge)
 
 	result, err := application.CheckAPIKey(context.Background(), key)
 	if err != nil || result != testIdentity {
@@ -121,20 +121,20 @@ func TestCheckAPIKeyReturnsMappedIdentity(t *testing.T) {
 func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 	created := core.APIKey{
 		ID: "key_abcdefghijklmnopqrstuvwxyz", Name: "local-cli",
-		Type: core.APIKeyTypeDevBox, Mask: "devbox_abcd...1234",
+		Scope: core.APIKeyScopeDevBox, Mask: "devbox_abcd...1234",
 		CreatedAt: time.Now(),
 	}
 	repository := &fakeRepository{created: created}
 	application := New(repository)
 
 	issued, err := application.CreateAPIKey(
-		context.Background(), testAssertion, " local-cli ", core.APIKeyTypeDevBox)
+		context.Background(), testAssertion, " local-cli ", core.APIKeyScopeDevBox)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if issued.APIKey != created || !strings.HasPrefix(issued.Value, "devbox_") ||
 		repository.createdKey.Name != "local-cli" ||
-		repository.createdKey.Type != core.APIKeyTypeDevBox {
+		repository.createdKey.Scope != core.APIKeyScopeDevBox {
 		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKey)
 	}
 	digest, err := security.DigestAPIKey(issued.Value)
@@ -147,7 +147,7 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 	application := New(&fakeRepository{})
 	for _, name := range []string{"", "default", "bad\nname"} {
 		if _, err := application.CreateAPIKey(
-			context.Background(), testAssertion, name, core.APIKeyTypeDevBridge,
+			context.Background(), testAssertion, name, core.APIKeyScopeDevBridge,
 		); err == nil {
 			t.Fatalf("CreateAPIKey(%q) succeeded", name)
 		}
@@ -156,7 +156,7 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity, createErr: store.ErrKeyLimit}
 	application = New(repository)
 	_, err := application.CreateAPIKey(
-		context.Background(), testAssertion, "fifth", core.APIKeyTypeDevBridge)
+		context.Background(), testAssertion, "fifth", core.APIKeyScopeDevBridge)
 	assertAppError(t, err, 409, core.CodeAPIKeyLimitReached)
 
 	_, err = application.CreateAPIKey(context.Background(), testAssertion, "invalid", "unknown")
@@ -172,7 +172,7 @@ func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
 	application := New(&fakeRepository{})
 	_, err := application.IssueDefaultAPIKey(context.Background(), core.IdentityAssertion{
 		DomainID: "invalid value", UserID: "user-1",
-	}, core.APIKeyTypeDevBridge)
+	}, core.APIKeyScopeDevBridge)
 	var appError *core.AppError
 	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
 		appError.Details[0].Target != "X-Domain-Id" {
@@ -182,8 +182,8 @@ func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
 		DomainID: "domain-1", UserID: "user-1",
 	}, "unknown")
 	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
-		appError.Details[0].Target != "type" {
-		t.Fatalf("IssueDefaultAPIKey(type) error = %#v", err)
+		appError.Details[0].Target != "scope" {
+		t.Fatalf("IssueDefaultAPIKey(scope) error = %#v", err)
 	}
 	if _, err := application.CheckAPIKey(context.Background(), "invalid"); err == nil {
 		t.Fatal("CheckAPIKey() accepted an invalid API key")
@@ -195,7 +195,7 @@ func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
 
 func TestMissingCredentialIsUnauthorized(t *testing.T) {
 	application := New(&fakeRepository{apiKeyErr: store.ErrNotFound})
-	key, _ := security.NewAPIKey(core.APIKeyTypeDevBridge)
+	key, _ := security.NewAPIKey(core.APIKeyScopeDevBridge)
 	_, err := application.CheckAPIKey(context.Background(), key)
 	assertAppError(t, err, 401, core.CodeUnauthorized)
 }

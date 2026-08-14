@@ -9,9 +9,9 @@ import (
 )
 
 func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
-	first, firstDigest := NewAPIKey(core.APIKeyTypeDevBox)
-	second, _ := NewAPIKey(core.APIKeyTypeDevBox)
-	devbridge, _ := NewAPIKey(core.APIKeyTypeDevBridge)
+	first, firstDigest := NewAPIKey(core.APIKeyScopeDevBox)
+	second, _ := NewAPIKey(core.APIKeyScopeDevBox)
+	devbridge, _ := NewAPIKey(core.APIKeyScopeDevBridge)
 	if first == second || !strings.HasPrefix(first, "devbox_") || len(first) != len("devbox_")+32 {
 		t.Fatalf("random API keys = %q, %q", first, second)
 	}

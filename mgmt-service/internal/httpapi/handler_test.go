@@ -14,30 +14,30 @@ import (
 )
 
 type fakeAPI struct {
-	defaultKey  core.DefaultAPIKeyCredential
-	identity    core.Identity
-	keys        []core.APIKey
-	issued      core.IssuedAPIKey
-	assertion   core.IdentityAssertion
-	createdName string
-	issuedType  core.APIKeyType
-	createdType core.APIKeyType
-	deletedID   string
-	checkedKey  string
-	authError   error
-	issueError  error
-	listError   error
-	createError error
-	deleteError error
+	defaultKey   core.DefaultAPIKeyCredential
+	identity     core.Identity
+	keys         []core.APIKey
+	issued       core.IssuedAPIKey
+	assertion    core.IdentityAssertion
+	createdName  string
+	issuedScope  core.APIKeyScope
+	createdScope core.APIKeyScope
+	deletedID    string
+	checkedKey   string
+	authError    error
+	issueError   error
+	listError    error
+	createError  error
+	deleteError  error
 }
 
 func (f *fakeAPI) IssueDefaultAPIKey(
 	_ context.Context,
 	assertion core.IdentityAssertion,
-	keyType core.APIKeyType,
+	scope core.APIKeyScope,
 ) (core.DefaultAPIKeyCredential, error) {
 	f.assertion = assertion
-	f.issuedType = keyType
+	f.issuedScope = scope
 	return f.defaultKey, f.issueError
 }
 
@@ -58,11 +58,11 @@ func (f *fakeAPI) CreateAPIKey(
 	_ context.Context,
 	assertion core.IdentityAssertion,
 	name string,
-	keyType core.APIKeyType,
+	scope core.APIKeyScope,
 ) (core.IssuedAPIKey, error) {
 	f.assertion = assertion
 	f.createdName = name
-	f.createdType = keyType
+	f.createdScope = scope
 	return f.issued, f.createError
 }
 
@@ -82,11 +82,11 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndType(t *testing.T) {
 			DomainID: "domain-1", UserID: "user-1",
 			AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
 		},
-		Type: core.APIKeyTypeDevBox, APIKey: strings.Repeat("a", 32),
+		Scope: core.APIKeyScopeDevBox, APIKey: strings.Repeat("a", 32),
 	}}
 	server := newTestServer(application)
 	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default",
-		strings.NewReader(`{"type":"devbox"}`))
+		strings.NewReader(`{"scope":"devbox"}`))
 	request.Header.Set("X-Domain-Id", "domain-1")
 	request.Header.Set("X-User-Id", "user-1")
 	request.Header.Set("Content-Type", "application/json")
@@ -100,8 +100,8 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndType(t *testing.T) {
 	if application.assertion.DomainID != "domain-1" || application.assertion.UserID != "user-1" {
 		t.Fatalf("assertion = %#v", application.assertion)
 	}
-	if application.issuedType != core.APIKeyTypeDevBox {
-		t.Fatalf("type = %q", application.issuedType)
+	if application.issuedScope != core.APIKeyScopeDevBox {
+		t.Fatalf("scope = %q", application.issuedScope)
 	}
 	var result core.DefaultAPIKeyCredential
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.APIKey == "" {
@@ -112,7 +112,7 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndType(t *testing.T) {
 func TestValidationErrorUsesRelayFormat(t *testing.T) {
 	server := newTestServer(&fakeAPI{issueError: core.Invalid("X-User-Id", "user ID is invalid")})
 	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default",
-		strings.NewReader(`{"type":"devbridge"}`))
+		strings.NewReader(`{"scope":"devbridge"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 
@@ -171,11 +171,11 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 	application := &fakeAPI{
 		keys: []core.APIKey{{
 			ID: "key_default", Name: "default",
-			Type: core.APIKeyTypeDevBridge, Default: true,
+			Scope: core.APIKeyScopeDevBridge, Default: true,
 		}},
 		issued: core.IssuedAPIKey{
 			APIKey: core.APIKey{
-				ID: "key_created", Name: "local-cli", Type: core.APIKeyTypeDevBox,
+				ID: "key_created", Name: "local-cli", Scope: core.APIKeyScopeDevBox,
 			},
 			Value: "devbox_" + strings.Repeat("a", 32),
 		},
@@ -191,13 +191,13 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 	}
 
 	createRequest := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys",
-		strings.NewReader(`{"name":"local-cli","type":"devbox"}`))
+		strings.NewReader(`{"name":"local-cli","scope":"devbox"}`))
 	setIdentityHeaders(createRequest)
 	createRequest.Header.Set("Content-Type", "application/json")
 	createResponse := httptest.NewRecorder()
 	server.ServeHTTP(createResponse, createRequest)
 	if createResponse.Code != http.StatusCreated || application.createdName != "local-cli" ||
-		application.createdType != core.APIKeyTypeDevBox ||
+		application.createdScope != core.APIKeyScopeDevBox ||
 		!strings.Contains(createResponse.Body.String(), "devbox_"+strings.Repeat("a", 32)) {
 		t.Fatalf("create status = %d, name = %q, body = %s",
 			createResponse.Code, application.createdName, createResponse.Body)
@@ -218,7 +218,7 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 func TestCreateAPIKeyRejectsInvalidJSON(t *testing.T) {
 	server := newTestServer(&fakeAPI{})
 	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys",
-		strings.NewReader(`{"name":"cli","type":"devbridge","unknown":true}`))
+		strings.NewReader(`{"name":"cli","scope":"devbridge","unknown":true}`))
 	request.Header.Set("X-API-Key", strings.Repeat("a", 32))
 	response := httptest.NewRecorder()
 

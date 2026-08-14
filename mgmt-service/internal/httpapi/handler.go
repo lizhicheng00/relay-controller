@@ -22,10 +22,10 @@ var openAPISpec []byte
 const apiBase = "/open-api-inner/v1/mgmt-service"
 
 type API interface {
-	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.APIKeyType) (core.DefaultAPIKeyCredential, error)
+	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.APIKeyScope) (core.DefaultAPIKeyCredential, error)
 	CheckAPIKey(context.Context, string) (core.Identity, error)
 	ListAPIKeys(context.Context, core.IdentityAssertion) ([]core.APIKey, error)
-	CreateAPIKey(context.Context, core.IdentityAssertion, string, core.APIKeyType) (core.IssuedAPIKey, error)
+	CreateAPIKey(context.Context, core.IdentityAssertion, string, core.APIKeyScope) (core.IssuedAPIKey, error)
 	DeleteAPIKey(context.Context, core.IdentityAssertion, string) error
 }
 
@@ -35,12 +35,12 @@ type Handler struct {
 }
 
 type issueDefaultAPIKeyRequest struct {
-	Type core.APIKeyType `json:"type"`
+	Scope core.APIKeyScope `json:"scope"`
 }
 
 type createAPIKeyRequest struct {
-	Name string          `json:"name"`
-	Type core.APIKeyType `json:"type"`
+	Name  string           `json:"name"`
+	Scope core.APIKeyScope `json:"scope"`
 }
 
 func New(api API, logger *slog.Logger) http.Handler {
@@ -64,7 +64,7 @@ func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http
 	result, err := h.api.IssueDefaultAPIKey(request.Context(), core.IdentityAssertion{
 		DomainID: request.Header.Get("X-Domain-Id"),
 		UserID:   request.Header.Get("X-User-Id"),
-	}, input.Type)
+	}, input.Scope)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -98,7 +98,7 @@ func (h *Handler) createAPIKey(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	key, err := h.api.CreateAPIKey(
-		request.Context(), identityAssertion(request), input.Name, input.Type)
+		request.Context(), identityAssertion(request), input.Name, input.Scope)
 	if err != nil {
 		h.writeError(response, err)
 		return

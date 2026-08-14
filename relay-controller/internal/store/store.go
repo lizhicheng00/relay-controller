@@ -117,6 +117,12 @@ func IsDuplicate(err error) bool {
 	return errors.As(err, &mysqlError) && mysqlError.Number == 1062
 }
 
+func isDuplicateKey(err error, key string) bool {
+	var mysqlError *mysql.MySQLError
+	return errors.As(err, &mysqlError) && mysqlError.Number == 1062 &&
+		strings.Contains(mysqlError.Message, key)
+}
+
 func dataSourceName(cfg config.Database) string {
 	address := strings.TrimPrefix(cfg.URL, "jdbc:mariadb://")
 	address = strings.TrimPrefix(address, "jdbc:mysql://")

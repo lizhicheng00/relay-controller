@@ -14,8 +14,14 @@ const tunnelColumns = `t._id, t.name, t.tunnel_id, t.tunnel_code, t.cluster_id,
 	t.expiration, t.expiration_hours, t.namespace, t.account_id, t.description,
 	t.bandwidth_used, t.url, t.type, t.created_at, t.updated_at`
 
+const tunnelNameUniqueKey = "uk_tunnel_namespace_name"
+
 type scanner interface {
 	Scan(...any) error
+}
+
+func IsTunnelNameConflict(err error) bool {
+	return isDuplicateKey(err, tunnelNameUniqueKey)
 }
 
 func (s *Store) ClusterExists(ctx context.Context, clusterID, region string) (bool, error) {

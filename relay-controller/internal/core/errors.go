@@ -15,6 +15,7 @@ const (
 	CodeTunnelExpired           = "10004"
 	CodeTunnelAccessDenied      = "10005"
 	CodeTunnelQuotaExceeded     = "10006"
+	CodeTunnelNameConflict      = "10007"
 	CodeTunnelPortInvalid       = "11001"
 	CodeTunnelPortExists        = "11002"
 	CodeTunnelPortNotFound      = "11003"
@@ -90,6 +91,10 @@ func InvalidField(target, message string) *AppError {
 
 func MissingHeader(name string) *AppError {
 	return &AppError{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: name + " is required", Target: name}
+}
+
+func Conflict(code, target, message string) *AppError {
+	return &AppError{Status: http.StatusConflict, Code: code, Message: message, Target: target}
 }
 
 func Internal(cause error) *AppError {

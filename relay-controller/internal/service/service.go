@@ -55,6 +55,7 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
 		return core.TunnelResponse{}, internal("create billing account", err)
 	}
+	tunnelName := strings.TrimSpace(request.Name)
 
 	var tunnel core.Tunnel
 	err = s.store.InTx(ctx, func(tx *store.Store) error {
@@ -77,13 +78,15 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 				return internal("generate tunnel code", err)
 			}
 			tunnel = core.Tunnel{
-				Name: request.Name, TunnelID: tunnelID, TunnelCode: code, ClusterID: request.ClusterID,
+				Name: tunnelName, TunnelID: tunnelID, TunnelCode: code, ClusterID: request.ClusterID,
 				Expiration: expiration, ExpirationHours: expirationHours, Namespace: namespace,
 				AccountID: account.ID, Description: request.Description, URL: buildTunnelURL(tunnelID, request.ClusterID, s.domain),
 				Type: tunnelType, CreatedAt: now, UpdatedAt: now,
 			}
 			if err := tx.InsertTunnel(ctx, &tunnel); err == nil {
 				return nil
+			} else if store.IsTunnelNameConflict(err) {
+				return tunnelNameConflict()
 			} else if !store.IsDuplicate(err) {
 				return internal("insert tunnel", err)
 			}
@@ -145,7 +148,7 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, tunnelID string, 
 			return err
 		}
 		if request.Name != nil {
-			tunnel.Name = *request.Name
+			tunnel.Name = strings.TrimSpace(*request.Name)
 		}
 		if request.Description != nil {
 			tunnel.Description = request.Description
@@ -162,6 +165,9 @@ func (s *Service) UpdateTunnel(ctx context.Context, namespace, tunnelID string, 
 		}
 		tunnel.UpdatedAt = now
 		if err := tx.UpdateTunnel(ctx, tunnel); err != nil {
+			if store.IsTunnelNameConflict(err) {
+				return tunnelNameConflict()
+			}
 			return internal("update tunnel", err)
 		}
 		return nil
@@ -365,6 +371,10 @@ func validateUpdateTunnel(request core.UpdateTunnelRequest) error {
 
 func buildTunnelURL(tunnelID, clusterID, domain string) string {
 	return tunnelID + "." + clusterID + "." + domain
+}
+
+func tunnelNameConflict() error {
+	return core.Conflict(core.CodeTunnelNameConflict, "name", "a tunnel with this name already exists")
 }
 
 func internal(operation string, err error) error {

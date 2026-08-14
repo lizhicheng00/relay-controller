@@ -3,16 +3,16 @@ package core
 import "time"
 
 const (
-	DefaultAPIKeyName           = "default"
-	MaxAPIKeysPerType           = 5
-	MaxAdditionalAPIKeysPerType = MaxAPIKeysPerType - 1
+	DefaultAPIKeyName            = "default"
+	MaxAPIKeysPerScope           = 5
+	MaxAdditionalAPIKeysPerScope = MaxAPIKeysPerScope - 1
 )
 
-type APIKeyType string
+type APIKeyScope string
 
 const (
-	APIKeyTypeDevBridge APIKeyType = "devbridge"
-	APIKeyTypeDevBox    APIKeyType = "devbox"
+	APIKeyScopeDevBridge APIKeyScope = "devbridge"
+	APIKeyScopeDevBox    APIKeyScope = "devbox"
 )
 
 type IdentityAssertion struct {
@@ -35,26 +35,26 @@ type Identity struct {
 
 type DefaultAPIKeyCredential struct {
 	Identity
-	Type   APIKeyType `json:"type"`
-	APIKey string     `json:"apiKey"`
+	Scope  APIKeyScope `json:"scope"`
+	APIKey string      `json:"apiKey"`
 }
 
 type NewAPIKey struct {
 	ID     string
 	Name   string
-	Type   APIKeyType
+	Scope  APIKeyScope
 	Mask   string
 	Digest []byte
 }
 
 type APIKey struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Type       APIKeyType `json:"type"`
-	Mask       string     `json:"mask"`
-	Default    bool       `json:"isDefault"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	LastUsedAt *time.Time `json:"lastUsedAt"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Scope      APIKeyScope `json:"scope"`
+	Mask       string      `json:"mask"`
+	Default    bool        `json:"isDefault"`
+	CreatedAt  time.Time   `json:"createdAt"`
+	LastUsedAt *time.Time  `json:"lastUsedAt"`
 }
 
 type IssuedAPIKey struct {

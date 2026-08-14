@@ -9,6 +9,7 @@ Relay Controller is the regional DevBridge control plane. It manages tunnels, po
 - A trial account has 5 GiB per Beijing calendar month, 10 active tunnels, and 10 ports per tunnel.
 - `tunnelCode` is a random positive 40-bit integer. `tunnelId` is its fixed eight-character lowercase Base32 encoding.
 - Tunnel URLs use `{tunnelId}.{clusterId}.{RELAY_DOMAIN}`.
+- Tunnel names are unique within a namespace.
 - Tunnel inactivity defaults to 72 hours and is capped at 720 hours. Configuration changes and positive settled metering refresh the deadline.
 - Every token request creates a new RS256 JWT with `aud=relay-gateway`; tokens are never cached.
 - Gateway appends metering rows. Controller settles each row exactly once into monthly and tunnel totals.
@@ -45,7 +46,7 @@ internal/service       tunnel, port, token, billing, cleanup workflows
 internal/core          business models and deterministic rules
 internal/store         MySQL queries and transactions
 internal/security      RS256 signing and PKCS12 mTLS
-migrations             reserved for deployment-managed schema changes
+migrations             deployment-managed schema changes
 ```
 
 The runtime uses the Go standard library where practical. The only direct dependencies are the MySQL driver and PKCS12 decoder.
@@ -102,7 +103,7 @@ export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 go run ./cmd
 ```
 
-The service does not create or migrate the shared database. Provision the Relay Controller schema before startup. The empty `migrations` directory remains reserved for deployment-managed schema changes.
+The service does not migrate the shared database. Apply the deployment-managed migrations before startup.
 
 ## Security Boundary
 

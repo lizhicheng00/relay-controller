@@ -33,24 +33,24 @@ func New(repository repository) *Service {
 func (s *Service) IssueDefaultAPIKey(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
-	keyType core.APIKeyType,
+	scope core.APIKeyScope,
 ) (core.DefaultAPIKeyCredential, error) {
 	if err := validateIdentity(assertion); err != nil {
 		return core.DefaultAPIKeyCredential{}, err
 	}
-	if !security.ValidAPIKeyType(keyType) {
-		return core.DefaultAPIKeyCredential{}, core.Invalid("type", "type must be devbridge or devbox")
+	if !security.ValidAPIKeyScope(scope) {
+		return core.DefaultAPIKeyCredential{}, core.Invalid("scope", "scope must be devbridge or devbox")
 	}
 	seed := newIdentitySeed()
-	value, digest := security.NewAPIKey(keyType)
+	value, digest := security.NewAPIKey(scope)
 	identity, err := s.store.IssueDefaultAPIKey(ctx, assertion, seed, core.NewAPIKey{
 		ID: security.NewID("key_"), Name: core.DefaultAPIKeyName,
-		Type: keyType, Mask: security.MaskAPIKey(value), Digest: digest,
+		Scope: scope, Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
 		return core.DefaultAPIKeyCredential{}, mapStoreError("issue default API key", "X-User-Id", err)
 	}
-	return core.DefaultAPIKeyCredential{Identity: identity, Type: keyType, APIKey: value}, nil
+	return core.DefaultAPIKeyCredential{Identity: identity, Scope: scope, APIKey: value}, nil
 }
 
 func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.Identity, error) {
@@ -84,22 +84,22 @@ func (s *Service) CreateAPIKey(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
 	name string,
-	keyType core.APIKeyType,
+	scope core.APIKeyScope,
 ) (core.IssuedAPIKey, error) {
 	name, err := validateAPIKeyName(name)
 	if err != nil {
 		return core.IssuedAPIKey{}, err
 	}
-	if !security.ValidAPIKeyType(keyType) {
-		return core.IssuedAPIKey{}, core.Invalid("type", "type must be devbridge or devbox")
+	if !security.ValidAPIKeyScope(scope) {
+		return core.IssuedAPIKey{}, core.Invalid("scope", "scope must be devbridge or devbox")
 	}
 	identity, err := s.resolveIdentity(ctx, assertion)
 	if err != nil {
 		return core.IssuedAPIKey{}, err
 	}
-	value, digest := security.NewAPIKey(keyType)
+	value, digest := security.NewAPIKey(scope)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
-		ID: security.NewID("key_"), Name: name, Type: keyType,
+		ID: security.NewID("key_"), Name: name, Scope: scope,
 		Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
@@ -214,7 +214,7 @@ func mapStoreError(operation, target string, err error) error {
 func mapAPIKeyStoreError(operation string, err error) error {
 	switch {
 	case errors.Is(err, store.ErrKeyLimit):
-		return core.Conflict(core.CodeAPIKeyLimitReached, "apiKeys", "an API key type can have at most five keys")
+		return core.Conflict(core.CodeAPIKeyLimitReached, "apiKeys", "an API key scope can have at most five keys")
 	case errors.Is(err, store.ErrNameConflict):
 		return core.Conflict(core.CodeAPIKeyNameConflict, "name", "an API key with this name already exists")
 	case errors.Is(err, store.ErrDefaultKey):

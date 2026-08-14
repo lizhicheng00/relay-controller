@@ -184,6 +184,31 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	duplicateNamespace := fmt.Sprintf("ns-integration-duplicate-%d", time.Now().UnixNano())
+	duplicateAccount := duplicateNamespace + "-account"
+	firstNamed, err := application.CreateTunnel(ctx, duplicateNamespace, duplicateAccount,
+		core.CreateTunnelRequest{Name: "shared-name", ClusterID: "cluster-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = application.CreateTunnel(ctx, duplicateNamespace, duplicateAccount,
+		core.CreateTunnelRequest{Name: "shared-name", ClusterID: "cluster-a"})
+	assertErrorCode(t, err, core.CodeTunnelNameConflict)
+	secondNamed, err := application.CreateTunnel(ctx, duplicateNamespace, duplicateAccount,
+		core.CreateTunnelRequest{Name: "other-name", ClusterID: "cluster-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflictingName := "shared-name"
+	_, err = application.UpdateTunnel(ctx, duplicateNamespace, secondNamed.TunnelID,
+		core.UpdateTunnelRequest{Name: &conflictingName})
+	assertErrorCode(t, err, core.CodeTunnelNameConflict)
+	for _, tunnelID := range []string{firstNamed.TunnelID, secondNamed.TunnelID} {
+		if _, err := application.DeleteTunnel(ctx, duplicateNamespace, tunnelID); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func assertErrorCode(t *testing.T, err error, code string) {

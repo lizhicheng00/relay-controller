@@ -11,7 +11,7 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - An authenticated CLI or upper service may explicitly request a typed default API key as an immediate business credential. Each request replaces the previous default key of the same type.
 - The default API key cannot be deleted. Additional keys are intended for separate clients or usage scenarios.
 - Additional key names are unique within a namespace and type. All keys currently grant the same namespace access.
-- API key types are `devbridge` and `devbox`. Each type has its own default key and additional-key allowance.
+- API key scopes are `devbridge` and `devbox`. Each scope has its own default key and additional-key allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
 - MySQL stores only API key metadata and SHA-256 digests.
 - Default and additional keys are generated randomly. Complete values are returned only when issued.
@@ -36,7 +36,7 @@ DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional AP
 
 All endpoints require mTLS. The upper identity layer confirms the user's login session before default issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the check endpoint accepts `X-API-Key`, because it validates a business credential and resolves its identity. The OpenAPI document is available at `/openapi.yaml`.
 
-The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, types, masks, and last-use times only. Creating a key requires `name` and `type`; the complete value is returned once.
+The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 
 ## Data Ownership
 
@@ -45,7 +45,7 @@ The management endpoints always operate on the namespace resolved from the suppl
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
 - Within each type, API key slot `0` is the default key and slots `1` through `4` are additional keys.
 
-Issuing a default key replaces only the previous default key of the requested type. Creating and deleting additional keys locks the user identity while assigning a slot, preserving the five-key-per-type limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
+Issuing a default key replaces only the previous default key of the requested scope. Creating and deleting additional keys locks the user identity while assigning a slot, preserving the five-key-per-scope limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
 For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each type creates its default API key without replacing the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 

@@ -117,15 +117,15 @@ func (s *Store) IssueDefaultAPIKey(
 	var existingDefaultID string
 	err = tx.QueryRowContext(ctx, `
 		SELECT id FROM api_key
-		WHERE namespace = ? AND key_type = ? AND slot = 0
-		FOR UPDATE`, identity.Namespace, defaultKey.Type).Scan(&existingDefaultID)
+		WHERE namespace = ? AND key_scope = ? AND slot = 0
+		FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefaultID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, slot, name, key_type, key_mask, key_hash)
+			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
 			VALUES (?, ?, 0, ?, ?, ?, ?)`,
 			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
-			defaultKey.Type, defaultKey.Mask, defaultKey.Digest)
+			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
 	case err == nil:
 		_, err = tx.ExecContext(ctx, `
 			UPDATE api_key
@@ -202,16 +202,16 @@ func (s *Store) FindIdentityByAPIKey(ctx context.Context, apiKeyHash []byte) (co
 
 func (s *Store) ListAPIKeys(ctx context.Context, namespace string) ([]core.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, key_type, key_mask, slot, created_at, last_used_at
+		SELECT id, name, key_scope, key_mask, slot, created_at, last_used_at
 		FROM api_key
 		WHERE namespace = ?
-		ORDER BY key_type, slot`, namespace)
+		ORDER BY key_scope, slot`, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("list API keys: %w", err)
 	}
 	defer rows.Close()
 
-	keys := make([]core.APIKey, 0, core.MaxAPIKeysPerType*2)
+	keys := make([]core.APIKey, 0, core.MaxAPIKeysPerScope*2)
 	for rows.Next() {
 		key, err := scanAPIKey(rows)
 		if err != nil {
@@ -239,15 +239,15 @@ func (s *Store) CreateAPIKey(
 	if err := lockIdentity(ctx, tx, namespace); err != nil {
 		return core.APIKey{}, err
 	}
-	slot, err := availableSlot(ctx, tx, namespace, key.Type, key.Name)
+	slot, err := availableSlot(ctx, tx, namespace, key.Scope, key.Name)
 	if err != nil {
 		return core.APIKey{}, err
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, slot, name, key_type, key_mask, key_hash)
+		INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		key.ID, namespace, slot, key.Name, key.Type, key.Mask, key.Digest)
+		key.ID, namespace, slot, key.Name, key.Scope, key.Mask, key.Digest)
 	if err != nil {
 		var mysqlError *mysqldriver.MySQLError
 		if errors.As(err, &mysqlError) && mysqlError.Number == 1062 {
@@ -315,14 +315,14 @@ func availableSlot(
 	ctx context.Context,
 	tx *sql.Tx,
 	namespace string,
-	keyType core.APIKeyType,
+	scope core.APIKeyScope,
 	name string,
 ) (int, error) {
-	var occupied [core.MaxAPIKeysPerType]bool
+	var occupied [core.MaxAPIKeysPerScope]bool
 	rows, err := tx.QueryContext(ctx, `
 		SELECT slot, name FROM api_key
-		WHERE namespace = ? AND key_type = ?
-		FOR UPDATE`, namespace, keyType)
+		WHERE namespace = ? AND key_scope = ?
+		FOR UPDATE`, namespace, scope)
 	if err != nil {
 		return 0, fmt.Errorf("list API key slots: %w", err)
 	}
@@ -341,7 +341,7 @@ func availableSlot(
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("iterate API key slots: %w", err)
 	}
-	for slot := 1; slot < core.MaxAPIKeysPerType; slot++ {
+	for slot := 1; slot < core.MaxAPIKeysPerScope; slot++ {
 		if !occupied[slot] {
 			return slot, nil
 		}
@@ -351,7 +351,7 @@ func availableSlot(
 
 func queryAPIKey(ctx context.Context, tx *sql.Tx, namespace, keyID string) (core.APIKey, error) {
 	return scanAPIKey(tx.QueryRowContext(ctx, `
-		SELECT id, name, key_type, key_mask, slot, created_at, last_used_at
+		SELECT id, name, key_scope, key_mask, slot, created_at, last_used_at
 		FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID))
 }
 
@@ -363,7 +363,7 @@ func scanAPIKey(row scanner) (core.APIKey, error) {
 	var key core.APIKey
 	var slot int
 	if err := row.Scan(
-		&key.ID, &key.Name, &key.Type, &key.Mask, &slot, &key.CreatedAt, &key.LastUsedAt,
+		&key.ID, &key.Name, &key.Scope, &key.Mask, &slot, &key.CreatedAt, &key.LastUsedAt,
 	); err != nil {
 		return core.APIKey{}, mapQueryError("load API key", err)
 	}

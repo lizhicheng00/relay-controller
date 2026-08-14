@@ -96,14 +96,14 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	}
 
 	devboxDefault := newTestKey("key_devbox_default_"+suffix, "default")
-	devboxDefault.Type = core.APIKeyTypeDevBox
+	devboxDefault.Scope = core.APIKeyScopeDevBox
 	devboxDefault.Mask = "devbox_test...mask"
 	if _, err := repository.IssueDefaultAPIKey(ctx, assertion, seed, devboxDefault); err != nil {
 		t.Fatalf("IssueDefaultAPIKey(devbox default) error = %v", err)
 	}
 
-	additional := make([]core.NewAPIKey, 0, core.MaxAdditionalAPIKeysPerType)
-	for index := 1; index <= core.MaxAdditionalAPIKeysPerType; index++ {
+	additional := make([]core.NewAPIKey, 0, core.MaxAdditionalAPIKeysPerScope)
+	for index := 1; index <= core.MaxAdditionalAPIKeysPerScope; index++ {
 		key := newTestKey(fmt.Sprintf("key_%d_%s", index, suffix), fmt.Sprintf("client-%d", index))
 		created, err := repository.CreateAPIKey(ctx, identity.Namespace, key)
 		if err != nil || created.Default || created.Name != key.Name {
@@ -115,41 +115,41 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		newTestKey("key_overflow_"+suffix, "overflow")); !errors.Is(err, ErrKeyLimit) {
 		t.Fatalf("overflow error = %v", err)
 	}
-	for index := 1; index <= core.MaxAdditionalAPIKeysPerType; index++ {
+	for index := 1; index <= core.MaxAdditionalAPIKeysPerScope; index++ {
 		key := newTestKey(fmt.Sprintf("key_box_%d_%s", index, suffix), fmt.Sprintf("client-%d", index))
-		key.Type = core.APIKeyTypeDevBox
+		key.Scope = core.APIKeyScopeDevBox
 		key.Mask = "devbox_test...mask"
 		if _, err := repository.CreateAPIKey(ctx, identity.Namespace, key); err != nil {
 			t.Fatalf("CreateAPIKey(devbox %d) error = %v", index, err)
 		}
 	}
 	devboxOverflow := newTestKey("key_box_overflow_"+suffix, "overflow")
-	devboxOverflow.Type = core.APIKeyTypeDevBox
+	devboxOverflow.Scope = core.APIKeyScopeDevBox
 	if _, err := repository.CreateAPIKey(ctx, identity.Namespace, devboxOverflow); !errors.Is(err, ErrKeyLimit) {
 		t.Fatalf("devbox overflow error = %v", err)
 	}
 
 	keys, err := repository.ListAPIKeys(ctx, identity.Namespace)
-	if err != nil || len(keys) != core.MaxAPIKeysPerType*2 || countDefaultKeys(keys) != 2 ||
-		keysWithType(keys, core.APIKeyTypeDevBridge) != core.MaxAPIKeysPerType ||
-		keysWithType(keys, core.APIKeyTypeDevBox) != core.MaxAPIKeysPerType {
+	if err != nil || len(keys) != core.MaxAPIKeysPerScope*2 || countDefaultKeys(keys) != 2 ||
+		keysWithScope(keys, core.APIKeyScopeDevBridge) != core.MaxAPIKeysPerScope ||
+		keysWithScope(keys, core.APIKeyScopeDevBox) != core.MaxAPIKeysPerScope {
 		t.Fatalf("ListAPIKeys() = %#v, %v", keys, err)
 	}
 	if keyByID(keys, defaultKey.ID).LastUsedAt == nil {
 		t.Fatal("authenticated key has no last-used time")
 	}
 	if _, err := repository.db.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, slot, name, key_type, key_mask, key_hash)
+		INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
 		VALUES (?, ?, 5, 'invalid-slot', 'devbridge', 'devbridge_test...mask', ?)`,
 		"key_invalid_"+suffix, identity.Namespace, bytes.Repeat([]byte{99}, 32)); err == nil {
 		t.Fatal("database accepted API key slot 5")
 	}
 	if _, err := repository.db.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, slot, name, key_type, key_mask, key_hash)
+		INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
 		VALUES (?, ?, 1, 'invalid-type', 'unknown', 'unknown_test...mask', ?)`,
-		"key_bad_type_"+suffix, secondIdentity.Namespace,
+		"key_bad_scope_"+suffix, secondIdentity.Namespace,
 		bytes.Repeat([]byte{98}, 32)); err == nil {
-		t.Fatal("database accepted an unknown API key type")
+		t.Fatal("database accepted an unknown API key scope")
 	}
 	if _, err := repository.CreateAPIKey(ctx, identity.Namespace,
 		newTestKey("key_duplicate_"+suffix, additional[0].Name)); !errors.Is(err, ErrNameConflict) {
@@ -185,7 +185,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatalf("rotated default metadata = %#v, %v", keyByID(keys, defaultKey.ID), err)
 	}
 	if found, err := repository.FindIdentityByAPIKey(ctx, devboxDefault.Digest); err != nil || found != identity {
-		t.Fatalf("other type default = %#v, %v", found, err)
+		t.Fatalf("other scope default = %#v, %v", found, err)
 	}
 	if found, err := repository.FindIdentityByAPIKey(ctx, rotatedDefault.Digest); err != nil || found != identity {
 		t.Fatalf("rotated identity = %#v, %v", found, err)
@@ -248,11 +248,11 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 			t.Fatalf("unexpected concurrent creation error: %v", err)
 		}
 	}
-	if succeeded != core.MaxAdditionalAPIKeysPerType || limited != attempts-core.MaxAdditionalAPIKeysPerType {
+	if succeeded != core.MaxAdditionalAPIKeysPerScope || limited != attempts-core.MaxAdditionalAPIKeysPerScope {
 		t.Fatalf("concurrent results: succeeded=%d limited=%d", succeeded, limited)
 	}
 	keys, err := repository.ListAPIKeys(ctx, identity.Namespace)
-	if err != nil || len(keys) != core.MaxAPIKeysPerType {
+	if err != nil || len(keys) != core.MaxAPIKeysPerScope {
 		t.Fatalf("ListAPIKeys() count = %d, error = %v", len(keys), err)
 	}
 }
@@ -260,7 +260,7 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 func newTestKey(id, name string) core.NewAPIKey {
 	digest := sha256.Sum256([]byte(id))
 	return core.NewAPIKey{
-		ID: id, Name: name, Type: core.APIKeyTypeDevBridge,
+		ID: id, Name: name, Scope: core.APIKeyScopeDevBridge,
 		Mask: "devbridge_test...mask", Digest: digest[:],
 	}
 }
@@ -275,10 +275,10 @@ func countDefaultKeys(keys []core.APIKey) int {
 	return count
 }
 
-func keysWithType(keys []core.APIKey, keyType core.APIKeyType) int {
+func keysWithScope(keys []core.APIKey, scope core.APIKeyScope) int {
 	count := 0
 	for _, key := range keys {
-		if key.Type == keyType {
+		if key.Scope == scope {
 			count++
 		}
 	}

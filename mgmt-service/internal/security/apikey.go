@@ -17,17 +17,17 @@ const (
 
 var ErrInvalidAPIKey = errors.New("invalid API key")
 
-func NewAPIKey(keyType core.APIKeyType) (string, []byte) {
+func NewAPIKey(scope core.APIKeyScope) (string, []byte) {
 	random := make([]byte, apiKeyPayloadBytes)
 	if _, err := rand.Read(random); err != nil {
 		panic(err)
 	}
-	value := string(keyType) + "_" + base64.RawURLEncoding.EncodeToString(random)
+	value := string(scope) + "_" + base64.RawURLEncoding.EncodeToString(random)
 	return value, apiKeyDigest(value)
 }
 
-func ValidAPIKeyType(keyType core.APIKeyType) bool {
-	return keyType == core.APIKeyTypeDevBridge || keyType == core.APIKeyTypeDevBox
+func ValidAPIKeyScope(scope core.APIKeyScope) bool {
+	return scope == core.APIKeyScopeDevBridge || scope == core.APIKeyScopeDevBox
 }
 
 func MaskAPIKey(value string) string {
@@ -42,17 +42,17 @@ func DigestAPIKey(value string) ([]byte, error) {
 	return apiKeyDigest(value), nil
 }
 
-func splitAPIKey(value string) (core.APIKeyType, string, bool) {
+func splitAPIKey(value string) (core.APIKeyScope, string, bool) {
 	prefix, payload, found := strings.Cut(value, "_")
-	keyType := core.APIKeyType(prefix)
-	if !found || !ValidAPIKeyType(keyType) || len(payload) != apiKeyPayloadLength {
+	scope := core.APIKeyScope(prefix)
+	if !found || !ValidAPIKeyScope(scope) || len(payload) != apiKeyPayloadLength {
 		return "", "", false
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(payload)
 	if err != nil || len(decoded) != apiKeyPayloadBytes {
 		return "", "", false
 	}
-	return keyType, payload, true
+	return scope, payload, true
 }
 
 func apiKeyDigest(value string) []byte {

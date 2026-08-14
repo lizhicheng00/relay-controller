@@ -10,11 +10,11 @@ servers:
 paths:
   /open-api-inner/v1/mgmt-service/api-keys/default:
     post:
-      summary: Issue a cloud user's default API key for a type
+      summary: Issue a cloud user's default API key for a scope
       description: >-
         Explicitly requested by an authenticated CLI or upper identity layer when an immediate
         business credential is needed. The service creates the user's namespace on first use
-        and replaces the requested type's previous default API key.
+        and replaces the requested scope's previous default API key.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -68,7 +68,7 @@ paths:
       description: Returns metadata and masks only. Complete API key values are never listed.
       responses:
         '200':
-          description: API keys grouped by type with each default key first
+          description: API keys grouped by scope with each default key first
           content:
             application/json:
               schema:
@@ -85,8 +85,8 @@ paths:
     post:
       summary: Create an additional API key
       description: >-
-        Creates one of at most four additional API keys for the requested type. The complete
-        value is returned only in this response and cannot be retrieved later. The type determines
+        Creates one of at most four additional API keys for the requested scope. The complete
+        value is returned only in this response and cannot be retrieved later. The scope determines
         whether the value starts with `devbridge_` or `devbox_`.
       requestBody:
         required: true
@@ -181,22 +181,22 @@ components:
       allOf:
         - $ref: '#/components/schemas/Identity'
         - type: object
-          required: [type, apiKey]
+          required: [scope, apiKey]
           properties:
-            type:
-              $ref: '#/components/schemas/APIKeyType'
+            scope:
+              $ref: '#/components/schemas/APIKeyScope'
             apiKey:
               $ref: '#/components/schemas/APIKeyValue'
     APIKey:
       type: object
-      required: [id, name, type, mask, isDefault, createdAt, lastUsedAt]
+      required: [id, name, scope, mask, isDefault, createdAt, lastUsedAt]
       properties:
         id:
           type: string
         name:
           type: string
-        type:
-          $ref: '#/components/schemas/APIKeyType'
+        scope:
+          $ref: '#/components/schemas/APIKeyScope'
         mask:
           type: string
           example: devbridge_abcd...1234
@@ -221,29 +221,29 @@ components:
     APIKeyValue:
       type: string
       pattern: '^(devbridge|devbox)_[A-Za-z0-9_-]{32}$'
-      description: Type prefix followed by a 32-character unpadded Base64URL payload.
-    APIKeyType:
+      description: Scope prefix followed by a 32-character unpadded Base64URL payload.
+    APIKeyScope:
       type: string
       enum: [devbridge, devbox]
     IssueDefaultAPIKeyRequest:
       type: object
-      required: [type]
+      required: [scope]
       additionalProperties: false
       properties:
-        type:
-          $ref: '#/components/schemas/APIKeyType'
+        scope:
+          $ref: '#/components/schemas/APIKeyScope'
     CreateAPIKeyRequest:
       type: object
-      required: [name, type]
+      required: [name, scope]
       additionalProperties: false
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 64
-          description: A client or usage label. The name `default` is reserved within each type.
-        type:
-          $ref: '#/components/schemas/APIKeyType'
+          description: A client or usage label. The name `default` is reserved within each scope.
+        scope:
+          $ref: '#/components/schemas/APIKeyScope'
     ErrorResponse:
       type: object
       required: [error]
@@ -292,7 +292,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: API key name, per-type limit, or default-key conflict
+      description: API key name, per-scope limit, or default-key conflict
       content:
         application/json:
           schema:
