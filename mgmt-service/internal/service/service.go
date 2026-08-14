@@ -14,7 +14,7 @@ import (
 )
 
 type repository interface {
-	Provision(context.Context, core.IdentityAssertion, core.IdentitySeed, core.NewAPIKey) (core.Identity, error)
+	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.IdentitySeed, core.NewAPIKey) (core.Identity, error)
 	FindIdentity(context.Context, []byte) (core.Identity, error)
 	ListAPIKeys(context.Context, string) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, string, core.NewAPIKey) (core.APIKey, error)
@@ -23,34 +23,33 @@ type repository interface {
 
 type Service struct {
 	store repository
-	keys  security.APIKeys
 }
 
-func New(repository repository, keys security.APIKeys) *Service {
-	return &Service{store: repository, keys: keys}
+func New(repository repository) *Service {
+	return &Service{store: repository}
 }
 
-func (s *Service) ProvisionAPIKey(
+func (s *Service) IssueDefaultAPIKey(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
 	keyType core.APIKeyType,
-) (core.ProvisionedCredential, error) {
+) (core.DefaultAPIKeyCredential, error) {
 	if err := validateIdentity(assertion); err != nil {
-		return core.ProvisionedCredential{}, err
+		return core.DefaultAPIKeyCredential{}, err
 	}
 	if !security.ValidAPIKeyType(keyType) {
-		return core.ProvisionedCredential{}, core.Invalid("type", "type must be devbridge or devbox")
+		return core.DefaultAPIKeyCredential{}, core.Invalid("type", "type must be devbridge or devbox")
 	}
 	seed := newIdentitySeed()
-	value, digest := s.keys.DefaultFor(assertion.DomainID, assertion.UserID, keyType)
-	identity, err := s.store.Provision(ctx, assertion, seed, core.NewAPIKey{
+	value, digest := security.NewAPIKey(keyType)
+	identity, err := s.store.IssueDefaultAPIKey(ctx, assertion, seed, core.NewAPIKey{
 		ID: security.NewID("key_"), Name: core.DefaultAPIKeyName,
 		Type: keyType, Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
-		return core.ProvisionedCredential{}, mapStoreError("provision identity", "X-User-Id", err)
+		return core.DefaultAPIKeyCredential{}, mapStoreError("issue default API key", "X-User-Id", err)
 	}
-	return core.ProvisionedCredential{Identity: identity, Type: keyType, APIKey: value}, nil
+	return core.DefaultAPIKeyCredential{Identity: identity, Type: keyType, APIKey: value}, nil
 }
 
 func (s *Service) Authenticate(ctx context.Context, value string) (core.Identity, error) {
@@ -86,7 +85,7 @@ func (s *Service) CreateAPIKey(
 	if !security.ValidAPIKeyType(keyType) {
 		return core.IssuedAPIKey{}, core.Invalid("type", "type must be devbridge or devbox")
 	}
-	value, digest := s.keys.New(keyType)
+	value, digest := security.NewAPIKey(keyType)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
 		ID: security.NewID("key_"), Name: name, Type: keyType,
 		Mask: security.MaskAPIKey(value), Digest: digest,

@@ -1,7 +1,6 @@
 package security
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -16,30 +15,9 @@ const (
 	apiKeyPayloadLength = 32
 )
 
-var (
-	ErrInvalidAPIKey = errors.New("invalid API key")
-)
+var ErrInvalidAPIKey = errors.New("invalid API key")
 
-type APIKeys struct {
-	secret []byte
-}
-
-func NewAPIKeys(secret string) APIKeys {
-	return APIKeys{secret: []byte(secret)}
-}
-
-func (k APIKeys) DefaultFor(domainID, userID string, keyType core.APIKeyType) (string, []byte) {
-	mac := hmac.New(sha256.New, k.secret)
-	_, _ = mac.Write([]byte(string(keyType) + "-api-key\x00"))
-	_, _ = mac.Write([]byte(domainID))
-	_, _ = mac.Write([]byte{0})
-	_, _ = mac.Write([]byte(userID))
-	payload := base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:apiKeyPayloadBytes])
-	value := string(keyType) + "_" + payload
-	return value, apiKeyDigest(value)
-}
-
-func (APIKeys) New(keyType core.APIKeyType) (string, []byte) {
+func NewAPIKey(keyType core.APIKeyType) (string, []byte) {
 	random := make([]byte, apiKeyPayloadBytes)
 	if _, err := rand.Read(random); err != nil {
 		panic(err)

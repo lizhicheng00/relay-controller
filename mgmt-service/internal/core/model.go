@@ -33,7 +33,7 @@ type Identity struct {
 	Namespace        string `json:"namespace"`
 }
 
-type ProvisionedCredential struct {
+type DefaultAPIKeyCredential struct {
 	Identity
 	Type   APIKeyType `json:"type"`
 	APIKey string     `json:"apiKey"`

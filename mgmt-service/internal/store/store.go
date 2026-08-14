@@ -55,7 +55,7 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) Provision(
+func (s *Store) IssueDefaultAPIKey(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
 	seed core.IdentitySeed,
@@ -63,7 +63,7 @@ func (s *Store) Provision(
 ) (core.Identity, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return core.Identity{}, fmt.Errorf("begin provision transaction: %w", err)
+		return core.Identity{}, fmt.Errorf("begin default API key transaction: %w", err)
 	}
 	defer rollback(tx)
 
@@ -128,7 +128,10 @@ func (s *Store) Provision(
 			defaultKey.Type, defaultKey.Mask, defaultKey.Digest)
 	case err == nil:
 		_, err = tx.ExecContext(ctx, `
-			UPDATE api_key SET name = ?, key_mask = ?, key_hash = ? WHERE id = ?`,
+			UPDATE api_key
+			SET name = ?, key_mask = ?, key_hash = ?,
+			    created_at = UTC_TIMESTAMP(6), last_used_at = NULL
+			WHERE id = ?`,
 			core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
 	}
 	if err != nil {
@@ -136,7 +139,7 @@ func (s *Store) Provision(
 	}
 
 	if err := tx.Commit(); err != nil {
-		return core.Identity{}, fmt.Errorf("commit provision transaction: %w", err)
+		return core.Identity{}, fmt.Errorf("commit default API key transaction: %w", err)
 	}
 	return identity, nil
 }
@@ -175,11 +178,10 @@ func (s *Store) FindIdentity(ctx context.Context, apiKeyHash []byte) (core.Ident
 
 func (s *Store) ListAPIKeys(ctx context.Context, namespace string) ([]core.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT k.id, k.name, k.key_type, k.key_mask, k.slot, k.created_at, k.last_used_at
-		FROM api_key k
-		JOIN user_identity u ON u.namespace = k.namespace
-		WHERE k.namespace = ? AND u.status = 'active'
-		ORDER BY k.key_type, k.slot`, namespace)
+		SELECT id, name, key_type, key_mask, slot, created_at, last_used_at
+		FROM api_key
+		WHERE namespace = ?
+		ORDER BY key_type, slot`, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("list API keys: %w", err)
 	}

@@ -25,7 +25,7 @@ const apiBase = "/open-api-inner/v1/mgmt-service"
 type identityContextKey struct{}
 
 type API interface {
-	ProvisionAPIKey(context.Context, core.IdentityAssertion, core.APIKeyType) (core.ProvisionedCredential, error)
+	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.APIKeyType) (core.DefaultAPIKeyCredential, error)
 	Authenticate(context.Context, string) (core.Identity, error)
 	ListAPIKeys(context.Context, core.Identity) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, core.Identity, string, core.APIKeyType) (core.IssuedAPIKey, error)
@@ -38,7 +38,7 @@ type Handler struct {
 	log               *slog.Logger
 }
 
-type provisionAPIKeyRequest struct {
+type issueDefaultAPIKeyRequest struct {
 	Type core.APIKeyType `json:"type"`
 }
 
@@ -53,25 +53,25 @@ func New(api API, trustedProxyToken string, logger *slog.Logger) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
-	mux.HandleFunc("POST "+apiBase+"/api-key", handler.provisionAPIKey)
-	mux.Handle("GET "+apiBase+"/me", handler.authenticate(http.HandlerFunc(handler.me)))
+	mux.HandleFunc("POST "+apiBase+"/api-keys/default", handler.issueDefaultAPIKey)
+	mux.Handle("POST "+apiBase+"/api-keys/check", handler.authenticate(http.HandlerFunc(handler.checkAPIKey)))
 	mux.Handle("GET "+apiBase+"/api-keys", handler.authenticate(http.HandlerFunc(handler.listAPIKeys)))
 	mux.Handle("POST "+apiBase+"/api-keys", handler.authenticate(http.HandlerFunc(handler.createAPIKey)))
 	mux.Handle("DELETE "+apiBase+"/api-keys/{keyId}", handler.authenticate(http.HandlerFunc(handler.deleteAPIKey)))
 	return handler.recover(handler.requestContext(mux))
 }
 
-func (h *Handler) provisionAPIKey(response http.ResponseWriter, request *http.Request) {
+func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http.Request) {
 	if !constantTimeEqual(request.Header.Get("X-DevBridge-Proxy-Token"), h.trustedProxyToken) {
 		h.writeError(response, core.Unauthorized("X-DevBridge-Proxy-Token"))
 		return
 	}
-	var input provisionAPIKeyRequest
+	var input issueDefaultAPIKeyRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.ProvisionAPIKey(request.Context(), core.IdentityAssertion{
+	result, err := h.api.IssueDefaultAPIKey(request.Context(), core.IdentityAssertion{
 		DomainID: request.Header.Get("X-Domain-Id"),
 		UserID:   request.Header.Get("X-User-Id"),
 	}, input.Type)
@@ -83,7 +83,7 @@ func (h *Handler) provisionAPIKey(response http.ResponseWriter, request *http.Re
 	writeJSON(response, http.StatusOK, result)
 }
 
-func (h *Handler) me(response http.ResponseWriter, request *http.Request) {
+func (h *Handler) checkAPIKey(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, identityFromContext(request.Context()))
 }
 

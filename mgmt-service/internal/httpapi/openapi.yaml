@@ -6,13 +6,13 @@ info:
 servers:
   - url: https://localhost:8443
 paths:
-  /open-api-inner/v1/mgmt-service/api-key:
+  /open-api-inner/v1/mgmt-service/api-keys/default:
     post:
-      summary: Get a cloud user's default API key for a type
+      summary: Issue a cloud user's default API key for a type
       description: >-
         Called by the trusted identity layer after browser login. The service creates the
-        user's namespace on first use and returns the same default API key for the requested
-        type on later calls.
+        user's namespace on first use and rotates the requested type's default API key on
+        every successful login.
       security:
         - trustedIdentityProxy: []
       parameters:
@@ -23,7 +23,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProvisionAPIKeyRequest'
+              $ref: '#/components/schemas/IssueDefaultAPIKeyRequest'
       responses:
         '200':
           description: User identity, namespaces, and default API key
@@ -33,17 +33,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProvisionedCredential'
+                $ref: '#/components/schemas/DefaultAPIKeyCredential'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
-  /open-api-inner/v1/mgmt-service/me:
-    get:
+  /open-api-inner/v1/mgmt-service/api-keys/check:
+    post:
       summary: Validate an API key and resolve its identity
-      description: A valid key returns its current identity mapping; an invalid or disabled key returns 401.
+      description: >-
+        A valid key returns its current identity mapping and records its latest use; an invalid
+        or disabled key returns 401.
       security:
         - apiKeyAuth: []
       responses:
@@ -181,7 +183,7 @@ components:
           type: string
         namespace:
           type: string
-    ProvisionedCredential:
+    DefaultAPIKeyCredential:
       allOf:
         - $ref: '#/components/schemas/Identity'
         - type: object
@@ -229,7 +231,7 @@ components:
     APIKeyType:
       type: string
       enum: [devbridge, devbox]
-    ProvisionAPIKeyRequest:
+    IssueDefaultAPIKeyRequest:
       type: object
       required: [type]
       additionalProperties: false

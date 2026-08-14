@@ -8,14 +8,13 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
 - Each namespace may have five API keys for each type: one default key and four additional keys.
-- The login flow supplies a type and retrieves that type's default API key. Repeated requests return the same key.
+- The login flow supplies a type and issues that type's default API key. Each login replaces the previous default key of the same type.
 - The default API key cannot be deleted. Additional keys are intended for separate clients or usage scenarios.
 - Additional key names are unique within a namespace and type. All keys currently grant the same namespace access.
 - API key types are `devbridge` and `devbox`. Each type has its own default key and additional-key allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
 - MySQL stores only API key metadata and SHA-256 digests.
-- The default key is derived with HMAC-SHA256 from `API_KEY_SECRET`; additional keys are generated randomly and returned only when created.
-- All replicas must use the same `API_KEY_SECRET`. Changing it is a coordinated default-key rotation completed as each user provisions again.
+- Default and additional keys are generated randomly. Complete values are returned only when issued.
 
 ## Namespace Ownership
 
@@ -28,8 +27,8 @@ Users in the same cloud domain receive different namespaces but share one `accou
 All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
-POST /open-api-inner/v1/mgmt-service/api-key   provision or retrieve the default API key
-GET  /open-api-inner/v1/mgmt-service/me        validate a key and resolve the current identity
+POST /open-api-inner/v1/mgmt-service/api-keys/default  issue or rotate a typed default API key
+POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
@@ -46,9 +45,9 @@ The management endpoints always operate on the namespace resolved from `X-API-Ke
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
 - Within each type, API key slot `0` is the default key and slots `1` through `4` are additional keys.
 
-Creating and deleting additional keys locks the user identity while assigning a slot. This preserves the five-key-per-type limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute. Namespace CRUD remains unnecessary.
+Issuing a default key replaces only the previous default key of the requested type. Creating and deleting additional keys locks the user identity while assigning a slot, preserving the five-key-per-type limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
-For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each type then creates its default API key without replacing the imported namespace. Runtime APIs intentionally do not accept a namespace supplied by the caller.
+For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each type creates its default API key without replacing the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 
 ## Structure
 
@@ -57,8 +56,8 @@ cmd                  process startup and graceful shutdown
 internal/config      environment configuration
 internal/core        identity models and application errors
 internal/httpapi     HTTP routes and OpenAPI
-internal/security    API key derivation, random identifiers, and PKCS12 mTLS
-internal/service     identity provisioning and authentication
+internal/security    API key generation, random identifiers, and PKCS12 mTLS
+internal/service     namespace and API key lifecycle
 internal/store       MySQL persistence
 migrations           embedded forward-only database migrations
 ```
@@ -68,7 +67,6 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `DATABASE_DSN` | yes | MySQL DSN |
-| `API_KEY_SECRET` | yes | API key derivation secret, at least 32 characters |
 | `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |

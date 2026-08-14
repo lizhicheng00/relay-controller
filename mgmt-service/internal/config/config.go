@@ -10,7 +10,6 @@ const defaultAddress = ":8443"
 type Config struct {
 	Address           string
 	DatabaseDSN       string
-	APIKeySecret      string
 	TrustedProxyToken string
 	TLS               TLS
 }
@@ -26,7 +25,6 @@ func Load() Config {
 	return Config{
 		Address:           valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		DatabaseDSN:       strings.TrimSpace(os.Getenv("DATABASE_DSN")),
-		APIKeySecret:      os.Getenv("API_KEY_SECRET"),
 		TrustedProxyToken: os.Getenv("IDENTITY_PROXY_TOKEN"),
 		TLS: TLS{
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),

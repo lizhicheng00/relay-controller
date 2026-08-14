@@ -14,30 +14,30 @@ import (
 )
 
 type fakeAPI struct {
-	provisioned    core.ProvisionedCredential
-	identity       core.Identity
-	keys           []core.APIKey
-	issued         core.IssuedAPIKey
-	assertion      core.IdentityAssertion
-	createdName    string
-	provisionType  core.APIKeyType
-	createdType    core.APIKeyType
-	deletedID      string
-	authError      error
-	provisionError error
-	listError      error
-	createError    error
-	deleteError    error
+	defaultKey  core.DefaultAPIKeyCredential
+	identity    core.Identity
+	keys        []core.APIKey
+	issued      core.IssuedAPIKey
+	assertion   core.IdentityAssertion
+	createdName string
+	issuedType  core.APIKeyType
+	createdType core.APIKeyType
+	deletedID   string
+	authError   error
+	issueError  error
+	listError   error
+	createError error
+	deleteError error
 }
 
-func (f *fakeAPI) ProvisionAPIKey(
+func (f *fakeAPI) IssueDefaultAPIKey(
 	_ context.Context,
 	assertion core.IdentityAssertion,
 	keyType core.APIKeyType,
-) (core.ProvisionedCredential, error) {
+) (core.DefaultAPIKeyCredential, error) {
 	f.assertion = assertion
-	f.provisionType = keyType
-	return f.provisioned, f.provisionError
+	f.issuedType = keyType
+	return f.defaultKey, f.issueError
 }
 
 func (f *fakeAPI) Authenticate(context.Context, string) (core.Identity, error) {
@@ -64,9 +64,9 @@ func (f *fakeAPI) DeleteAPIKey(_ context.Context, _ core.Identity, keyID string)
 	return f.deleteError
 }
 
-func TestProvisionRequiresTrustedProxy(t *testing.T) {
+func TestIssueDefaultAPIKeyRequiresTrustedProxy(t *testing.T) {
 	server := newTestServer(&fakeAPI{})
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-key", nil)
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default", nil)
 	request.Header.Set("X-Domain-Id", "domain-1")
 	request.Header.Set("X-User-Id", "user-1")
 	response := httptest.NewRecorder()
@@ -79,8 +79,8 @@ func TestProvisionRequiresTrustedProxy(t *testing.T) {
 	assertErrorCode(t, response, core.CodeUnauthorized)
 }
 
-func TestProvisionUsesDomainAndUser(t *testing.T) {
-	application := &fakeAPI{provisioned: core.ProvisionedCredential{
+func TestIssueDefaultAPIKeyUsesDomainUserAndType(t *testing.T) {
+	application := &fakeAPI{defaultKey: core.DefaultAPIKeyCredential{
 		Identity: core.Identity{
 			DomainID: "domain-1", UserID: "user-1",
 			AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
@@ -88,7 +88,7 @@ func TestProvisionUsesDomainAndUser(t *testing.T) {
 		Type: core.APIKeyTypeDevBox, APIKey: strings.Repeat("a", 32),
 	}}
 	server := newTestServer(application)
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-key",
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default",
 		strings.NewReader(`{"type":"devbox"}`))
 	request.Header.Set("X-DevBridge-Proxy-Token", strings.Repeat("t", 32))
 	request.Header.Set("X-Domain-Id", "domain-1")
@@ -104,18 +104,18 @@ func TestProvisionUsesDomainAndUser(t *testing.T) {
 	if application.assertion.DomainID != "domain-1" || application.assertion.UserID != "user-1" {
 		t.Fatalf("assertion = %#v", application.assertion)
 	}
-	if application.provisionType != core.APIKeyTypeDevBox {
-		t.Fatalf("type = %q", application.provisionType)
+	if application.issuedType != core.APIKeyTypeDevBox {
+		t.Fatalf("type = %q", application.issuedType)
 	}
-	var result core.ProvisionedCredential
+	var result core.DefaultAPIKeyCredential
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.APIKey == "" {
 		t.Fatalf("response = %#v, %v", result, err)
 	}
 }
 
 func TestValidationErrorUsesRelayFormat(t *testing.T) {
-	server := newTestServer(&fakeAPI{provisionError: core.Invalid("X-User-Id", "user ID is invalid")})
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-key",
+	server := newTestServer(&fakeAPI{issueError: core.Invalid("X-User-Id", "user ID is invalid")})
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default",
 		strings.NewReader(`{"type":"devbridge"}`))
 	request.Header.Set("X-DevBridge-Proxy-Token", strings.Repeat("t", 32))
 	request.Header.Set("Content-Type", "application/json")
@@ -133,13 +133,13 @@ func TestValidationErrorUsesRelayFormat(t *testing.T) {
 	}
 }
 
-func TestMeUsesAPIKeyIdentity(t *testing.T) {
+func TestCheckAPIKeyReturnsIdentity(t *testing.T) {
 	identity := core.Identity{
 		DomainID: "domain-1", UserID: "user-1",
 		AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
 	}
 	server := newTestServer(&fakeAPI{identity: identity})
-	request := httptest.NewRequest(http.MethodGet, apiBase+"/me", nil)
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/check", nil)
 	request.Header.Set("X-API-Key", strings.Repeat("a", 32))
 	response := httptest.NewRecorder()
 
@@ -152,6 +152,20 @@ func TestMeUsesAPIKeyIdentity(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result != identity {
 		t.Fatalf("identity = %#v, %v", result, err)
 	}
+}
+
+func TestCheckAPIKeyRejectsInvalidKey(t *testing.T) {
+	server := newTestServer(&fakeAPI{authError: core.Unauthorized("X-API-Key")})
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/check", nil)
+	request.Header.Set("X-API-Key", "invalid")
+	response := httptest.NewRecorder()
+
+	server.ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
+	}
+	assertErrorCode(t, response, core.CodeUnauthorized)
 }
 
 func TestAPIKeyManagementRoutes(t *testing.T) {

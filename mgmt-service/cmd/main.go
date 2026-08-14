@@ -48,7 +48,7 @@ func run() error {
 		return err
 	}
 	defer func() { _ = repository.Close() }()
-	application := service.New(repository, security.NewAPIKeys(cfg.APIKeySecret))
+	application := service.New(repository)
 	server := &http.Server{
 		Handler:           httpapi.New(application, cfg.TrustedProxyToken, logger),
 		ErrorLog:          log.New(io.Discard, "", 0),
