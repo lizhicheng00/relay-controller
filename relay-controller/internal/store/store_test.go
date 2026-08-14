@@ -23,7 +23,7 @@ func TestIsTunnelNameConflict(t *testing.T) {
 }
 
 func TestDataSourceNameIgnoresJDBCParameters(t *testing.T) {
-	dsn := dataSourceName(config.Database{
+	dsn := DataSourceName(config.Database{
 		URL:      "jdbc:mariadb://database.example.com:3306/relay_controller?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC",
 		Username: "relay",
 		Password: "secret",

@@ -46,7 +46,7 @@ internal/service       tunnel, port, token, billing, cleanup workflows
 internal/core          business models and deterministic rules
 internal/store         MySQL queries and transactions
 internal/security      RS256 signing and PKCS12 mTLS
-migrations             deployment-managed schema changes
+migrations             embedded database migrations
 ```
 
 The runtime uses the Go standard library where practical. The only direct dependencies are the MySQL driver and PKCS12 decoder.
@@ -103,7 +103,7 @@ export SERVER_SSL_TRUST_STORE_PASSWORD='<secret>'
 go run ./cmd
 ```
 
-The service does not migrate the shared database. Apply the deployment-managed migrations before startup.
+The service applies embedded migrations before opening the application store. Applied versions are recorded in `schema_migration`.
 
 ## Security Boundary
 

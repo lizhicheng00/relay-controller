@@ -19,6 +19,7 @@ import (
 	"relay-controller/internal/security"
 	"relay-controller/internal/service"
 	"relay-controller/internal/store"
+	"relay-controller/migrations"
 )
 
 func main() {
@@ -47,6 +48,9 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if err := migrations.Run(ctx, cfg.Database); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
 	database, err := store.Open(ctx, cfg.Database)
 	if err != nil {
 		return err

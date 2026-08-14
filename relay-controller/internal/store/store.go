@@ -36,7 +36,7 @@ const (
 )
 
 func Open(ctx context.Context, cfg config.Database) (*Store, error) {
-	db, err := sql.Open("mysql", dataSourceName(cfg))
+	db, err := sql.Open("mysql", DataSourceName(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -123,7 +123,7 @@ func isDuplicateKey(err error, key string) bool {
 		strings.Contains(mysqlError.Message, key)
 }
 
-func dataSourceName(cfg config.Database) string {
+func DataSourceName(cfg config.Database) string {
 	address := strings.TrimPrefix(cfg.URL, "jdbc:mariadb://")
 	address = strings.TrimPrefix(address, "jdbc:mysql://")
 	address, _, _ = strings.Cut(address, "?")
