@@ -7,11 +7,11 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One cloud domain maps to one shared `accountNamespace`.
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
-- Each namespace has one default API key and may have up to four additional API keys.
-- The login flow retrieves the default API key. Repeated requests return the same default key.
+- Each namespace may have five API keys for each type: one default key and four additional keys.
+- The login flow supplies a type and retrieves that type's default API key. Repeated requests return the same key.
 - The default API key cannot be deleted. Additional keys are intended for separate clients or usage scenarios.
-- Additional key names are unique within a namespace. All keys currently grant the same namespace access.
-- API key scenarios are `devbridge` and `devbox`. The default key uses `devbridge`; additional keys select a scenario when created.
+- Additional key names are unique within a namespace and type. All keys currently grant the same namespace access.
+- API key types are `devbridge` and `devbox`. Each type has its own default key and additional-key allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
 - MySQL stores only API key metadata and SHA-256 digests.
 - The default key is derived with HMAC-SHA256 from `API_KEY_SECRET`; additional keys are generated randomly and returned only when created.
@@ -29,26 +29,26 @@ All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
 POST /open-api-inner/v1/mgmt-service/api-key   provision or retrieve the default API key
-GET  /open-api-inner/v1/mgmt-service/me        resolve the current identity
+GET  /open-api-inner/v1/mgmt-service/me        validate a key and resolve the current identity
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
 ```
 
-The default API key endpoint requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, and `X-User-Id`. The remaining business endpoints require `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
+The default API key endpoint requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, `X-User-Id`, and a JSON body containing `type`. The remaining business endpoints require `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
 
-The three management endpoints also require `X-API-Key`. They always operate on the namespace resolved from that key; a caller cannot submit another namespace. Lists contain metadata, scenarios, and masks only. Creating a key requires `name` and `scenario`; the complete value is returned once.
+The management endpoints always operate on the namespace resolved from `X-API-Key`; a caller cannot submit another namespace. Lists contain metadata, types, masks, and last-use times only. Creating a key requires `name` and `type`; the complete value is returned once.
 
 ## Data Ownership
 
 - `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
 - `user_identity` owns the `(domainId, userId)` mapping and user namespace.
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
-- API key slot `0` is the default key; slots `1` through `4` are additional keys.
+- Within each type, API key slot `0` is the default key and slots `1` through `4` are additional keys.
 
-Creating and deleting additional keys locks the user identity while assigning a slot. This preserves the five-key limit across concurrent requests and service replicas. Namespace CRUD remains unnecessary.
+Creating and deleting additional keys locks the user identity while assigning a slot. This preserves the five-key-per-type limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute. Namespace CRUD remains unnecessary.
 
-For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first login then creates the default API key without replacing the imported namespace. Runtime APIs intentionally do not accept a namespace supplied by the caller.
+For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each type then creates its default API key without replacing the imported namespace. Runtime APIs intentionally do not accept a namespace supplied by the caller.
 
 ## Structure
 

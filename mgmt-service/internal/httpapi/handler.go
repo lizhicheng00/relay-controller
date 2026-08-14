@@ -25,10 +25,10 @@ const apiBase = "/open-api-inner/v1/mgmt-service"
 type identityContextKey struct{}
 
 type API interface {
-	ProvisionAPIKey(context.Context, core.IdentityAssertion) (core.ProvisionedCredential, error)
+	ProvisionAPIKey(context.Context, core.IdentityAssertion, core.APIKeyType) (core.ProvisionedCredential, error)
 	Authenticate(context.Context, string) (core.Identity, error)
 	ListAPIKeys(context.Context, core.Identity) ([]core.APIKey, error)
-	CreateAPIKey(context.Context, core.Identity, string, core.APIKeyScenario) (core.IssuedAPIKey, error)
+	CreateAPIKey(context.Context, core.Identity, string, core.APIKeyType) (core.IssuedAPIKey, error)
 	DeleteAPIKey(context.Context, core.Identity, string) error
 }
 
@@ -38,9 +38,13 @@ type Handler struct {
 	log               *slog.Logger
 }
 
+type provisionAPIKeyRequest struct {
+	Type core.APIKeyType `json:"type"`
+}
+
 type createAPIKeyRequest struct {
-	Name     string              `json:"name"`
-	Scenario core.APIKeyScenario `json:"scenario"`
+	Name string          `json:"name"`
+	Type core.APIKeyType `json:"type"`
 }
 
 func New(api API, trustedProxyToken string, logger *slog.Logger) http.Handler {
@@ -62,10 +66,15 @@ func (h *Handler) provisionAPIKey(response http.ResponseWriter, request *http.Re
 		h.writeError(response, core.Unauthorized("X-DevBridge-Proxy-Token"))
 		return
 	}
+	var input provisionAPIKeyRequest
+	if err := decodeJSON(response, request, &input); err != nil {
+		h.writeError(response, err)
+		return
+	}
 	result, err := h.api.ProvisionAPIKey(request.Context(), core.IdentityAssertion{
 		DomainID: request.Header.Get("X-Domain-Id"),
 		UserID:   request.Header.Get("X-User-Id"),
-	})
+	}, input.Type)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -94,7 +103,7 @@ func (h *Handler) createAPIKey(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	key, err := h.api.CreateAPIKey(
-		request.Context(), identityFromContext(request.Context()), input.Name, input.Scenario)
+		request.Context(), identityFromContext(request.Context()), input.Name, input.Type)
 	if err != nil {
 		h.writeError(response, err)
 		return

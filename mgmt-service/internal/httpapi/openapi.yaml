@@ -8,16 +8,22 @@ servers:
 paths:
   /open-api-inner/v1/mgmt-service/api-key:
     post:
-      summary: Get a cloud user's default API key
+      summary: Get a cloud user's default API key for a type
       description: >-
         Called by the trusted identity layer after browser login. The service creates the
-        user's namespace on first use and returns the same `devbridge` default API key on
-        later calls.
+        user's namespace on first use and returns the same default API key for the requested
+        type on later calls.
       security:
         - trustedIdentityProxy: []
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionAPIKeyRequest'
       responses:
         '200':
           description: User identity, namespaces, and default API key
@@ -36,7 +42,8 @@ paths:
           $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/me:
     get:
-      summary: Get the identity mapped to an API key
+      summary: Validate an API key and resolve its identity
+      description: A valid key returns its current identity mapping; an invalid or disabled key returns 401.
       security:
         - apiKeyAuth: []
       responses:
@@ -58,12 +65,12 @@ paths:
         - apiKeyAuth: []
       responses:
         '200':
-          description: API keys ordered with the default key first
+          description: API keys grouped by type with each default key first
           content:
             application/json:
               schema:
                 type: array
-                maxItems: 5
+                maxItems: 10
                 items:
                   $ref: '#/components/schemas/APIKey'
         '401':
@@ -73,8 +80,8 @@ paths:
     post:
       summary: Create an additional API key
       description: >-
-        Creates one of at most four additional API keys. The complete value is returned only
-        in this response and cannot be retrieved later. The requested scenario determines
+        Creates one of at most four additional API keys for the requested type. The complete
+        value is returned only in this response and cannot be retrieved later. The type determines
         whether the value starts with `devbridge_` or `devbox_`.
       security:
         - apiKeyAuth: []
@@ -178,20 +185,22 @@ components:
       allOf:
         - $ref: '#/components/schemas/Identity'
         - type: object
-          required: [apiKey]
+          required: [type, apiKey]
           properties:
+            type:
+              $ref: '#/components/schemas/APIKeyType'
             apiKey:
               $ref: '#/components/schemas/APIKeyValue'
     APIKey:
       type: object
-      required: [id, name, scenario, mask, isDefault, createdAt]
+      required: [id, name, type, mask, isDefault, createdAt, lastUsedAt]
       properties:
         id:
           type: string
         name:
           type: string
-        scenario:
-          $ref: '#/components/schemas/APIKeyScenario'
+        type:
+          $ref: '#/components/schemas/APIKeyType'
         mask:
           type: string
           example: devbridge_abcd...1234
@@ -200,6 +209,11 @@ components:
         createdAt:
           type: string
           format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Most recent successful authentication time, updated at most once per minute.
     IssuedAPIKey:
       allOf:
         - $ref: '#/components/schemas/APIKey'
@@ -211,22 +225,29 @@ components:
     APIKeyValue:
       type: string
       pattern: '^(devbridge|devbox)_[A-Za-z0-9_-]{32}$'
-      description: Scenario prefix followed by a 32-character unpadded Base64URL payload.
-    APIKeyScenario:
+      description: Type prefix followed by a 32-character unpadded Base64URL payload.
+    APIKeyType:
       type: string
       enum: [devbridge, devbox]
+    ProvisionAPIKeyRequest:
+      type: object
+      required: [type]
+      additionalProperties: false
+      properties:
+        type:
+          $ref: '#/components/schemas/APIKeyType'
     CreateAPIKeyRequest:
       type: object
-      required: [name, scenario]
+      required: [name, type]
       additionalProperties: false
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 64
-          description: A client or usage-scenario label. The name `default` is reserved.
-        scenario:
-          $ref: '#/components/schemas/APIKeyScenario'
+          description: A client or usage label. The name `default` is reserved within each type.
+        type:
+          $ref: '#/components/schemas/APIKeyType'
     ErrorResponse:
       type: object
       required: [error]
@@ -275,7 +296,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: API key name, limit, or default-key conflict
+      description: API key name, per-type limit, or default-key conflict
       content:
         application/json:
           schema:
