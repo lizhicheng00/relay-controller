@@ -20,6 +20,8 @@ import (
 //go:embed openapi.yaml
 var openAPISpec []byte
 
+const apiBase = "/open-api-inner/v1/mgmt-service"
+
 type identityContextKey struct{}
 
 type API interface {
@@ -47,11 +49,11 @@ func New(api API, trustedProxyToken string, logger *slog.Logger) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
-	mux.HandleFunc("POST /v1/api-key", handler.provisionAPIKey)
-	mux.Handle("GET /v1/me", handler.authenticate(http.HandlerFunc(handler.me)))
-	mux.Handle("GET /v1/api-keys", handler.authenticate(http.HandlerFunc(handler.listAPIKeys)))
-	mux.Handle("POST /v1/api-keys", handler.authenticate(http.HandlerFunc(handler.createAPIKey)))
-	mux.Handle("DELETE /v1/api-keys/{keyId}", handler.authenticate(http.HandlerFunc(handler.deleteAPIKey)))
+	mux.HandleFunc("POST "+apiBase+"/api-key", handler.provisionAPIKey)
+	mux.Handle("GET "+apiBase+"/me", handler.authenticate(http.HandlerFunc(handler.me)))
+	mux.Handle("GET "+apiBase+"/api-keys", handler.authenticate(http.HandlerFunc(handler.listAPIKeys)))
+	mux.Handle("POST "+apiBase+"/api-keys", handler.authenticate(http.HandlerFunc(handler.createAPIKey)))
+	mux.Handle("DELETE "+apiBase+"/api-keys/{keyId}", handler.authenticate(http.HandlerFunc(handler.deleteAPIKey)))
 	return handler.recover(handler.requestContext(mux))
 }
 

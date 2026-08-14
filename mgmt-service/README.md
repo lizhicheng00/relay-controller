@@ -25,15 +25,17 @@ Users in the same cloud domain receive different namespaces but share one `accou
 
 ## API
 
+All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
+
 ```text
-POST /v1/api-key   trusted identity layer provisions or retrieves the user's default API key
-GET  /v1/me        API key resolves its domain, user, and namespaces
-GET  /v1/api-keys  list key metadata for the current namespace
-POST /v1/api-keys  create an additional API key
-DELETE /v1/api-keys/{keyId}  delete an additional API key
+POST /open-api-inner/v1/mgmt-service/api-key   provision or retrieve the default API key
+GET  /open-api-inner/v1/mgmt-service/me        resolve the current identity
+GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
+POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
+DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
 ```
 
-`POST /v1/api-key` requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, and `X-User-Id`. `GET /v1/me` requires `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
+The default API key endpoint requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, and `X-User-Id`. The remaining business endpoints require `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
 
 The three management endpoints also require `X-API-Key`. They always operate on the namespace resolved from that key; a caller cannot submit another namespace. Lists contain metadata, scenarios, and masks only. Creating a key requires `name` and `scenario`; the complete value is returned once.
 

@@ -6,7 +6,7 @@ info:
 servers:
   - url: https://localhost:8443
 paths:
-  /v1/api-key:
+  /open-api-inner/v1/mgmt-service/api-key:
     post:
       summary: Get a cloud user's default API key
       description: >-
@@ -34,7 +34,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/me:
+  /open-api-inner/v1/mgmt-service/me:
     get:
       summary: Get the identity mapped to an API key
       security:
@@ -50,7 +50,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/api-keys:
+  /open-api-inner/v1/mgmt-service/api-keys:
     get:
       summary: List API keys for the current namespace
       description: Returns metadata and masks only. Complete API key values are never listed.
@@ -102,7 +102,7 @@ paths:
           $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
-  /v1/api-keys/{keyId}:
+  /open-api-inner/v1/mgmt-service/api-keys/{keyId}:
     delete:
       summary: Delete an additional API key
       description: The default API key cannot be deleted.
