@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -22,20 +21,17 @@ var openAPISpec []byte
 
 const apiBase = "/open-api-inner/v1/mgmt-service"
 
-type identityContextKey struct{}
-
 type API interface {
 	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.APIKeyType) (core.DefaultAPIKeyCredential, error)
-	Authenticate(context.Context, string) (core.Identity, error)
-	ListAPIKeys(context.Context, core.Identity) ([]core.APIKey, error)
-	CreateAPIKey(context.Context, core.Identity, string, core.APIKeyType) (core.IssuedAPIKey, error)
-	DeleteAPIKey(context.Context, core.Identity, string) error
+	CheckAPIKey(context.Context, string) (core.Identity, error)
+	ListAPIKeys(context.Context, core.IdentityAssertion) ([]core.APIKey, error)
+	CreateAPIKey(context.Context, core.IdentityAssertion, string, core.APIKeyType) (core.IssuedAPIKey, error)
+	DeleteAPIKey(context.Context, core.IdentityAssertion, string) error
 }
 
 type Handler struct {
-	api               API
-	trustedProxyToken string
-	log               *slog.Logger
+	api API
+	log *slog.Logger
 }
 
 type issueDefaultAPIKeyRequest struct {
@@ -47,25 +43,19 @@ type createAPIKeyRequest struct {
 	Type core.APIKeyType `json:"type"`
 }
 
-func New(api API, trustedProxyToken string, logger *slog.Logger) http.Handler {
-	handler := &Handler{
-		api: api, trustedProxyToken: trustedProxyToken, log: logger,
-	}
+func New(api API, logger *slog.Logger) http.Handler {
+	handler := &Handler{api: api, log: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
 	mux.HandleFunc("POST "+apiBase+"/api-keys/default", handler.issueDefaultAPIKey)
-	mux.Handle("POST "+apiBase+"/api-keys/check", handler.authenticate(http.HandlerFunc(handler.checkAPIKey)))
-	mux.Handle("GET "+apiBase+"/api-keys", handler.authenticate(http.HandlerFunc(handler.listAPIKeys)))
-	mux.Handle("POST "+apiBase+"/api-keys", handler.authenticate(http.HandlerFunc(handler.createAPIKey)))
-	mux.Handle("DELETE "+apiBase+"/api-keys/{keyId}", handler.authenticate(http.HandlerFunc(handler.deleteAPIKey)))
+	mux.HandleFunc("POST "+apiBase+"/api-keys/check", handler.checkAPIKey)
+	mux.HandleFunc("GET "+apiBase+"/api-keys", handler.listAPIKeys)
+	mux.HandleFunc("POST "+apiBase+"/api-keys", handler.createAPIKey)
+	mux.HandleFunc("DELETE "+apiBase+"/api-keys/{keyId}", handler.deleteAPIKey)
 	return handler.recover(handler.requestContext(mux))
 }
 
 func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http.Request) {
-	if !constantTimeEqual(request.Header.Get("X-DevBridge-Proxy-Token"), h.trustedProxyToken) {
-		h.writeError(response, core.Unauthorized("X-DevBridge-Proxy-Token"))
-		return
-	}
 	var input issueDefaultAPIKeyRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		h.writeError(response, err)
@@ -84,11 +74,16 @@ func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http
 }
 
 func (h *Handler) checkAPIKey(response http.ResponseWriter, request *http.Request) {
-	writeJSON(response, http.StatusOK, identityFromContext(request.Context()))
+	identity, err := h.api.CheckAPIKey(request.Context(), request.Header.Get("X-API-Key"))
+	if err != nil {
+		h.writeError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, identity)
 }
 
 func (h *Handler) listAPIKeys(response http.ResponseWriter, request *http.Request) {
-	keys, err := h.api.ListAPIKeys(request.Context(), identityFromContext(request.Context()))
+	keys, err := h.api.ListAPIKeys(request.Context(), identityAssertion(request))
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -103,7 +98,7 @@ func (h *Handler) createAPIKey(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	key, err := h.api.CreateAPIKey(
-		request.Context(), identityFromContext(request.Context()), input.Name, input.Type)
+		request.Context(), identityAssertion(request), input.Name, input.Type)
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -113,7 +108,7 @@ func (h *Handler) createAPIKey(response http.ResponseWriter, request *http.Reque
 
 func (h *Handler) deleteAPIKey(response http.ResponseWriter, request *http.Request) {
 	err := h.api.DeleteAPIKey(
-		request.Context(), identityFromContext(request.Context()), request.PathValue("keyId"))
+		request.Context(), identityAssertion(request), request.PathValue("keyId"))
 	if err != nil {
 		h.writeError(response, err)
 		return
@@ -128,23 +123,11 @@ func (h *Handler) openapi(response http.ResponseWriter, _ *http.Request) {
 	_, _ = response.Write(openAPISpec)
 }
 
-func (h *Handler) authenticate(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		identity, err := h.api.Authenticate(request.Context(), request.Header.Get("X-API-Key"))
-		if err != nil {
-			h.writeError(response, err)
-			return
-		}
-		response.Header().Set("Cache-Control", "no-store")
-		ctx := context.WithValue(request.Context(), identityContextKey{}, identity)
-		next.ServeHTTP(response, request.WithContext(ctx))
-	})
-}
-
 func (h *Handler) requestContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("X-Request-Id", security.NewID("req_"))
 		response.Header().Set("X-Content-Type-Options", "nosniff")
+		response.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(response, request)
 	})
 }
@@ -201,14 +184,9 @@ func decodeJSON(response http.ResponseWriter, request *http.Request, value any) 
 	return nil
 }
 
-func identityFromContext(ctx context.Context) core.Identity {
-	identity, _ := ctx.Value(identityContextKey{}).(core.Identity)
-	return identity
-}
-
-func constantTimeEqual(actual, expected string) bool {
-	if len(actual) != len(expected) || len(actual) == 0 {
-		return false
+func identityAssertion(request *http.Request) core.IdentityAssertion {
+	return core.IdentityAssertion{
+		DomainID: request.Header.Get("X-Domain-Id"),
+		UserID:   request.Header.Get("X-User-Id"),
 	}
-	return subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) == 1
 }

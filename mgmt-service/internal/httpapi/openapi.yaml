@@ -2,7 +2,9 @@ openapi: 3.0.3
 info:
   title: DevBridge Management API
   version: 1.0.0
-  description: Maps trusted cloud identities to DevBridge namespaces and API keys.
+  description: >-
+    Maps trusted cloud identities to DevBridge namespaces and API keys. Every endpoint requires
+    a mutually authenticated TLS connection.
 servers:
   - url: https://localhost:8443
 paths:
@@ -13,8 +15,6 @@ paths:
         Called by the trusted identity layer after browser login. The service creates the
         user's namespace on first use and rotates the requested type's default API key on
         every successful login.
-      security:
-        - trustedIdentityProxy: []
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -60,11 +60,12 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys:
+    parameters:
+      - $ref: '#/components/parameters/DomainId'
+      - $ref: '#/components/parameters/UserId'
     get:
       summary: List API keys for the current namespace
       description: Returns metadata and masks only. Complete API key values are never listed.
-      security:
-        - apiKeyAuth: []
       responses:
         '200':
           description: API keys grouped by type with each default key first
@@ -75,8 +76,10 @@ paths:
                 maxItems: 10
                 items:
                   $ref: '#/components/schemas/APIKey'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
@@ -85,8 +88,6 @@ paths:
         Creates one of at most four additional API keys for the requested type. The complete
         value is returned only in this response and cannot be retrieved later. The type determines
         whether the value starts with `devbridge_` or `devbox_`.
-      security:
-        - apiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -105,8 +106,8 @@ paths:
                 $ref: '#/components/schemas/IssuedAPIKey'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '500':
@@ -115,9 +116,9 @@ paths:
     delete:
       summary: Delete an additional API key
       description: The default API key cannot be deleted.
-      security:
-        - apiKeyAuth: []
       parameters:
+        - $ref: '#/components/parameters/DomainId'
+        - $ref: '#/components/parameters/UserId'
         - name: keyId
           in: path
           required: true
@@ -129,8 +130,6 @@ paths:
           description: API key deleted
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -143,11 +142,6 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-    trustedIdentityProxy:
-      type: apiKey
-      in: header
-      name: X-DevBridge-Proxy-Token
-      description: Internal credential held by the trusted identity layer.
   parameters:
     DomainId:
       name: X-Domain-Id
@@ -292,7 +286,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: API key not found in the current namespace
+      description: User identity or API key not found
       content:
         application/json:
           schema:

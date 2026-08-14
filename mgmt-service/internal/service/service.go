@@ -15,7 +15,8 @@ import (
 
 type repository interface {
 	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.IdentitySeed, core.NewAPIKey) (core.Identity, error)
-	FindIdentity(context.Context, []byte) (core.Identity, error)
+	FindIdentity(context.Context, core.IdentityAssertion) (core.Identity, error)
+	FindIdentityByAPIKey(context.Context, []byte) (core.Identity, error)
 	ListAPIKeys(context.Context, string) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, string, core.NewAPIKey) (core.APIKey, error)
 	DeleteAPIKey(context.Context, string, string) error
@@ -52,29 +53,36 @@ func (s *Service) IssueDefaultAPIKey(
 	return core.DefaultAPIKeyCredential{Identity: identity, Type: keyType, APIKey: value}, nil
 }
 
-func (s *Service) Authenticate(ctx context.Context, value string) (core.Identity, error) {
+func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.Identity, error) {
 	digest, err := security.DigestAPIKey(strings.TrimSpace(value))
 	if err != nil {
 		return core.Identity{}, core.Unauthorized("X-API-Key")
 	}
-	identity, err := s.store.FindIdentity(ctx, digest)
+	identity, err := s.store.FindIdentityByAPIKey(ctx, digest)
 	if err != nil {
-		return core.Identity{}, mapStoreError("authenticate API key", "X-API-Key", err)
+		return core.Identity{}, mapStoreError("check API key", "X-API-Key", err)
 	}
 	return identity, nil
 }
 
-func (s *Service) ListAPIKeys(ctx context.Context, identity core.Identity) ([]core.APIKey, error) {
+func (s *Service) ListAPIKeys(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+) ([]core.APIKey, error) {
+	identity, err := s.resolveIdentity(ctx, assertion)
+	if err != nil {
+		return nil, err
+	}
 	keys, err := s.store.ListAPIKeys(ctx, identity.Namespace)
 	if err != nil {
-		return nil, mapStoreError("list API keys", "X-API-Key", err)
+		return nil, core.Internal(fmt.Errorf("list API keys: %w", err))
 	}
 	return keys, nil
 }
 
 func (s *Service) CreateAPIKey(
 	ctx context.Context,
-	identity core.Identity,
+	assertion core.IdentityAssertion,
 	name string,
 	keyType core.APIKeyType,
 ) (core.IssuedAPIKey, error) {
@@ -84,6 +92,10 @@ func (s *Service) CreateAPIKey(
 	}
 	if !security.ValidAPIKeyType(keyType) {
 		return core.IssuedAPIKey{}, core.Invalid("type", "type must be devbridge or devbox")
+	}
+	identity, err := s.resolveIdentity(ctx, assertion)
+	if err != nil {
+		return core.IssuedAPIKey{}, err
 	}
 	value, digest := security.NewAPIKey(keyType)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
@@ -96,14 +108,39 @@ func (s *Service) CreateAPIKey(
 	return core.IssuedAPIKey{APIKey: key, Value: value}, nil
 }
 
-func (s *Service) DeleteAPIKey(ctx context.Context, identity core.Identity, keyID string) error {
+func (s *Service) DeleteAPIKey(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+	keyID string,
+) error {
 	if !validKeyID(keyID) {
 		return core.Invalid("keyId", "keyId is invalid")
+	}
+	identity, err := s.resolveIdentity(ctx, assertion)
+	if err != nil {
+		return err
 	}
 	if err := s.store.DeleteAPIKey(ctx, identity.Namespace, keyID); err != nil {
 		return mapAPIKeyStoreError("delete API key", err)
 	}
 	return nil
+}
+
+func (s *Service) resolveIdentity(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+) (core.Identity, error) {
+	if err := validateIdentity(assertion); err != nil {
+		return core.Identity{}, err
+	}
+	identity, err := s.store.FindIdentity(ctx, assertion)
+	if errors.Is(err, store.ErrNotFound) {
+		return core.Identity{}, core.IdentityNotFound()
+	}
+	if err != nil {
+		return core.Identity{}, core.Internal(fmt.Errorf("resolve identity: %w", err))
+	}
+	return identity, nil
 }
 
 func newIdentitySeed() core.IdentitySeed {
@@ -185,7 +222,7 @@ func mapAPIKeyStoreError(operation string, err error) error {
 	case errors.Is(err, store.ErrNotFound):
 		return core.NotFound("keyId", "API key not found")
 	case errors.Is(err, store.ErrUnauthorized):
-		return core.Unauthorized("X-API-Key")
+		return core.IdentityNotFound()
 	default:
 		return core.Internal(fmt.Errorf("%s: %w", operation, err))
 	}

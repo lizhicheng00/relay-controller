@@ -50,7 +50,7 @@ func run() error {
 	defer func() { _ = repository.Close() }()
 	application := service.New(repository)
 	server := &http.Server{
-		Handler:           httpapi.New(application, cfg.TrustedProxyToken, logger),
+		Handler:           httpapi.New(application, logger),
 		ErrorLog:          log.New(io.Discard, "", 0),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

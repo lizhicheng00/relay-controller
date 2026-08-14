@@ -144,7 +144,31 @@ func (s *Store) IssueDefaultAPIKey(
 	return identity, nil
 }
 
-func (s *Store) FindIdentity(ctx context.Context, apiKeyHash []byte) (core.Identity, error) {
+func (s *Store) FindIdentity(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+) (core.Identity, error) {
+	var identity core.Identity
+	err := s.db.QueryRowContext(ctx, `
+		SELECT a.domain_id, u.user_id, a.account_namespace, u.namespace
+		FROM domain_account a
+		JOIN user_identity u ON u.account_id = a.id
+		WHERE a.domain_id = ?
+		  AND u.user_id = ?
+		  AND a.status = 'active'
+		  AND u.status = 'active'`, assertion.DomainID, assertion.UserID).Scan(
+		&identity.DomainID,
+		&identity.UserID,
+		&identity.AccountNamespace,
+		&identity.Namespace,
+	)
+	if err != nil {
+		return core.Identity{}, mapQueryError("find identity", err)
+	}
+	return identity, nil
+}
+
+func (s *Store) FindIdentityByAPIKey(ctx context.Context, apiKeyHash []byte) (core.Identity, error) {
 	var identity core.Identity
 	var keyID string
 	err := s.db.QueryRowContext(ctx, `

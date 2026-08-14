@@ -13,6 +13,7 @@ const (
 	CodeAPIKeyNameConflict = "13002"
 	CodeAPIKeyLimitReached = "13003"
 	CodeDefaultAPIKey      = "13004"
+	CodeIdentityNotFound   = "13005"
 	CodeInternal           = "50000"
 )
 
@@ -83,6 +84,13 @@ func Unauthorized(target string) *AppError {
 func NotFound(target, message string) *AppError {
 	return &AppError{
 		Status: http.StatusNotFound, Code: CodeAPIKeyNotFound, Message: message, Target: target,
+	}
+}
+
+func IdentityNotFound() *AppError {
+	return &AppError{
+		Status: http.StatusNotFound, Code: CodeIdentityNotFound,
+		Message: "user identity not found", Target: "X-User-Id",
 	}
 }
 

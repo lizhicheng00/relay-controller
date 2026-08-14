@@ -34,9 +34,9 @@ POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
 ```
 
-The default API key endpoint requires `X-DevBridge-Proxy-Token`, `X-Domain-Id`, `X-User-Id`, and a JSON body containing `type`. The remaining business endpoints require `X-API-Key`. The OpenAPI document is available at `/openapi.yaml`.
+All endpoints require mTLS. Default issuance and API key management use the trusted `X-Domain-Id` and `X-User-Id` headers. Only the check endpoint accepts `X-API-Key`, because it validates a business credential and resolves its identity. The OpenAPI document is available at `/openapi.yaml`.
 
-The management endpoints always operate on the namespace resolved from `X-API-Key`; a caller cannot submit another namespace. Lists contain metadata, types, masks, and last-use times only. Creating a key requires `name` and `type`; the complete value is returned once.
+The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, types, masks, and last-use times only. Creating a key requires `name` and `type`; the complete value is returned once.
 
 ## Data Ownership
 
@@ -67,7 +67,6 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `DATABASE_DSN` | yes | MySQL DSN |
-| `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |

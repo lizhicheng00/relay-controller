@@ -1,9 +1,6 @@
 package config
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestLoadDefaults(t *testing.T) {
 	setRequiredEnvironment(t)
@@ -24,5 +21,4 @@ func TestLoadDefaults(t *testing.T) {
 func setRequiredEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_DSN", "user:password@tcp(localhost:3306)/mgmt")
-	t.Setenv("IDENTITY_PROXY_TOKEN", strings.Repeat("t", 32))
 }

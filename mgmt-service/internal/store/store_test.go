@@ -51,8 +51,15 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	if err != nil || repeated != identity {
 		t.Fatalf("IssueDefaultAPIKey(repeated) = %#v, %v; want %#v", repeated, err, identity)
 	}
-	if found, err := repository.FindIdentity(ctx, defaultKey.Digest); err != nil || found != identity {
-		t.Fatalf("FindIdentity(default) = %#v, %v", found, err)
+	if found, err := repository.FindIdentity(ctx, assertion); err != nil || found != identity {
+		t.Fatalf("FindIdentity() = %#v, %v", found, err)
+	}
+	keysBeforeUse, err := repository.ListAPIKeys(ctx, identity.Namespace)
+	if err != nil || keyByID(keysBeforeUse, defaultKey.ID).LastUsedAt != nil {
+		t.Fatalf("unused default metadata = %#v, %v", keyByID(keysBeforeUse, defaultKey.ID), err)
+	}
+	if found, err := repository.FindIdentityByAPIKey(ctx, defaultKey.Digest); err != nil || found != identity {
+		t.Fatalf("FindIdentityByAPIKey(default) = %#v, %v", found, err)
 	}
 
 	secondIdentity, err := repository.IssueDefaultAPIKey(ctx, core.IdentityAssertion{
@@ -158,7 +165,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	if err := repository.DeleteAPIKey(ctx, identity.Namespace, additional[0].ID); err != nil {
 		t.Fatalf("DeleteAPIKey() error = %v", err)
 	}
-	if _, err := repository.FindIdentity(ctx, additional[0].Digest); !errors.Is(err, ErrNotFound) {
+	if _, err := repository.FindIdentityByAPIKey(ctx, additional[0].Digest); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleted key authentication error = %v", err)
 	}
 	if _, err := repository.CreateAPIKey(ctx, identity.Namespace,
@@ -170,17 +177,17 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	if _, err := repository.IssueDefaultAPIKey(ctx, assertion, seed, rotatedDefault); err != nil {
 		t.Fatalf("IssueDefaultAPIKey(rotated default) error = %v", err)
 	}
-	if _, err := repository.FindIdentity(ctx, defaultKey.Digest); !errors.Is(err, ErrNotFound) {
+	if _, err := repository.FindIdentityByAPIKey(ctx, defaultKey.Digest); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("old default authentication error = %v", err)
 	}
 	keys, err = repository.ListAPIKeys(ctx, identity.Namespace)
 	if err != nil || keyByID(keys, defaultKey.ID).LastUsedAt != nil {
 		t.Fatalf("rotated default metadata = %#v, %v", keyByID(keys, defaultKey.ID), err)
 	}
-	if found, err := repository.FindIdentity(ctx, devboxDefault.Digest); err != nil || found != identity {
+	if found, err := repository.FindIdentityByAPIKey(ctx, devboxDefault.Digest); err != nil || found != identity {
 		t.Fatalf("other type default = %#v, %v", found, err)
 	}
-	if found, err := repository.FindIdentity(ctx, rotatedDefault.Digest); err != nil || found != identity {
+	if found, err := repository.FindIdentityByAPIKey(ctx, rotatedDefault.Digest); err != nil || found != identity {
 		t.Fatalf("rotated identity = %#v, %v", found, err)
 	}
 }
