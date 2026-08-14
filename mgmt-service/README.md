@@ -55,7 +55,7 @@ cmd                  process startup and graceful shutdown
 internal/config      environment configuration
 internal/core        identity models and application errors
 internal/httpapi     HTTP routes and OpenAPI
-internal/security    API key derivation and random namespace identifiers
+internal/security    API key derivation, random identifiers, and PKCS12 mTLS
 internal/service     identity provisioning and authentication
 internal/store       MySQL persistence
 migrations           embedded forward-only database migrations
@@ -68,9 +68,18 @@ migrations           embedded forward-only database migrations
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `API_KEY_SECRET` | yes | API key derivation secret, at least 32 characters |
 | `IDENTITY_PROXY_TOKEN` | yes | Trusted identity-layer credential, at least 32 characters |
-| `SERVER_ADDRESS` | no | HTTP listen address, default `:8443` |
+| `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
+| `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
+| `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
+| `SERVER_SSL_TRUST_STORE_BASE64` | yes | Base64 PKCS12 client CA trust store |
+| `SERVER_SSL_TRUST_STORE_PASSWORD` | yes | Trust store password |
 
-Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTP listener:
+The HTTPS server requires a trusted client certificate. TLS 1.2 and 1.3 are enabled.
+The key store contains the server private key and certificate chain; the trust store contains
+the accepted client CA. Base64 is encoding rather than encryption, so passwords and stores
+must be supplied through the deployment secret mechanism.
+
+Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTPS listener:
 
 ```bash
 go run ./cmd

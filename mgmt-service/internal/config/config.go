@@ -12,6 +12,14 @@ type Config struct {
 	DatabaseDSN       string
 	APIKeySecret      string
 	TrustedProxyToken string
+	TLS               TLS
+}
+
+type TLS struct {
+	KeyStoreBase64     string
+	KeyStorePassword   string
+	TrustStoreBase64   string
+	TrustStorePassword string
 }
 
 func Load() Config {
@@ -20,6 +28,12 @@ func Load() Config {
 		DatabaseDSN:       strings.TrimSpace(os.Getenv("DATABASE_DSN")),
 		APIKeySecret:      os.Getenv("API_KEY_SECRET"),
 		TrustedProxyToken: os.Getenv("IDENTITY_PROXY_TOKEN"),
+		TLS: TLS{
+			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
+			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
+			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),
+			TrustStorePassword: os.Getenv("SERVER_SSL_TRUST_STORE_PASSWORD"),
+		},
 	}
 }
 

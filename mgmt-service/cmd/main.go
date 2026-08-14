@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,6 +33,10 @@ func run() error {
 	cfg := config.Load()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
+	tlsConfig, err := security.TLSConfig(cfg.TLS)
+	if err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -43,17 +50,22 @@ func run() error {
 	defer func() { _ = repository.Close() }()
 	application := service.New(repository, security.NewAPIKeys(cfg.APIKeySecret))
 	server := &http.Server{
-		Addr:              cfg.Address,
 		Handler:           httpapi.New(application, cfg.TrustedProxyToken, logger),
+		ErrorLog:          log.New(io.Discard, "", 0),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
+		TLSConfig:         tlsConfig,
+	}
+	listener, err := net.Listen("tcp", cfg.Address)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
 	serverErrors := make(chan error, 1)
-	go func() { serverErrors <- server.ListenAndServe() }()
+	go func() { serverErrors <- server.ServeTLS(listener, "", "") }()
 	logger.Info("Management Service started", "address", cfg.Address)
 
 	var serveErr error
