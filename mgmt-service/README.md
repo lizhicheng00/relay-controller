@@ -8,7 +8,7 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
 - Each namespace may have five API keys for each type: one default key and four additional keys.
-- The login flow supplies a type and issues that type's default API key. Each login replaces the previous default key of the same type.
+- An authenticated CLI or upper service may explicitly request a typed default API key as an immediate business credential. Each request replaces the previous default key of the same type.
 - The default API key cannot be deleted. Additional keys are intended for separate clients or usage scenarios.
 - Additional key names are unique within a namespace and type. All keys currently grant the same namespace access.
 - API key types are `devbridge` and `devbox`. Each type has its own default key and additional-key allowance.
@@ -34,7 +34,7 @@ POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
 ```
 
-All endpoints require mTLS. Default issuance and API key management use the trusted `X-Domain-Id` and `X-User-Id` headers. Only the check endpoint accepts `X-API-Key`, because it validates a business credential and resolves its identity. The OpenAPI document is available at `/openapi.yaml`.
+All endpoints require mTLS. The upper identity layer confirms the user's login session before default issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the check endpoint accepts `X-API-Key`, because it validates a business credential and resolves its identity. The OpenAPI document is available at `/openapi.yaml`.
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, types, masks, and last-use times only. Creating a key requires `name` and `type`; the complete value is returned once.
 

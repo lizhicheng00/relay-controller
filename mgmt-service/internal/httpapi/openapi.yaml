@@ -12,9 +12,9 @@ paths:
     post:
       summary: Issue a cloud user's default API key for a type
       description: >-
-        Called by the trusted identity layer after browser login. The service creates the
-        user's namespace on first use and rotates the requested type's default API key on
-        every successful login.
+        Explicitly requested by an authenticated CLI or upper identity layer when an immediate
+        business credential is needed. The service creates the user's namespace on first use
+        and replaces the requested type's previous default API key.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
