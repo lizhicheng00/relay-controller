@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -23,14 +24,23 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	var err error
+	if len(os.Args) > 1 {
+		err = runCommand(os.Args[1:])
+	} else {
+		err = run()
+	}
+	if err != nil {
 		slog.Error("Management Service stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 	tlsConfig, err := security.TLSConfig(cfg.TLS)
@@ -88,4 +98,36 @@ func run() error {
 	}
 	logger.Info("Management Service stopped")
 	return nil
+}
+
+func runCommand(args []string) error {
+	if len(args) < 2 || args[0] != "config" {
+		return errors.New("usage: mgmt-service config <generate-key|encrypt>")
+	}
+	switch args[1] {
+	case "generate-key":
+		if len(args) != 2 {
+			return errors.New("usage: mgmt-service config generate-key")
+		}
+		key, err := config.GenerateMasterKey()
+		if err != nil {
+			return err
+		}
+		fmt.Println(key)
+		return nil
+	case "encrypt":
+		flags := flag.NewFlagSet("config encrypt", flag.ContinueOnError)
+		flags.SetOutput(io.Discard)
+		input := flags.String("input", "", "plaintext JSON configuration")
+		output := flags.String("output", "", "encrypted configuration")
+		if err := flags.Parse(args[2:]); err != nil {
+			return err
+		}
+		if *input == "" || *output == "" {
+			return errors.New("usage: mgmt-service config encrypt --input <file> --output <file>")
+		}
+		return config.EncryptFile(*input, *output, os.Getenv("MGMT_CONFIG_MASTER_KEY"))
+	default:
+		return errors.New("usage: mgmt-service config <generate-key|encrypt>")
+	}
 }
