@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -25,56 +24,37 @@ type TLS struct {
 	TrustStorePassword string
 }
 
-type secretValues struct {
-	DatabaseDSN        string `json:"database_dsn"`
-	KeyStoreBase64     string `json:"server_ssl_key_store_base64"`
-	KeyStorePassword   string `json:"server_ssl_key_store_password"`
-	TrustStoreBase64   string `json:"server_ssl_trust_store_base64"`
-	TrustStorePassword string `json:"server_ssl_trust_store_password"`
-}
-
 func Load() (Config, error) {
-	values, err := loadSecretValues()
-	if err != nil {
-		return Config{}, err
-	}
-	return Config{
+	cfg := Config{
 		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
-		DatabaseDSN: strings.TrimSpace(values.DatabaseDSN),
+		DatabaseDSN: os.Getenv("DATABASE_DSN"),
 		TLS: TLS{
-			KeyStoreBase64:     values.KeyStoreBase64,
-			KeyStorePassword:   values.KeyStorePassword,
-			TrustStoreBase64:   values.TrustStoreBase64,
-			TrustStorePassword: values.TrustStorePassword,
-		},
-	}, nil
-}
-
-func loadSecretValues() (secretValues, error) {
-	path := strings.TrimSpace(os.Getenv("MGMT_CONFIG_FILE"))
-	if path == "" {
-		return secretValues{
-			DatabaseDSN:        os.Getenv("DATABASE_DSN"),
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
 			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
 			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),
 			TrustStorePassword: os.Getenv("SERVER_SSL_TRUST_STORE_PASSWORD"),
-		}, nil
+		},
 	}
-
-	ciphertext, err := os.ReadFile(path)
-	if err != nil {
-		return secretValues{}, fmt.Errorf("read encrypted configuration: %w", err)
+	fields := []struct {
+		name  string
+		value *string
+	}{
+		{"DATABASE_DSN", &cfg.DatabaseDSN},
+		{"SERVER_SSL_KEY_STORE_BASE64", &cfg.TLS.KeyStoreBase64},
+		{"SERVER_SSL_KEY_STORE_PASSWORD", &cfg.TLS.KeyStorePassword},
+		{"SERVER_SSL_TRUST_STORE_BASE64", &cfg.TLS.TrustStoreBase64},
+		{"SERVER_SSL_TRUST_STORE_PASSWORD", &cfg.TLS.TrustStorePassword},
 	}
-	plaintext, err := decrypt(ciphertext, os.Getenv(masterKeyEnvironment))
-	if err != nil {
-		return secretValues{}, fmt.Errorf("decrypt configuration: %w", err)
+	masterKey := os.Getenv(masterKeyEnvironment)
+	for _, field := range fields {
+		value, err := decryptIfEncrypted(*field.value, masterKey)
+		if err != nil {
+			return Config{}, fmt.Errorf("load %s: %w", field.name, err)
+		}
+		*field.value = value
 	}
-	var values secretValues
-	if err := json.Unmarshal(plaintext, &values); err != nil {
-		return secretValues{}, fmt.Errorf("decode encrypted configuration: %w", err)
-	}
-	return values, nil
+	cfg.DatabaseDSN = strings.TrimSpace(cfg.DatabaseDSN)
+	return cfg, nil
 }
 
 func valueOrDefault(name, fallback string) string {

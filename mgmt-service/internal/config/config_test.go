@@ -2,73 +2,56 @@ package config
 
 import (
 	"encoding/base64"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestLoadDefaults(t *testing.T) {
-	setRequiredEnvironment(t)
-	t.Setenv("SERVER_ADDRESS", "")
-	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
-	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "key-password")
-	t.Setenv("SERVER_SSL_TRUST_STORE_BASE64", "trust-store")
-	t.Setenv("SERVER_SSL_TRUST_STORE_PASSWORD", "trust-password")
+func TestLoadPlainValues(t *testing.T) {
+	setEnvironment(t)
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Address != ":8443" || cfg.TLS.KeyStoreBase64 != "key-store" ||
-		cfg.TLS.KeyStorePassword != "key-password" || cfg.TLS.TrustStoreBase64 != "trust-store" ||
-		cfg.TLS.TrustStorePassword != "trust-password" {
-		t.Fatalf("Load() defaults = %#v", cfg)
+	if cfg.Address != ":8443" || cfg.DatabaseDSN != "plain-dsn" ||
+		cfg.TLS.KeyStorePassword != "key-password" || cfg.TLS.TrustStorePassword != "trust-password" {
+		t.Fatalf("Load() = %#v", cfg)
 	}
 }
 
-func TestLoadEncryptedConfiguration(t *testing.T) {
-	key := testMasterKey()
-	plaintext := []byte(`{
-  "database_dsn": "encrypted-dsn",
-  "server_ssl_key_store_base64": "encrypted-key-store",
-  "server_ssl_key_store_password": "encrypted-key-password",
-  "server_ssl_trust_store_base64": "encrypted-trust-store",
-  "server_ssl_trust_store_password": "encrypted-trust-password"
-}`)
-	ciphertext, err := encrypt(plaintext, key)
+func TestLoadEncryptedValues(t *testing.T) {
+	setEnvironment(t)
+	key := testMasterKey("k")
+	dsn, err := EncryptValue("encrypted-dsn", key)
 	if err != nil {
-		t.Fatalf("encrypt() error = %v", err)
+		t.Fatalf("EncryptValue() error = %v", err)
 	}
-	path := filepath.Join(t.TempDir(), "mgmt-secrets.enc")
-	if err := os.WriteFile(path, ciphertext, 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
+	password, err := EncryptValue("encrypted-password", key)
+	if err != nil {
+		t.Fatalf("EncryptValue() error = %v", err)
 	}
-	t.Setenv("MGMT_CONFIG_FILE", path)
 	t.Setenv("MGMT_CONFIG_MASTER_KEY", key)
-	t.Setenv("DATABASE_DSN", "ignored-dsn")
+	t.Setenv("DATABASE_DSN", dsn)
+	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", password)
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.DatabaseDSN != "encrypted-dsn" || cfg.TLS.KeyStoreBase64 != "encrypted-key-store" ||
-		cfg.TLS.TrustStorePassword != "encrypted-trust-password" {
-		t.Fatalf("Load() encrypted configuration = %#v", cfg)
+	if cfg.DatabaseDSN != "encrypted-dsn" || cfg.TLS.KeyStorePassword != "encrypted-password" ||
+		cfg.TLS.TrustStorePassword != "trust-password" {
+		t.Fatalf("Load() = %#v", cfg)
 	}
 }
 
 func TestLoadRejectsWrongMasterKey(t *testing.T) {
-	ciphertext, err := encrypt([]byte(`{"database_dsn":"dsn"}`), testMasterKey())
+	setEnvironment(t)
+	value, err := EncryptValue("encrypted-dsn", testMasterKey("k"))
 	if err != nil {
-		t.Fatalf("encrypt() error = %v", err)
+		t.Fatalf("EncryptValue() error = %v", err)
 	}
-	path := filepath.Join(t.TempDir(), "mgmt-secrets.enc")
-	if err := os.WriteFile(path, ciphertext, 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	t.Setenv("MGMT_CONFIG_FILE", path)
-	t.Setenv("MGMT_CONFIG_MASTER_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 32))))
+	t.Setenv("DATABASE_DSN", value)
+	t.Setenv("MGMT_CONFIG_MASTER_KEY", testMasterKey("x"))
 
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want decryption error")
@@ -82,17 +65,21 @@ func TestGenerateMasterKey(t *testing.T) {
 	}
 	key, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil || len(key) != 32 {
-		t.Fatalf("GenerateMasterKey() produced invalid key")
+		t.Fatal("GenerateMasterKey() produced invalid key")
 	}
 }
 
-func setRequiredEnvironment(t *testing.T) {
+func setEnvironment(t *testing.T) {
 	t.Helper()
-	t.Setenv("MGMT_CONFIG_FILE", "")
 	t.Setenv("MGMT_CONFIG_MASTER_KEY", "")
-	t.Setenv("DATABASE_DSN", "user:password@tcp(localhost:3306)/mgmt")
+	t.Setenv("SERVER_ADDRESS", "")
+	t.Setenv("DATABASE_DSN", "plain-dsn")
+	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
+	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "key-password")
+	t.Setenv("SERVER_SSL_TRUST_STORE_BASE64", "trust-store")
+	t.Setenv("SERVER_SSL_TRUST_STORE_PASSWORD", "trust-password")
 }
 
-func testMasterKey() string {
-	return base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
+func testMasterKey(character string) string {
+	return base64.StdEncoding.EncodeToString([]byte(strings.Repeat(character, 32)))
 }

@@ -5,14 +5,12 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 )
 
-const encryptedConfigPrefix = "MGMT_SECRET_V1:"
+const encryptedValuePrefix = "ENC("
 
 func GenerateMasterKey() (string, error) {
 	key := make([]byte, 32)
@@ -22,64 +20,44 @@ func GenerateMasterKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(key), nil
 }
 
-func EncryptFile(inputPath, outputPath, encodedKey string) error {
-	plaintext, err := os.ReadFile(inputPath)
-	if err != nil {
-		return fmt.Errorf("read configuration: %w", err)
-	}
-	var values secretValues
-	if err := json.Unmarshal(plaintext, &values); err != nil {
-		return fmt.Errorf("decode configuration: %w", err)
-	}
-	ciphertext, err := encrypt(plaintext, encodedKey)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(outputPath, ciphertext, 0o600); err != nil {
-		return fmt.Errorf("write encrypted configuration: %w", err)
-	}
-	if err := os.Chmod(outputPath, 0o600); err != nil {
-		return fmt.Errorf("restrict encrypted configuration permissions: %w", err)
-	}
-	return nil
-}
-
-func encrypt(plaintext []byte, encodedKey string) ([]byte, error) {
+func EncryptValue(plaintext, encodedKey string) (string, error) {
 	gcm, err := newGCM(encodedKey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("generate nonce: %w", err)
+		return "", fmt.Errorf("generate nonce: %w", err)
 	}
-	sealed := gcm.Seal(nonce, nonce, plaintext, []byte(encryptedConfigPrefix))
-	encoded := base64.RawStdEncoding.EncodeToString(sealed)
-	return []byte(encryptedConfigPrefix + encoded), nil
+	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return encryptedValuePrefix + base64.RawStdEncoding.EncodeToString(sealed) + ")", nil
 }
 
-func decrypt(value []byte, encodedKey string) ([]byte, error) {
-	encoded := strings.TrimSpace(string(value))
-	if !strings.HasPrefix(encoded, encryptedConfigPrefix) {
-		return nil, errors.New("unsupported encrypted configuration format")
+func decryptIfEncrypted(value, encodedKey string) (string, error) {
+	if !strings.HasPrefix(value, encryptedValuePrefix) {
+		return value, nil
 	}
-	sealed, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(encoded, encryptedConfigPrefix))
+	if !strings.HasSuffix(value, ")") {
+		return "", errors.New("unsupported encrypted value format")
+	}
+	payload := strings.TrimSuffix(strings.TrimPrefix(value, encryptedValuePrefix), ")")
+	sealed, err := base64.RawStdEncoding.DecodeString(payload)
 	if err != nil {
-		return nil, errors.New("invalid encrypted configuration")
+		return "", errors.New("invalid encrypted value")
 	}
 	gcm, err := newGCM(encodedKey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if len(sealed) < gcm.NonceSize() {
-		return nil, errors.New("invalid encrypted configuration")
+		return "", errors.New("invalid encrypted value")
 	}
 	nonce, ciphertext := sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, []byte(encryptedConfigPrefix))
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, errors.New("invalid encrypted configuration or master key")
+		return "", errors.New("invalid encrypted value or master key")
 	}
-	return plaintext, nil
+	return string(plaintext), nil
 }
 
 func newGCM(encodedKey string) (cipher.AEAD, error) {

@@ -53,7 +53,7 @@ For an existing DevBridge deployment, preload the known `domainId`, `userId`, `a
 
 ```text
 cmd                  process startup and graceful shutdown
-internal/config      environment and encrypted configuration
+internal/config      environment configuration and value decryption
 internal/core        identity models and application errors
 internal/httpapi     HTTP routes and OpenAPI
 internal/security    API key generation, random identifiers, and PKCS12 mTLS
@@ -67,53 +67,37 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
-| `MGMT_CONFIG_FILE` | production | Encrypted configuration file |
-| `MGMT_CONFIG_MASTER_KEY` | with encrypted file | Base64-encoded 32-byte root key |
-| `DATABASE_DSN` | local fallback | MySQL DSN |
-| `SERVER_SSL_KEY_STORE_BASE64` | local fallback | Base64 PKCS12 server key store |
-| `SERVER_SSL_KEY_STORE_PASSWORD` | local fallback | Server key store password |
-| `SERVER_SSL_TRUST_STORE_BASE64` | local fallback | Base64 PKCS12 client CA trust store |
-| `SERVER_SSL_TRUST_STORE_PASSWORD` | local fallback | Trust store password |
+| `MGMT_CONFIG_MASTER_KEY` | with encrypted values | Base64-encoded 32-byte root key |
+| `DATABASE_DSN` | yes | MySQL DSN |
+| `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
+| `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
+| `SERVER_SSL_TRUST_STORE_BASE64` | yes | Base64 PKCS12 client CA trust store |
+| `SERVER_SSL_TRUST_STORE_PASSWORD` | yes | Trust store password |
 
 The HTTPS server requires a trusted client certificate. TLS 1.2 and 1.3 are enabled.
 The key store contains the server private key and certificate chain; the trust store contains
 the accepted client CA.
 
-Production can keep all sensitive startup values in one AES-256-GCM encrypted file. Generate
+Sensitive values may be stored directly in configuration as AES-256-GCM ciphertext. Generate
 one root key per environment:
 
 ```bash
+mkdir -p bin
 go build -o bin/mgmt-service ./cmd
 export MGMT_CONFIG_MASTER_KEY="$(bin/mgmt-service config generate-key)"
 ```
 
-Create an ignored plaintext file such as `secrets/mgmt-secrets.json`:
-
-```json
-{
-  "database_dsn": "user:password@tcp(mysql:3306)/mgmt_service?parseTime=true&loc=UTC",
-  "server_ssl_key_store_base64": "...",
-  "server_ssl_key_store_password": "...",
-  "server_ssl_trust_store_base64": "...",
-  "server_ssl_trust_store_password": "..."
-}
-```
-
-Encrypt it and remove the plaintext copy:
+Encrypt each value through standard input, then place the returned `ENC(...)` text in the
+corresponding configuration entry:
 
 ```bash
-mkdir -p config
-bin/mgmt-service config encrypt \
-  --input secrets/mgmt-secrets.json \
-  --output config/mgmt-secrets.enc
-rm secrets/mgmt-secrets.json
-export MGMT_CONFIG_FILE=config/mgmt-secrets.enc
+printf '%s' 'user:password@tcp(mysql:3306)/mgmt_service?parseTime=true&loc=UTC' \
+  | bin/mgmt-service config encrypt
 ```
 
-The encrypted file may be distributed with the service. Only `MGMT_CONFIG_MASTER_KEY` remains
-an external bootstrap secret and is configured once for all replicas in the environment. When
-`MGMT_CONFIG_FILE` is set, its contents replace the five direct secret environment variables.
-Local development may continue using those variables without an encrypted file.
+The same root key decrypts all encrypted values and is configured once for all replicas in the
+environment. Plain values remain supported for local development. Only values beginning with
+`ENC(` are decrypted.
 
 Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTPS listener:
 
@@ -128,5 +112,6 @@ Applied migration versions are recorded in `schema_migration`. Migrations are fo
 ```bash
 go test ./...
 go vet ./...
-go build ./cmd
+mkdir -p bin
+go build -o bin/mgmt-service ./cmd
 ```

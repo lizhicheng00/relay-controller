@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -101,14 +100,11 @@ func run() error {
 }
 
 func runCommand(args []string) error {
-	if len(args) < 2 || args[0] != "config" {
+	if len(args) != 2 || args[0] != "config" {
 		return errors.New("usage: mgmt-service config <generate-key|encrypt>")
 	}
 	switch args[1] {
 	case "generate-key":
-		if len(args) != 2 {
-			return errors.New("usage: mgmt-service config generate-key")
-		}
 		key, err := config.GenerateMasterKey()
 		if err != nil {
 			return err
@@ -116,17 +112,16 @@ func runCommand(args []string) error {
 		fmt.Println(key)
 		return nil
 	case "encrypt":
-		flags := flag.NewFlagSet("config encrypt", flag.ContinueOnError)
-		flags.SetOutput(io.Discard)
-		input := flags.String("input", "", "plaintext JSON configuration")
-		output := flags.String("output", "", "encrypted configuration")
-		if err := flags.Parse(args[2:]); err != nil {
+		plaintext, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("read value: %w", err)
+		}
+		value, err := config.EncryptValue(string(plaintext), os.Getenv("MGMT_CONFIG_MASTER_KEY"))
+		if err != nil {
 			return err
 		}
-		if *input == "" || *output == "" {
-			return errors.New("usage: mgmt-service config encrypt --input <file> --output <file>")
-		}
-		return config.EncryptFile(*input, *output, os.Getenv("MGMT_CONFIG_MASTER_KEY"))
+		fmt.Println(value)
+		return nil
 	default:
 		return errors.New("usage: mgmt-service config <generate-key|encrypt>")
 	}
