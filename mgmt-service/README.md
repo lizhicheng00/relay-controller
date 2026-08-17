@@ -52,11 +52,12 @@ For an existing DevBridge deployment, preload the known `domainId`, `userId`, `a
 ## Structure
 
 ```text
-cmd                  process startup and graceful shutdown
-internal/config      environment configuration and value decryption
+cmd                  service and configuration-tool entrypoints
+internal/config      environment configuration loading
 internal/core        identity models and application errors
 internal/httpapi     HTTP routes and OpenAPI
 internal/security    API key generation, random identifiers, and PKCS12 mTLS
+internal/secret      encrypted configuration values
 internal/service     namespace and API key lifecycle
 internal/store       MySQL persistence
 migrations           embedded forward-only database migrations
@@ -67,7 +68,7 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
-| `MGMT_CONFIG_MASTER_KEY` | with encrypted values | Base64-encoded 32-byte root key |
+| `MGMT_CONFIG_KEY_FILE` | no | Root-key file, default `/run/secrets/mgmt_config_key` |
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
@@ -78,26 +79,39 @@ The HTTPS server requires a trusted client certificate. TLS 1.2 and 1.3 are enab
 The key store contains the server private key and certificate chain; the trust store contains
 the accepted client CA.
 
-Sensitive values may be stored directly in configuration as AES-256-GCM ciphertext. Generate
-one root key per environment:
+Each sensitive configuration entry accepts either a plain value or an AES-256-GCM `ENC(...)`
+value. One root-key file decrypts all encrypted entries in the environment.
+
+Build the service and its small configuration tool:
 
 ```bash
 mkdir -p bin
 go build -o bin/mgmt-service ./cmd
-export MGMT_CONFIG_MASTER_KEY="$(bin/mgmt-service config generate-key)"
+go build -o bin/mgmt-config ./cmd/config
 ```
 
-Encrypt each value through standard input, then place the returned `ENC(...)` text in the
-corresponding configuration entry:
+For local use, create the key once in the ignored `secrets` directory:
 
 ```bash
-printf '%s' 'user:password@tcp(mysql:3306)/mgmt_service?parseTime=true&loc=UTC' \
-  | bin/mgmt-service config encrypt
+mkdir -p secrets
+bin/mgmt-config init-key secrets/mgmt_config_key
+export MGMT_CONFIG_KEY_FILE="$PWD/secrets/mgmt_config_key"
 ```
 
-The same root key decrypts all encrypted values and is configured once for all replicas in the
-environment. Plain values remain supported for local development. Only values beginning with
-`ENC(` are decrypted.
+Encrypt one value and place the returned `ENC(...)` text directly in its configuration entry:
+
+```bash
+read -rsp 'Value: ' CONFIG_VALUE
+printf '\n'
+printf '%s' "$CONFIG_VALUE" | bin/mgmt-config encrypt secrets/mgmt_config_key
+unset CONFIG_VALUE
+```
+
+`encrypt` reads the plaintext from standard input so it is not passed as a process argument.
+Use `printf` rather than `echo`, because a trailing newline changes the encrypted value. For
+production, mount the same key read-only at `/run/secrets/mgmt_config_key`; only this file needs
+secret mounting. The independently encrypted configuration entries can then be changed without
+changing or remounting the key. Plain values do not require a key file.
 
 Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTPS listener:
 
@@ -114,4 +128,5 @@ go test ./...
 go vet ./...
 mkdir -p bin
 go build -o bin/mgmt-service ./cmd
+go build -o bin/mgmt-config ./cmd/config
 ```

@@ -23,13 +23,7 @@ import (
 )
 
 func main() {
-	var err error
-	if len(os.Args) > 1 {
-		err = runCommand(os.Args[1:])
-	} else {
-		err = run()
-	}
-	if err != nil {
+	if err := run(); err != nil {
 		slog.Error("Management Service stopped", "error", err)
 		os.Exit(1)
 	}
@@ -97,32 +91,4 @@ func run() error {
 	}
 	logger.Info("Management Service stopped")
 	return nil
-}
-
-func runCommand(args []string) error {
-	if len(args) != 2 || args[0] != "config" {
-		return errors.New("usage: mgmt-service config <generate-key|encrypt>")
-	}
-	switch args[1] {
-	case "generate-key":
-		key, err := config.GenerateMasterKey()
-		if err != nil {
-			return err
-		}
-		fmt.Println(key)
-		return nil
-	case "encrypt":
-		plaintext, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return fmt.Errorf("read value: %w", err)
-		}
-		value, err := config.EncryptValue(string(plaintext), os.Getenv("MGMT_CONFIG_MASTER_KEY"))
-		if err != nil {
-			return err
-		}
-		fmt.Println(value)
-		return nil
-	default:
-		return errors.New("usage: mgmt-service config <generate-key|encrypt>")
-	}
 }

@@ -1,13 +1,15 @@
 package config
 
 import (
-	"encoding/base64"
-	"strings"
+	"path/filepath"
 	"testing"
+
+	"mgmt-service/internal/secret"
 )
 
 func TestLoadPlainValues(t *testing.T) {
 	setEnvironment(t)
+	t.Setenv("MGMT_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
 
 	cfg, err := Load()
 	if err != nil {
@@ -21,16 +23,16 @@ func TestLoadPlainValues(t *testing.T) {
 
 func TestLoadEncryptedValues(t *testing.T) {
 	setEnvironment(t)
-	key := testMasterKey("k")
-	dsn, err := EncryptValue("encrypted-dsn", key)
+	keyFile, codec := testCodec(t)
+	dsn, err := codec.Encrypt([]byte("encrypted-dsn"))
 	if err != nil {
-		t.Fatalf("EncryptValue() error = %v", err)
+		t.Fatalf("Encrypt() error = %v", err)
 	}
-	password, err := EncryptValue("encrypted-password", key)
+	password, err := codec.Encrypt([]byte("encrypted-password"))
 	if err != nil {
-		t.Fatalf("EncryptValue() error = %v", err)
+		t.Fatalf("Encrypt() error = %v", err)
 	}
-	t.Setenv("MGMT_CONFIG_MASTER_KEY", key)
+	t.Setenv("MGMT_CONFIG_KEY_FILE", keyFile)
 	t.Setenv("DATABASE_DSN", dsn)
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", password)
 
@@ -44,34 +46,24 @@ func TestLoadEncryptedValues(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsWrongMasterKey(t *testing.T) {
+func TestLoadRejectsWrongKey(t *testing.T) {
 	setEnvironment(t)
-	value, err := EncryptValue("encrypted-dsn", testMasterKey("k"))
+	_, codec := testCodec(t)
+	value, err := codec.Encrypt([]byte("encrypted-dsn"))
 	if err != nil {
-		t.Fatalf("EncryptValue() error = %v", err)
+		t.Fatalf("Encrypt() error = %v", err)
 	}
+	wrongKeyFile, _ := testCodec(t)
 	t.Setenv("DATABASE_DSN", value)
-	t.Setenv("MGMT_CONFIG_MASTER_KEY", testMasterKey("x"))
+	t.Setenv("MGMT_CONFIG_KEY_FILE", wrongKeyFile)
 
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want decryption error")
 	}
 }
 
-func TestGenerateMasterKey(t *testing.T) {
-	encoded, err := GenerateMasterKey()
-	if err != nil {
-		t.Fatalf("GenerateMasterKey() error = %v", err)
-	}
-	key, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil || len(key) != 32 {
-		t.Fatal("GenerateMasterKey() produced invalid key")
-	}
-}
-
 func setEnvironment(t *testing.T) {
 	t.Helper()
-	t.Setenv("MGMT_CONFIG_MASTER_KEY", "")
 	t.Setenv("SERVER_ADDRESS", "")
 	t.Setenv("DATABASE_DSN", "plain-dsn")
 	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
@@ -80,6 +72,15 @@ func setEnvironment(t *testing.T) {
 	t.Setenv("SERVER_SSL_TRUST_STORE_PASSWORD", "trust-password")
 }
 
-func testMasterKey(character string) string {
-	return base64.StdEncoding.EncodeToString([]byte(strings.Repeat(character, 32)))
+func testCodec(t *testing.T) (string, *secret.Codec) {
+	t.Helper()
+	keyFile := filepath.Join(t.TempDir(), "config.key")
+	if err := secret.GenerateKeyFile(keyFile); err != nil {
+		t.Fatalf("GenerateKeyFile() error = %v", err)
+	}
+	codec, err := secret.Load(keyFile)
+	if err != nil {
+		t.Fatalf("Load() key error = %v", err)
+	}
+	return keyFile, codec
 }

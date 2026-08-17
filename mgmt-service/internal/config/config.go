@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"mgmt-service/internal/secret"
 )
 
 const (
-	defaultAddress       = ":8443"
-	masterKeyEnvironment = "MGMT_CONFIG_MASTER_KEY"
+	defaultAddress = ":8443"
+	defaultKeyFile = "/run/secrets/mgmt_config_key"
 )
 
 type Config struct {
@@ -45,9 +47,20 @@ func Load() (Config, error) {
 		{"SERVER_SSL_TRUST_STORE_BASE64", &cfg.TLS.TrustStoreBase64},
 		{"SERVER_SSL_TRUST_STORE_PASSWORD", &cfg.TLS.TrustStorePassword},
 	}
-	masterKey := os.Getenv(masterKeyEnvironment)
+	var codec *secret.Codec
 	for _, field := range fields {
-		value, err := decryptIfEncrypted(*field.value, masterKey)
+		if !secret.IsEncrypted(*field.value) {
+			continue
+		}
+		if codec == nil {
+			keyFile := valueOrDefault("MGMT_CONFIG_KEY_FILE", defaultKeyFile)
+			var err error
+			codec, err = secret.Load(keyFile)
+			if err != nil {
+				return Config{}, err
+			}
+		}
+		value, err := codec.Decrypt(*field.value)
 		if err != nil {
 			return Config{}, fmt.Errorf("load %s: %w", field.name, err)
 		}
