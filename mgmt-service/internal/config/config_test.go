@@ -15,9 +15,24 @@ func TestLoadPlainValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Address != ":8443" || cfg.DatabaseDSN != "plain-dsn" ||
+	if cfg.Address != ":8443" || cfg.DatabaseDSN != "plain-dsn" || !cfg.TLS.Enabled ||
 		cfg.TLS.KeyStorePassword != "key-password" || cfg.TLS.TrustStorePassword != "trust-password" {
 		t.Fatalf("Load() = %#v", cfg)
+	}
+}
+
+func TestLoadWithoutTLS(t *testing.T) {
+	setEnvironment(t)
+	t.Setenv("SERVER_TLS_ENABLED", "false")
+	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "ENC[unused]")
+	t.Setenv("MGMT_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TLS.Enabled {
+		t.Fatal("TLS should be disabled")
 	}
 }
 
@@ -65,6 +80,7 @@ func TestLoadRejectsWrongKey(t *testing.T) {
 func setEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("SERVER_ADDRESS", "")
+	t.Setenv("SERVER_TLS_ENABLED", "")
 	t.Setenv("DATABASE_DSN", "plain-dsn")
 	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "key-password")

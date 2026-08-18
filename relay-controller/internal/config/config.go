@@ -32,6 +32,7 @@ type Relay struct {
 }
 
 type TLS struct {
+	Enabled            bool
 	KeyStoreBase64     string
 	KeyStorePassword   string
 	TrustStoreBase64   string
@@ -60,6 +61,7 @@ func Load() (Config, error) {
 			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
 		},
 		TLS: TLS{
+			Enabled:            !strings.EqualFold(strings.TrimSpace(os.Getenv("SERVER_TLS_ENABLED")), "false"),
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
 			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
 			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),

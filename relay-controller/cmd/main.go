@@ -41,11 +41,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	tlsConfig, err := security.TLSConfig(cfg.TLS)
-	if err != nil {
-		return err
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := migrations.Run(ctx, cfg.Database); err != nil {
@@ -69,7 +64,13 @@ func run() error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
-		TLSConfig:         tlsConfig,
+	}
+	if cfg.TLS.Enabled {
+		tlsConfig, err := security.TLSConfig(cfg.TLS)
+		if err != nil {
+			return err
+		}
+		server.TLSConfig = tlsConfig
 	}
 	listener, err := net.Listen("tcp", ":8443")
 	if err != nil {
@@ -78,7 +79,11 @@ func run() error {
 	jobs := application.StartJobs(ctx)
 	serverErrors := make(chan error, 1)
 	go func() {
-		serverErrors <- server.ServeTLS(listener, "", "")
+		if cfg.TLS.Enabled {
+			serverErrors <- server.ServeTLS(listener, "", "")
+			return
+		}
+		serverErrors <- server.Serve(listener)
 	}()
 	logger.Info("Relay Controller started", "region", cfg.Relay.Region)
 

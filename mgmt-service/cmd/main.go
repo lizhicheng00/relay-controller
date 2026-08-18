@@ -36,11 +36,6 @@ func run() error {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
-	tlsConfig, err := security.TLSConfig(cfg.TLS)
-	if err != nil {
-		return err
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := migrations.Run(ctx, cfg.DatabaseDSN); err != nil {
@@ -60,7 +55,13 @@ func run() error {
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
-		TLSConfig:         tlsConfig,
+	}
+	if cfg.TLS.Enabled {
+		tlsConfig, err := security.TLSConfig(cfg.TLS)
+		if err != nil {
+			return err
+		}
+		server.TLSConfig = tlsConfig
 	}
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
@@ -68,7 +69,13 @@ func run() error {
 	}
 
 	serverErrors := make(chan error, 1)
-	go func() { serverErrors <- server.ServeTLS(listener, "", "") }()
+	go func() {
+		if cfg.TLS.Enabled {
+			serverErrors <- server.ServeTLS(listener, "", "")
+			return
+		}
+		serverErrors <- server.Serve(listener)
+	}()
 	logger.Info("Management Service started", "address", cfg.Address)
 
 	var serveErr error

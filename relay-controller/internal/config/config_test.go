@@ -14,14 +14,26 @@ func TestLoadRejectsInvalidRateLimit(t *testing.T) {
 }
 
 func TestLoadDefaults(t *testing.T) {
+	t.Setenv("SERVER_TLS_ENABLED", "")
 	t.Setenv("RELAY_DOMAIN", "")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Relay.Domain != "myhuaweicloud.com" || cfg.Relay.RequestsPerMinute != 120 {
+	if cfg.Relay.Domain != "myhuaweicloud.com" || cfg.Relay.RequestsPerMinute != 120 || !cfg.TLS.Enabled {
 		t.Fatalf("relay defaults = %#v", cfg.Relay)
+	}
+}
+
+func TestLoadDisablesTLS(t *testing.T) {
+	t.Setenv("SERVER_TLS_ENABLED", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TLS.Enabled {
+		t.Fatal("TLS should be disabled")
 	}
 }
 
