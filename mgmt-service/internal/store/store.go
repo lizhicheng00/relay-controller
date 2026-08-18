@@ -67,7 +67,69 @@ func (s *Store) IssueDefaultAPIKey(
 	}
 	defer rollback(tx)
 
-	_, err = tx.ExecContext(ctx, `
+	identity, err := ensureIdentity(ctx, tx, assertion, seed)
+	if err != nil {
+		return core.Identity{}, err
+	}
+
+	var existingDefaultID string
+	err = tx.QueryRowContext(ctx, `
+		SELECT id FROM api_key
+		WHERE namespace = ? AND key_scope = ? AND slot = 0
+		FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefaultID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
+			VALUES (?, ?, 0, ?, ?, ?, ?)`,
+			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
+			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
+	case err == nil:
+		_, err = tx.ExecContext(ctx, `
+			UPDATE api_key
+			SET name = ?, key_mask = ?, key_hash = ?,
+			    created_at = UTC_TIMESTAMP(6), last_used_at = NULL
+			WHERE id = ?`,
+			core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
+	}
+	if err != nil {
+		return core.Identity{}, fmt.Errorf("store default API key: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return core.Identity{}, fmt.Errorf("commit default API key transaction: %w", err)
+	}
+	return identity, nil
+}
+
+func (s *Store) EnsureIdentity(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+	seed core.IdentitySeed,
+) (core.Identity, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.Identity{}, fmt.Errorf("begin identity transaction: %w", err)
+	}
+	defer rollback(tx)
+
+	identity, err := ensureIdentity(ctx, tx, assertion, seed)
+	if err != nil {
+		return core.Identity{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return core.Identity{}, fmt.Errorf("commit identity transaction: %w", err)
+	}
+	return identity, nil
+}
+
+func ensureIdentity(
+	ctx context.Context,
+	tx *sql.Tx,
+	assertion core.IdentityAssertion,
+	seed core.IdentitySeed,
+) (core.Identity, error) {
+	_, err := tx.ExecContext(ctx, `
 		INSERT INTO domain_account (id, domain_id, account_namespace)
 		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE id = id`,
@@ -114,33 +176,6 @@ func (s *Store) IssueDefaultAPIKey(
 		return core.Identity{}, ErrUnauthorized
 	}
 
-	var existingDefaultID string
-	err = tx.QueryRowContext(ctx, `
-		SELECT id FROM api_key
-		WHERE namespace = ? AND key_scope = ? AND slot = 0
-		FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefaultID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
-			VALUES (?, ?, 0, ?, ?, ?, ?)`,
-			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
-			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
-	case err == nil:
-		_, err = tx.ExecContext(ctx, `
-			UPDATE api_key
-			SET name = ?, key_mask = ?, key_hash = ?,
-			    created_at = UTC_TIMESTAMP(6), last_used_at = NULL
-			WHERE id = ?`,
-			core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
-	}
-	if err != nil {
-		return core.Identity{}, fmt.Errorf("store default API key: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return core.Identity{}, fmt.Errorf("commit default API key transaction: %w", err)
-	}
 	return identity, nil
 }
 

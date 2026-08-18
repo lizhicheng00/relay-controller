@@ -170,12 +170,12 @@ func TestCheckAPIKeyRejectsInvalidKey(t *testing.T) {
 func TestAPIKeyManagementRoutes(t *testing.T) {
 	application := &fakeAPI{
 		keys: []core.APIKey{{
-			ID: "key_default", Name: "default",
+			ID: "abcdefghijklmnopqrstuvwxyz", Name: "default",
 			Scope: core.APIKeyScopeDevBridge, Default: true,
 		}},
 		issued: core.IssuedAPIKey{
 			APIKey: core.APIKey{
-				ID: "key_created", Name: "local-cli", Scope: core.APIKeyScopeDevBox,
+				ID: "bcdefghijklmnopqrstuvwxyza", Name: "local-cli", Scope: core.APIKeyScopeDevBox,
 			},
 			Value: "devbox_" + strings.Repeat("a", 32),
 		},
@@ -186,7 +186,7 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 	setIdentityHeaders(listRequest)
 	listResponse := httptest.NewRecorder()
 	server.ServeHTTP(listResponse, listRequest)
-	if listResponse.Code != http.StatusOK || !strings.Contains(listResponse.Body.String(), "key_default") {
+	if listResponse.Code != http.StatusOK || !strings.Contains(listResponse.Body.String(), "abcdefghijklmnopqrstuvwxyz") {
 		t.Fatalf("list status = %d, body = %s", listResponse.Code, listResponse.Body)
 	}
 
@@ -203,11 +203,11 @@ func TestAPIKeyManagementRoutes(t *testing.T) {
 			createResponse.Code, application.createdName, createResponse.Body)
 	}
 
-	deleteRequest := httptest.NewRequest(http.MethodDelete, apiBase+"/api-keys/key_created", nil)
+	deleteRequest := httptest.NewRequest(http.MethodDelete, apiBase+"/api-keys/bcdefghijklmnopqrstuvwxyza", nil)
 	setIdentityHeaders(deleteRequest)
 	deleteResponse := httptest.NewRecorder()
 	server.ServeHTTP(deleteResponse, deleteRequest)
-	if deleteResponse.Code != http.StatusNoContent || application.deletedID != "key_created" {
+	if deleteResponse.Code != http.StatusNoContent || application.deletedID != "bcdefghijklmnopqrstuvwxyza" {
 		t.Fatalf("delete status = %d, key = %q", deleteResponse.Code, application.deletedID)
 	}
 	if application.assertion != (core.IdentityAssertion{DomainID: "domain-1", UserID: "user-1"}) {

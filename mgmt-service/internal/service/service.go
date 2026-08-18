@@ -15,6 +15,7 @@ import (
 
 type repository interface {
 	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.IdentitySeed, core.NewAPIKey) (core.Identity, error)
+	EnsureIdentity(context.Context, core.IdentityAssertion, core.IdentitySeed) (core.Identity, error)
 	FindIdentity(context.Context, core.IdentityAssertion) (core.Identity, error)
 	FindIdentityByAPIKey(context.Context, []byte) (core.Identity, error)
 	ListAPIKeys(context.Context, string) ([]core.APIKey, error)
@@ -44,7 +45,7 @@ func (s *Service) IssueDefaultAPIKey(
 	seed := newIdentitySeed()
 	value, digest := security.NewAPIKey(scope)
 	identity, err := s.store.IssueDefaultAPIKey(ctx, assertion, seed, core.NewAPIKey{
-		ID: security.NewID("key_"), Name: core.DefaultAPIKeyName,
+		ID: security.NewID(""), Name: core.DefaultAPIKeyName,
 		Scope: scope, Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
@@ -69,9 +70,15 @@ func (s *Service) ListAPIKeys(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
 ) ([]core.APIKey, error) {
-	identity, err := s.resolveIdentity(ctx, assertion)
-	if err != nil {
+	if err := validateIdentity(assertion); err != nil {
 		return nil, err
+	}
+	identity, err := s.store.FindIdentity(ctx, assertion)
+	if errors.Is(err, store.ErrNotFound) {
+		return []core.APIKey{}, nil
+	}
+	if err != nil {
+		return nil, core.Internal(fmt.Errorf("resolve identity: %w", err))
 	}
 	keys, err := s.store.ListAPIKeys(ctx, identity.Namespace)
 	if err != nil {
@@ -93,13 +100,16 @@ func (s *Service) CreateAPIKey(
 	if !security.ValidAPIKeyScope(scope) {
 		return core.IssuedAPIKey{}, core.Invalid("scope", "scope must be devbridge or devbox")
 	}
-	identity, err := s.resolveIdentity(ctx, assertion)
-	if err != nil {
+	if err := validateIdentity(assertion); err != nil {
 		return core.IssuedAPIKey{}, err
+	}
+	identity, err := s.store.EnsureIdentity(ctx, assertion, newIdentitySeed())
+	if err != nil {
+		return core.IssuedAPIKey{}, mapStoreError("ensure identity", "X-User-Id", err)
 	}
 	value, digest := security.NewAPIKey(scope)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
-		ID: security.NewID("key_"), Name: name, Scope: scope,
+		ID: security.NewID(""), Name: name, Scope: scope,
 		Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
@@ -191,10 +201,10 @@ func validIdentifier(value string) bool {
 }
 
 func validKeyID(value string) bool {
-	if len(value) != 30 || !strings.HasPrefix(value, "key_") {
+	if len(value) != 26 {
 		return false
 	}
-	for _, char := range value[4:] {
+	for _, char := range value {
 		if char < 'a' || char > 'z' {
 			if char < '2' || char > '7' {
 				return false

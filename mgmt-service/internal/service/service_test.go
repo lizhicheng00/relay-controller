@@ -46,6 +46,14 @@ func (f *fakeRepository) IssueDefaultAPIKey(
 	return f.identity, f.issueErr
 }
 
+func (f *fakeRepository) EnsureIdentity(
+	_ context.Context,
+	_ core.IdentityAssertion,
+	_ core.IdentitySeed,
+) (core.Identity, error) {
+	return f.identity, f.identityErr
+}
+
 func (f *fakeRepository) FindIdentity(
 	_ context.Context,
 	_ core.IdentityAssertion,
@@ -98,6 +106,7 @@ func TestIssueDefaultAPIKeyRotates(t *testing.T) {
 	}
 	digest, _ := security.DigestAPIKey(second.APIKey)
 	if !bytes.Equal(digest, repository.defaultKey.Digest) ||
+		!validKeyID(repository.defaultKey.ID) ||
 		repository.defaultKey.Name != core.DefaultAPIKeyName ||
 		repository.defaultKey.Scope != core.APIKeyScopeDevBridge {
 		t.Fatalf("default key = %#v", repository.defaultKey)
@@ -120,7 +129,7 @@ func TestCheckAPIKeyReturnsMappedIdentity(t *testing.T) {
 
 func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 	created := core.APIKey{
-		ID: "key_abcdefghijklmnopqrstuvwxyz", Name: "local-cli",
+		ID: "abcdefghijklmnopqrstuvwxyz", Name: "local-cli",
 		Scope: core.APIKeyScopeDevBox, Mask: "devbox_abcd...1234",
 		CreatedAt: time.Now(),
 	}
@@ -133,6 +142,7 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if issued.APIKey != created || !strings.HasPrefix(issued.Value, "devbox_") ||
+		!validKeyID(repository.createdKey.ID) ||
 		repository.createdKey.Name != "local-cli" ||
 		repository.createdKey.Scope != core.APIKeyScopeDevBox {
 		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKey)
@@ -164,7 +174,7 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 
 	repository = &fakeRepository{identity: testIdentity, deleteErr: store.ErrDefaultKey}
 	application = New(repository)
-	err = application.DeleteAPIKey(context.Background(), testAssertion, "key_abcdefghijklmnopqrstuvwxyz")
+	err = application.DeleteAPIKey(context.Background(), testAssertion, "abcdefghijklmnopqrstuvwxyz")
 	assertAppError(t, err, 409, core.CodeDefaultAPIKey)
 }
 
@@ -200,10 +210,12 @@ func TestMissingCredentialIsUnauthorized(t *testing.T) {
 	assertAppError(t, err, 401, core.CodeUnauthorized)
 }
 
-func TestMissingIdentityIsNotFound(t *testing.T) {
+func TestMissingIdentityReturnsEmptyList(t *testing.T) {
 	application := New(&fakeRepository{identityErr: store.ErrNotFound})
-	_, err := application.ListAPIKeys(context.Background(), testAssertion)
-	assertAppError(t, err, 404, core.CodeIdentityNotFound)
+	keys, err := application.ListAPIKeys(context.Background(), testAssertion)
+	if err != nil || keys == nil || len(keys) != 0 {
+		t.Fatalf("ListAPIKeys() = %#v, %v", keys, err)
+	}
 }
 
 func assertAppError(t *testing.T, err error, status int, code string) {

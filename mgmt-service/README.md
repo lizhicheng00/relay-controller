@@ -38,6 +38,8 @@ All endpoints require mTLS. The upper identity layer confirms the user's login s
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 
+Opening the management page does not create an identity or a default API key. Listing keys for a new user returns an empty list. Creating an additional key creates the user's namespace when needed; issuing a default key remains an explicit login-redirect operation.
+
 ## Data Ownership
 
 - `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
