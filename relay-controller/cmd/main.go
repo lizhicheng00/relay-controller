@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"relay-controller/internal/auth"
 	"relay-controller/internal/config"
 	"relay-controller/internal/httpapi"
 	"relay-controller/internal/security"
@@ -41,6 +42,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	identityResolver, err := auth.NewClient(cfg.ManagementServiceURL)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := migrations.Run(ctx, cfg.Database); err != nil {
@@ -57,7 +62,7 @@ func run() error {
 	application := service.New(database, signer, cfg.Relay.Domain, cfg.Relay.Region, logger)
 	limiter := httpapi.NewRateLimiter(cfg.Relay.RequestsPerMinute)
 	server := &http.Server{
-		Handler:           httpapi.New(application, logger, limiter),
+		Handler:           httpapi.New(application, identityResolver, logger, limiter),
 		ErrorLog:          log.New(io.Discard, "", 0),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -65,27 +70,16 @@ func run() error {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
-	if cfg.TLS.Enabled {
-		tlsConfig, err := security.TLSConfig(cfg.TLS)
-		if err != nil {
-			return err
-		}
-		server.TLSConfig = tlsConfig
-	}
-	listener, err := net.Listen("tcp", ":8443")
+	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 	jobs := application.StartJobs(ctx)
 	serverErrors := make(chan error, 1)
 	go func() {
-		if cfg.TLS.Enabled {
-			serverErrors <- server.ServeTLS(listener, "", "")
-			return
-		}
 		serverErrors <- server.Serve(listener)
 	}()
-	logger.Info("Relay Controller started", "region", cfg.Relay.Region)
+	logger.Info("Relay Controller started", "address", cfg.Address, "region", cfg.Relay.Region)
 
 	var serveErr error
 	select {

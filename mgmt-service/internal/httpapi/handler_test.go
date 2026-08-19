@@ -15,7 +15,7 @@ import (
 
 type fakeAPI struct {
 	defaultKey   core.DefaultAPIKeyCredential
-	identity     core.Identity
+	identity     core.APIKeyIdentity
 	keys         []core.APIKey
 	issued       core.IssuedAPIKey
 	assertion    core.IdentityAssertion
@@ -41,7 +41,7 @@ func (f *fakeAPI) IssueDefaultAPIKey(
 	return f.defaultKey, f.issueError
 }
 
-func (f *fakeAPI) CheckAPIKey(_ context.Context, value string) (core.Identity, error) {
+func (f *fakeAPI) CheckAPIKey(_ context.Context, value string) (core.APIKeyIdentity, error) {
 	f.checkedKey = value
 	return f.identity, f.authError
 }
@@ -129,9 +129,12 @@ func TestValidationErrorUsesRelayFormat(t *testing.T) {
 }
 
 func TestCheckAPIKeyReturnsIdentity(t *testing.T) {
-	identity := core.Identity{
-		DomainID: "domain-1", UserID: "user-1",
-		AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
+	identity := core.APIKeyIdentity{
+		Identity: core.Identity{
+			DomainID: "domain-1", UserID: "user-1",
+			AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
+		},
+		Scope: core.APIKeyScopeDevBridge,
 	}
 	application := &fakeAPI{identity: identity}
 	server := newTestServer(application)
@@ -144,7 +147,7 @@ func TestCheckAPIKeyReturnsIdentity(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
 	}
-	var result core.Identity
+	var result core.APIKeyIdentity
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result != identity {
 		t.Fatalf("identity = %#v, %v", result, err)
 	}

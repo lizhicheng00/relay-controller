@@ -9,6 +9,7 @@ import (
 const (
 	CodeParamInvalid            = "40000"
 	CodeUnauthorized            = "40100"
+	CodeForbidden               = "40300"
 	CodeClusterNotFound         = "10001"
 	CodeTunnelNotFound          = "10002"
 	CodeTunnelIDConflict        = "10003"
@@ -25,6 +26,7 @@ const (
 	CodeJWTGenerateFailed       = "30001"
 	CodeRateLimited             = "42900"
 	CodeInternal                = "50000"
+	CodeServiceUnavailable      = "50300"
 )
 
 type AppError struct {
@@ -93,10 +95,28 @@ func MissingHeader(name string) *AppError {
 	return &AppError{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: name + " is required", Target: name}
 }
 
+func Unauthorized(target string) *AppError {
+	return &AppError{
+		Status: http.StatusUnauthorized, Code: CodeUnauthorized,
+		Message: "authentication failed", Target: target,
+	}
+}
+
+func Forbidden(target, message string) *AppError {
+	return &AppError{Status: http.StatusForbidden, Code: CodeForbidden, Message: message, Target: target}
+}
+
 func Conflict(code, target, message string) *AppError {
 	return &AppError{Status: http.StatusConflict, Code: code, Message: message, Target: target}
 }
 
 func Internal(cause error) *AppError {
 	return &AppError{Status: http.StatusInternalServerError, Code: CodeInternal, Message: "internal error", Cause: cause}
+}
+
+func ServiceUnavailable(cause error) *AppError {
+	return &AppError{
+		Status: http.StatusServiceUnavailable, Code: CodeServiceUnavailable,
+		Message: "service temporarily unavailable", Cause: cause,
+	}
 }

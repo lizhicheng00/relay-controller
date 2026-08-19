@@ -33,6 +33,11 @@ type Identity struct {
 	Namespace        string `json:"namespace"`
 }
 
+type APIKeyIdentity struct {
+	Identity
+	Scope APIKeyScope `json:"scope"`
+}
+
 type DefaultAPIKeyCredential struct {
 	Identity
 	Scope  APIKeyScope `json:"scope"`

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"relay-controller/internal/auth"
 	"relay-controller/internal/core"
 )
 
@@ -41,7 +42,7 @@ type Handler struct {
 	log *slog.Logger
 }
 
-func New(api API, logger *slog.Logger, limiter *RateLimiter) http.Handler {
+func New(api API, resolver auth.Resolver, logger *slog.Logger, limiter *RateLimiter) http.Handler {
 	handler := &Handler{api: api, log: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+apiBase+"/tunnels", handler.createTunnel)
@@ -62,6 +63,7 @@ func New(api API, logger *slog.Logger, limiter *RateLimiter) http.Handler {
 	if limiter != nil {
 		result = limiter.Middleware(result)
 	}
+	result = handler.authenticate(resolver, result)
 	return handler.recover(result)
 }
 
@@ -255,21 +257,11 @@ func (h *Handler) recover(next http.Handler) http.Handler {
 }
 
 func requestContext(request *http.Request) (string, string, error) {
-	namespace := request.Header.Get("X-Namespace")
-	if strings.TrimSpace(namespace) == "" {
-		return "", "", core.MissingHeader("X-Namespace")
+	principal, ok := auth.PrincipalFrom(request.Context())
+	if !ok {
+		return "", "", core.Internal(errors.New("authenticated principal is missing"))
 	}
-	accountNamespace := request.Header.Get("X-Account-Namespace")
-	if strings.TrimSpace(accountNamespace) == "" {
-		return "", "", core.MissingHeader("X-Account-Namespace")
-	}
-	if !core.ValidIdentifier(namespace) {
-		return "", "", core.Invalid("X-Namespace is invalid")
-	}
-	if !core.ValidIdentifier(accountNamespace) {
-		return "", "", core.Invalid("X-Account-Namespace is invalid")
-	}
-	return namespace, accountNamespace, nil
+	return principal.Namespace, principal.AccountNamespace, nil
 }
 
 func tunnelContext(request *http.Request) (string, string, error) {

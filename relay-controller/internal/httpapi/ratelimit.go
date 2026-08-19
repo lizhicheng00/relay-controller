@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"relay-controller/internal/auth"
 	"relay-controller/internal/core"
 )
 
@@ -74,9 +75,8 @@ func (r *RateLimiter) Allow(key string) bool {
 }
 
 func rateKey(request *http.Request) string {
-	namespace := request.Header.Get("X-Namespace")
-	if core.ValidIdentifier(namespace) {
-		return "namespace:" + namespace
+	if principal, ok := auth.PrincipalFrom(request.Context()); ok {
+		return "namespace:" + principal.Namespace
 	}
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err == nil {

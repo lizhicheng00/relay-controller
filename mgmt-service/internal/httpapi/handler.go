@@ -23,7 +23,7 @@ const apiBase = "/open-api-inner/v1/mgmt-service"
 
 type API interface {
 	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.APIKeyScope) (core.DefaultAPIKeyCredential, error)
-	CheckAPIKey(context.Context, string) (core.Identity, error)
+	CheckAPIKey(context.Context, string) (core.APIKeyIdentity, error)
 	ListAPIKeys(context.Context, core.IdentityAssertion) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, core.IdentityAssertion, string, core.APIKeyScope) (core.IssuedAPIKey, error)
 	DeleteAPIKey(context.Context, core.IdentityAssertion, string) error

@@ -14,37 +14,31 @@ func TestLoadRejectsInvalidRateLimit(t *testing.T) {
 }
 
 func TestLoadDefaults(t *testing.T) {
-	t.Setenv("SERVER_TLS_ENABLED", "")
+	t.Setenv("SERVER_ADDRESS", "")
+	t.Setenv("MGMT_SERVICE_URL", "")
 	t.Setenv("RELAY_DOMAIN", "")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Relay.Domain != "myhuaweicloud.com" || cfg.Relay.RequestsPerMinute != 120 || !cfg.TLS.Enabled {
+	if cfg.Address != "127.0.0.1:8443" || cfg.ManagementServiceURL != "http://127.0.0.1:8444" ||
+		cfg.Relay.Domain != "myhuaweicloud.com" || cfg.Relay.RequestsPerMinute != 120 {
 		t.Fatalf("relay defaults = %#v", cfg.Relay)
-	}
-}
-
-func TestLoadDisablesTLS(t *testing.T) {
-	t.Setenv("SERVER_TLS_ENABLED", "false")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.TLS.Enabled {
-		t.Fatal("TLS should be disabled")
 	}
 }
 
 func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("RELAY_DOMAIN", "relay.example.com")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "240")
+	t.Setenv("SERVER_ADDRESS", "10.0.0.1:9443")
+	t.Setenv("MGMT_SERVICE_URL", "https://mgmt.example.com")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 {
+	if cfg.Address != "10.0.0.1:9443" || cfg.ManagementServiceURL != "https://mgmt.example.com" ||
+		cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 {
 		t.Fatalf("relay overrides = %#v", cfg.Relay)
 	}
 }

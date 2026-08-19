@@ -11,8 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"relay-controller/internal/auth"
 	"relay-controller/internal/core"
 )
+
+var testPrincipal = auth.Principal{
+	Namespace: "ns-sub-user-001", AccountNamespace: "ns-user-001", Scope: "devbridge",
+}
 
 func TestCreateTunnelReturnsDirectResponse(t *testing.T) {
 	api := stubAPI{createTunnel: func(_ context.Context, namespace, accountNamespace string, request core.CreateTunnelRequest) (core.TunnelResponse, error) {
@@ -31,13 +36,37 @@ func TestCreateTunnelReturnsDirectResponse(t *testing.T) {
 	}
 }
 
-func TestMissingNamespaceReturnsStructured401(t *testing.T) {
+func TestMissingAPIKeyReturnsStructured401(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, apiBase+"/tunnels", strings.NewReader(`{"name":"dev"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	New(stubAPI{}, testLogger(), nil).ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized || !strings.Contains(response.Body.String(), `"code":"40100"`) || !strings.Contains(response.Body.String(), `"target":"X-Namespace"`) {
+	New(stubAPI{}, stubResolver{principal: testPrincipal}, testLogger(), nil).ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized || !strings.Contains(response.Body.String(), `"code":"40100"`) || !strings.Contains(response.Body.String(), `"target":"X-API-Key"`) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAPIKeyAuthenticationFailures(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolver stubResolver
+		status   int
+		code     string
+	}{
+		{name: "invalid", resolver: stubResolver{err: auth.ErrUnauthorized}, status: http.StatusUnauthorized, code: core.CodeUnauthorized},
+		{name: "scope", resolver: stubResolver{principal: auth.Principal{Scope: "devbox"}}, status: http.StatusForbidden, code: core.CodeForbidden},
+		{name: "unavailable", resolver: stubResolver{err: errors.New("mgmt unavailable")}, status: http.StatusServiceUnavailable, code: core.CodeServiceUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, apiBase+"/tunnels", nil)
+			request.Header.Set("X-API-Key", "devbridge_test")
+			response := httptest.NewRecorder()
+			New(stubAPI{}, test.resolver, testLogger(), nil).ServeHTTP(response, request)
+			if response.Code != test.status || !strings.Contains(response.Body.String(), `"code":"`+test.code+`"`) {
+				t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -61,10 +90,9 @@ func TestMalformedBodyReturnsRequestBodyTarget(t *testing.T) {
 func TestInvalidJSONMediaTypeIsRejected(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, apiBase+"/tunnels", strings.NewReader(`{"name":"dev"}`))
 	request.Header.Set("Content-Type", "application/json-malformed")
-	request.Header.Set("X-Namespace", "ns-user-001")
-	request.Header.Set("X-Account-Namespace", "ns-user-001")
+	request.Header.Set("X-API-Key", "devbridge_test")
 	response := httptest.NewRecorder()
-	New(stubAPI{}, testLogger(), nil).ServeHTTP(response, request)
+	New(stubAPI{}, stubResolver{principal: testPrincipal}, testLogger(), nil).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"target":"requestBody"`) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
 	}
@@ -100,18 +128,19 @@ func TestRateLimiterUsesFixedNamespaceWindow(t *testing.T) {
 	}
 }
 
-func serve(t *testing.T, api API, method, target, body string, headers bool) *httptest.ResponseRecorder {
+func serve(t *testing.T, api API, method, target, body string, authenticated bool) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, target, strings.NewReader(body))
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	if headers {
-		request.Header.Set("X-Namespace", "ns-sub-user-001")
-		request.Header.Set("X-Account-Namespace", "ns-user-001")
+	if authenticated {
+		request.Header.Set("X-API-Key", "devbridge_test")
+		request.Header.Set("X-Namespace", "forged-namespace")
+		request.Header.Set("X-Account-Namespace", "forged-account")
 	}
 	response := httptest.NewRecorder()
-	New(api, testLogger(), nil).ServeHTTP(response, request)
+	New(api, stubResolver{principal: testPrincipal}, testLogger(), nil).ServeHTTP(response, request)
 	return response
 }
 
@@ -123,6 +152,15 @@ type stubAPI struct {
 	createTunnel func(context.Context, string, string, core.CreateTunnelRequest) (core.TunnelResponse, error)
 	getTunnel    func(context.Context, string, string) (core.TunnelResponse, error)
 	issueToken   func(context.Context, string, string, string) (core.TunnelTokenResponse, error)
+}
+
+type stubResolver struct {
+	principal auth.Principal
+	err       error
+}
+
+func (s stubResolver) ResolveAPIKey(context.Context, string) (auth.Principal, error) {
+	return s.principal, s.err
 }
 
 func (s stubAPI) CreateTunnel(ctx context.Context, namespace, account string, request core.CreateTunnelRequest) (core.TunnelResponse, error) {

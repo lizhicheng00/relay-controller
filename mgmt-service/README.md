@@ -28,13 +28,13 @@ All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
 POST /open-api-inner/v1/mgmt-service/api-keys/default  issue or rotate a typed default API key
-POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity
+POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
 ```
 
-All endpoints require mTLS. The upper identity layer confirms the user's login session before default issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the check endpoint accepts `X-API-Key`, because it validates a business credential and resolves its identity. The OpenAPI document is available at `/openapi.yaml`.
+All endpoints require mTLS. The upper identity layer confirms the user's login session before default issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 

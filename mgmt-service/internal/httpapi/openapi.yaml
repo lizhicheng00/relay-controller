@@ -44,8 +44,8 @@ paths:
     post:
       summary: Validate an API key and resolve its identity
       description: >-
-        A valid key returns its current identity mapping and records its latest use; an invalid
-        or disabled key returns 401.
+        Used internally by business services. A valid key returns its current identity mapping
+        and scope and records its latest use; an invalid or disabled key returns 401.
       security:
         - apiKeyAuth: []
       responses:
@@ -54,7 +54,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Identity'
+                $ref: '#/components/schemas/APIKeyIdentity'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -173,6 +173,14 @@ components:
           type: string
         namespace:
           type: string
+    APIKeyIdentity:
+      allOf:
+        - $ref: '#/components/schemas/Identity'
+        - type: object
+          required: [scope]
+          properties:
+            scope:
+              $ref: '#/components/schemas/APIKeyScope'
     DefaultAPIKeyCredential:
       allOf:
         - $ref: '#/components/schemas/Identity'

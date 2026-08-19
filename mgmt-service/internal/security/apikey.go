@@ -36,10 +36,16 @@ func MaskAPIKey(value string) string {
 }
 
 func DigestAPIKey(value string) ([]byte, error) {
-	if _, _, ok := splitAPIKey(value); !ok {
-		return nil, ErrInvalidAPIKey
+	_, digest, err := ParseAPIKey(value)
+	return digest, err
+}
+
+func ParseAPIKey(value string) (core.APIKeyScope, []byte, error) {
+	scope, _, ok := splitAPIKey(value)
+	if !ok {
+		return "", nil, ErrInvalidAPIKey
 	}
-	return apiKeyDigest(value), nil
+	return scope, apiKeyDigest(value), nil
 }
 
 func splitAPIKey(value string) (core.APIKeyScope, string, bool) {

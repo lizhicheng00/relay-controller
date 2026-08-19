@@ -22,6 +22,10 @@ func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	if err != nil || !bytes.Equal(parsed, firstDigest) {
 		t.Fatalf("DigestAPIKey() = %x, %v", parsed, err)
 	}
+	scope, parsed, err := ParseAPIKey(first)
+	if err != nil || scope != core.APIKeyScopeDevBox || !bytes.Equal(parsed, firstDigest) {
+		t.Fatalf("ParseAPIKey() = %q, %x, %v", scope, parsed, err)
+	}
 	payload := strings.TrimPrefix(first, "devbox_")
 	if mask := MaskAPIKey(first); mask != "devbox_"+payload[:4]+"..."+payload[len(payload)-4:] {
 		t.Fatalf("MaskAPIKey() = %q", mask)

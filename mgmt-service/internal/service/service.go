@@ -54,16 +54,16 @@ func (s *Service) IssueDefaultAPIKey(
 	return core.DefaultAPIKeyCredential{Identity: identity, Scope: scope, APIKey: value}, nil
 }
 
-func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.Identity, error) {
-	digest, err := security.DigestAPIKey(strings.TrimSpace(value))
+func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.APIKeyIdentity, error) {
+	scope, digest, err := security.ParseAPIKey(strings.TrimSpace(value))
 	if err != nil {
-		return core.Identity{}, core.Unauthorized("X-API-Key")
+		return core.APIKeyIdentity{}, core.Unauthorized("X-API-Key")
 	}
 	identity, err := s.store.FindIdentityByAPIKey(ctx, digest)
 	if err != nil {
-		return core.Identity{}, mapStoreError("check API key", "X-API-Key", err)
+		return core.APIKeyIdentity{}, mapStoreError("check API key", "X-API-Key", err)
 	}
-	return identity, nil
+	return core.APIKeyIdentity{Identity: identity, Scope: scope}, nil
 }
 
 func (s *Service) ListAPIKeys(

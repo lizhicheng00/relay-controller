@@ -119,7 +119,7 @@ func TestCheckAPIKeyReturnsMappedIdentity(t *testing.T) {
 	key, _ := security.NewAPIKey(core.APIKeyScopeDevBridge)
 
 	result, err := application.CheckAPIKey(context.Background(), key)
-	if err != nil || result != testIdentity {
+	if err != nil || result.Identity != testIdentity || result.Scope != core.APIKeyScopeDevBridge {
 		t.Fatalf("CheckAPIKey() = %#v, %v", result, err)
 	}
 	if len(repository.findDigest) != 32 {

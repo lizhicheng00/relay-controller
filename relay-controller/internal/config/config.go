@@ -10,12 +10,15 @@ import (
 const (
 	defaultRelayDomain       = "myhuaweicloud.com"
 	defaultRequestsPerMinute = 120
+	defaultManagementURL     = "http://127.0.0.1:8444"
+	defaultAddress           = "127.0.0.1:8443"
 )
 
 type Config struct {
-	Database Database
-	Relay    Relay
-	TLS      TLS
+	Address              string
+	Database             Database
+	Relay                Relay
+	ManagementServiceURL string
 }
 
 type Database struct {
@@ -31,14 +34,6 @@ type Relay struct {
 	JWTPrivateKey     string
 }
 
-type TLS struct {
-	Enabled            bool
-	KeyStoreBase64     string
-	KeyStorePassword   string
-	TrustStoreBase64   string
-	TrustStorePassword string
-}
-
 func Load() (Config, error) {
 	requestsPerMinute := defaultRequestsPerMinute
 	if value := strings.TrimSpace(os.Getenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE")); value != "" {
@@ -49,6 +44,7 @@ func Load() (Config, error) {
 		requestsPerMinute = parsed
 	}
 	return Config{
+		Address: valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		Database: Database{
 			URL:      os.Getenv("DATASOURCE_URL"),
 			Username: os.Getenv("DATASOURCE_USERNAME"),
@@ -60,13 +56,7 @@ func Load() (Config, error) {
 			RequestsPerMinute: requestsPerMinute,
 			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
 		},
-		TLS: TLS{
-			Enabled:            !strings.EqualFold(strings.TrimSpace(os.Getenv("SERVER_TLS_ENABLED")), "false"),
-			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
-			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
-			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),
-			TrustStorePassword: os.Getenv("SERVER_SSL_TRUST_STORE_PASSWORD"),
-		},
+		ManagementServiceURL: valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
 	}, nil
 }
 
