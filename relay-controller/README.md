@@ -20,6 +20,7 @@ Relay Controller is the regional DevBridge control plane. It manages tunnels, po
 All business APIs use the prefix `/open-api-inner/v1/relay-controller` and require `X-API-Key`.
 
 ```text
+GET    /auth/check
 POST   /tunnels
 GET    /tunnels?clusterId=
 DELETE /tunnels
@@ -36,6 +37,8 @@ DELETE /tunnels/{tunnelId}/ports/{port}
 
 GET    /limits
 ```
+
+`GET /auth/check` performs the same API key and scope validation as every business request and returns `204` without querying tunnel or billing data. CLI clients use it once when accepting a manually supplied API key; normal commands call their business endpoint directly.
 
 ## Structure
 

@@ -86,5 +86,6 @@ func rateKey(request *http.Request) string {
 }
 
 func isAPIPath(path string) bool {
-	return path == apiBase+"/limits" || path == apiBase+"/tunnels" || strings.HasPrefix(path, apiBase+"/tunnels/")
+	return path == apiBase+"/auth/check" || path == apiBase+"/limits" ||
+		path == apiBase+"/tunnels" || strings.HasPrefix(path, apiBase+"/tunnels/")
 }

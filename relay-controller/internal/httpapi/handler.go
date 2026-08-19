@@ -45,6 +45,7 @@ type Handler struct {
 func New(api API, resolver auth.Resolver, logger *slog.Logger, limiter *RateLimiter) http.Handler {
 	handler := &Handler{api: api, log: logger}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+apiBase+"/auth/check", handler.checkAuthentication)
 	mux.HandleFunc("POST "+apiBase+"/tunnels", handler.createTunnel)
 	mux.HandleFunc("GET "+apiBase+"/tunnels", handler.listTunnels)
 	mux.HandleFunc("DELETE "+apiBase+"/tunnels", handler.deleteTunnels)
@@ -65,6 +66,11 @@ func New(api API, resolver auth.Resolver, logger *slog.Logger, limiter *RateLimi
 	}
 	result = handler.authenticate(resolver, result)
 	return handler.recover(result)
+}
+
+func (*Handler) checkAuthentication(response http.ResponseWriter, _ *http.Request) {
+	response.Header().Set("Cache-Control", "no-store")
+	response.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) createTunnel(response http.ResponseWriter, request *http.Request) {

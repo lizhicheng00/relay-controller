@@ -46,6 +46,13 @@ func TestMissingAPIKeyReturnsStructured401(t *testing.T) {
 	}
 }
 
+func TestAuthenticationCheckReturnsNoContent(t *testing.T) {
+	response := serve(t, stubAPI{}, http.MethodGet, apiBase+"/auth/check", "", true)
+	if response.Code != http.StatusNoContent || response.Body.Len() != 0 || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("unexpected response: %d, headers = %#v, body = %s", response.Code, response.Header(), response.Body.String())
+	}
+}
+
 func TestAPIKeyAuthenticationFailures(t *testing.T) {
 	tests := []struct {
 		name     string
