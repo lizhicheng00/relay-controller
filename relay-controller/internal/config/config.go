@@ -10,15 +10,15 @@ import (
 const (
 	defaultRelayDomain       = "myhuaweicloud.com"
 	defaultRequestsPerMinute = 120
-	defaultManagementURL     = "http://127.0.0.1:8444"
+	defaultManagementURL     = "https://127.0.0.1:8444"
 	defaultAddress           = "127.0.0.1:8443"
 )
 
 type Config struct {
-	Address              string
-	Database             Database
-	Relay                Relay
-	ManagementServiceURL string
+	Address    string
+	Database   Database
+	Relay      Relay
+	Management Management
 }
 
 type Database struct {
@@ -32,6 +32,14 @@ type Relay struct {
 	Region            string
 	RequestsPerMinute int
 	JWTPrivateKey     string
+}
+
+type Management struct {
+	URL               string
+	ClientCertFile    string
+	ClientKeyFile     string
+	ClientKeyPassword string
+	CACertFile        string
 }
 
 func Load() (Config, error) {
@@ -56,7 +64,13 @@ func Load() (Config, error) {
 			RequestsPerMinute: requestsPerMinute,
 			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
 		},
-		ManagementServiceURL: valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
+		Management: Management{
+			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
+			ClientCertFile:    strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_FILE")),
+			ClientKeyFile:     strings.TrimSpace(os.Getenv("MGMT_CLIENT_KEY_FILE")),
+			ClientKeyPassword: os.Getenv("MGMT_CLIENT_KEY_PASSWORD"),
+			CACertFile:        strings.TrimSpace(os.Getenv("MGMT_CA_CERT_FILE")),
+		},
 	}, nil
 }
 

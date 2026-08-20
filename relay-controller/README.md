@@ -53,7 +53,7 @@ internal/security      RS256 signing
 migrations             embedded database migrations
 ```
 
-The runtime uses the Go standard library where practical. The only direct dependency is the MySQL driver.
+The runtime uses the Go standard library where practical.
 
 ## Configuration
 
@@ -62,7 +62,11 @@ Environment variables:
 | Variable | Meaning |
 | --- | --- |
 | `SERVER_ADDRESS` | HTTP listen address, default `127.0.0.1:8443` |
-| `MGMT_SERVICE_URL` | Management Service or internal gateway base URL, default `http://127.0.0.1:8444` |
+| `MGMT_SERVICE_URL` | Management Service HTTPS base URL, default `https://127.0.0.1:8444` |
+| `MGMT_CLIENT_CERT_FILE` | Relay client certificate PEM file used for Management Service mTLS |
+| `MGMT_CLIENT_KEY_FILE` | Relay client private-key PEM file used for Management Service mTLS |
+| `MGMT_CLIENT_KEY_PASSWORD` | Client-key password when the key is encrypted PKCS#8; omit for an unencrypted key |
+| `MGMT_CA_CERT_FILE` | Optional PEM CA file for the Management Service certificate; system roots are always retained |
 | `DATASOURCE_URL` | `jdbc:mariadb://host:3306/database` or `jdbc:mysql://...` |
 | `DATASOURCE_USERNAME` | Database user |
 | `DATASOURCE_PASSWORD` | Database password |
@@ -97,7 +101,11 @@ export RELAY_DOMAIN='myhuaweicloud.com'
 export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'
 export RELAY_JWT_PRIVATE_KEY='<PKCS8 PEM or Base64 DER>'
 export SERVER_ADDRESS='127.0.0.1:8443'
-export MGMT_SERVICE_URL='http://127.0.0.1:8444'
+export MGMT_SERVICE_URL='https://127.0.0.1:8444'
+export MGMT_CLIENT_CERT_FILE='/run/secrets/mgmt-client/client.crt'
+export MGMT_CLIENT_KEY_FILE='/run/secrets/mgmt-client/client.key'
+export MGMT_CLIENT_KEY_PASSWORD='<secret>'
+export MGMT_CA_CERT_FILE='/run/secrets/mgmt-client/ca.crt'
 go run ./cmd
 ```
 
@@ -105,8 +113,8 @@ The service applies embedded migrations before opening the application store. Ap
 
 ## Security Boundary
 
-The caller supplies only `X-API-Key`. Relay Controller resolves it through Management Service, requires `scope=devbridge`, and places the returned namespace identity in request context. Caller-supplied namespace headers are ignored. Missing or invalid credentials return `401`, an incompatible scope returns `403`, and a Management Service failure returns `503`.
+The caller supplies only `X-API-Key`. Relay Controller resolves it through Management Service over mTLS, requires `scope=devbridge`, and places the returned namespace identity in request context. Caller-supplied namespace headers are ignored. Missing or invalid credentials return `401`, an incompatible scope returns `403`, and a Management Service failure returns `503`.
 
-The API key Check endpoint remains owned by Management Service because it owns key hashes and identity mappings. Relay Controller owns when that check is required. Public HTTPS terminates at the gateway; the Relay HTTP listener remains private.
+The API key Check endpoint remains owned by Management Service because it owns key hashes and identity mappings. Relay Controller owns when that check is required. Public HTTPS terminates at the gateway; the Relay HTTP listener remains private. Relay authenticates itself to Management Service with its client certificate and verifies the Management Service certificate against the configured private CA or the system trust store.
 
 Gateway enforces data-plane limits such as one Host per tunnel, bandwidth, HTTP request rate, and concurrent connections. The Controller's in-memory request limiter is only a bounded per-instance safety limit; strict cross-replica API limiting belongs at ingress.

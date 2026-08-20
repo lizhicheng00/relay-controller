@@ -2,9 +2,20 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/youmark/pkcs8"
 )
 
 func TestClientResolvesAPIKey(t *testing.T) {
@@ -16,10 +27,7 @@ func TestClientResolvesAPIKey(t *testing.T) {
 		_, _ = response.Write([]byte(`{"accountNamespace":"ns-account","namespace":"ns-user","scope":"devbridge"}`))
 	}))
 	defer server.Close()
-	client, err := NewClient(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newClient(server.URL+checkPath, server.Client())
 	principal, err := client.ResolveAPIKey(context.Background(), "devbridge_test")
 	if err != nil || principal.Namespace != "ns-user" || principal.AccountNamespace != "ns-account" || principal.Scope != "devbridge" {
 		t.Fatalf("ResolveAPIKey() = %#v, %v", principal, err)
@@ -31,17 +39,65 @@ func TestClientMapsUnauthorized(t *testing.T) {
 		response.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
-	client, err := NewClient(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newClient(server.URL+checkPath, server.Client())
 	if _, err := client.ResolveAPIKey(context.Background(), "invalid"); err != ErrUnauthorized {
 		t.Fatalf("ResolveAPIKey() error = %v", err)
 	}
 }
 
 func TestClientRejectsInvalidURL(t *testing.T) {
-	if _, err := NewClient("localhost:8444"); err == nil {
-		t.Fatal("NewClient() accepted a URL without a scheme")
+	if _, err := NewClient("http://localhost:8444", TLSConfig{}); err == nil {
+		t.Fatal("NewClient() accepted an HTTP URL")
+	}
+}
+
+func TestTLSConfigLoadsEncryptedClientKey(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "relay-controller"},
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	certificateDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encryptedKey, err := pkcs8.MarshalPrivateKey(privateKey, []byte("password"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	certificateFile := filepath.Join(directory, "client.crt")
+	keyFile := filepath.Join(directory, "client.key")
+	caFile := filepath.Join(directory, "ca.crt")
+	certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
+	if err := os.WriteFile(certificateFile, certificatePEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: encryptedKey}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caFile, certificatePEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tlsConfig, err := newTLSConfig(TLSConfig{
+		ClientCertFile:    certificateFile,
+		ClientKeyFile:     keyFile,
+		ClientKeyPassword: "password",
+		CACertFile:        caFile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tlsConfig.Certificates) != 1 || tlsConfig.RootCAs == nil {
+		t.Fatal("client certificate or CA pool was not loaded")
 	}
 }

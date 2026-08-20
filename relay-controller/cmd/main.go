@@ -42,7 +42,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	identityResolver, err := auth.NewClient(cfg.ManagementServiceURL)
+	identityResolver, err := auth.NewClient(cfg.Management.URL, auth.TLSConfig{
+		ClientCertFile:    cfg.Management.ClientCertFile,
+		ClientKeyFile:     cfg.Management.ClientKeyFile,
+		ClientKeyPassword: cfg.Management.ClientKeyPassword,
+		CACertFile:        cfg.Management.CACertFile,
+	})
 	if err != nil {
 		return err
 	}

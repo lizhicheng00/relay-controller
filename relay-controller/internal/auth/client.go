@@ -2,13 +2,19 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
+
+	"github.com/youmark/pkcs8"
 )
 
 const checkPath = "/open-api-inner/v1/mgmt-service/api-keys/check"
@@ -30,24 +36,99 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(baseURL string) (*Client, error) {
+type TLSConfig struct {
+	ClientCertFile    string
+	ClientKeyFile     string
+	ClientKeyPassword string
+	CACertFile        string
+}
+
+func NewClient(baseURL string, cfg TLSConfig) (*Client, error) {
 	parsed, err := url.Parse(baseURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return nil, fmt.Errorf("management service URL is invalid")
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return nil, fmt.Errorf("management service URL must use HTTPS")
 	}
 	endpoint, err := url.JoinPath(baseURL, checkPath)
 	if err != nil {
 		return nil, fmt.Errorf("build management service URL: %w", err)
 	}
-	return &Client{
-		endpoint: endpoint,
-		httpClient: &http.Client{
-			Timeout: 3 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	tlsConfig, err := newTLSConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+	return newClient(endpoint, &http.Client{
+		Transport: transport,
+		Timeout:   3 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
+	}), nil
+}
+
+func newClient(endpoint string, httpClient *http.Client) *Client {
+	return &Client{
+		endpoint:   endpoint,
+		httpClient: httpClient,
+	}
+}
+
+func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
+	if cfg.ClientCertFile == "" || cfg.ClientKeyFile == "" {
+		return nil, fmt.Errorf("management service client certificate and key are required")
+	}
+	certificatePEM, err := os.ReadFile(cfg.ClientCertFile)
+	if err != nil {
+		return nil, fmt.Errorf("read management service client certificate: %w", err)
+	}
+	privateKeyPEM, err := os.ReadFile(cfg.ClientKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("read management service client key: %w", err)
+	}
+	certificate, err := loadKeyPair(certificatePEM, privateKeyPEM, cfg.ClientKeyPassword)
+	if err != nil {
+		return nil, fmt.Errorf("load management service client certificate: %w", err)
+	}
+
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("load system certificate pool: %w", err)
+	}
+	if cfg.CACertFile != "" {
+		caPEM, err := os.ReadFile(cfg.CACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("read management service CA certificate: %w", err)
+		}
+		if !roots.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("management service CA certificate is invalid")
+		}
+	}
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{certificate},
+		RootCAs:      roots,
 	}, nil
+}
+
+func loadKeyPair(certificatePEM, privateKeyPEM []byte, password string) (tls.Certificate, error) {
+	certificate, err := tls.X509KeyPair(certificatePEM, privateKeyPEM)
+	if err == nil || password == "" {
+		return certificate, err
+	}
+	block, _ := pem.Decode(privateKeyPEM)
+	if block == nil || block.Type != "ENCRYPTED PRIVATE KEY" {
+		return tls.Certificate{}, err
+	}
+	privateKey, err := pkcs8.ParsePKCS8PrivateKey(block.Bytes, []byte(password))
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("decrypt private key: %w", err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("marshal private key: %w", err)
+	}
+	return tls.X509KeyPair(certificatePEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
 }
 
 func (c *Client) ResolveAPIKey(ctx context.Context, apiKey string) (Principal, error) {

@@ -47,6 +47,10 @@ func run() error {
 	}
 	defer func() { _ = repository.Close() }()
 	application := service.New(repository)
+	tlsConfig, err := security.TLSConfig(cfg.TLS)
+	if err != nil {
+		return err
+	}
 	server := &http.Server{
 		Handler:           httpapi.New(application, logger),
 		ErrorLog:          log.New(io.Discard, "", 0),
@@ -55,13 +59,7 @@ func run() error {
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
-	}
-	if cfg.TLS.Enabled {
-		tlsConfig, err := security.TLSConfig(cfg.TLS)
-		if err != nil {
-			return err
-		}
-		server.TLSConfig = tlsConfig
+		TLSConfig:         tlsConfig,
 	}
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
@@ -70,11 +68,7 @@ func run() error {
 
 	serverErrors := make(chan error, 1)
 	go func() {
-		if cfg.TLS.Enabled {
-			serverErrors <- server.ServeTLS(listener, "", "")
-			return
-		}
-		serverErrors <- server.Serve(listener)
+		serverErrors <- server.ServeTLS(listener, "", "")
 	}()
 	logger.Info("Management Service started", "address", cfg.Address)
 
@@ -83,7 +77,7 @@ func run() error {
 	case <-ctx.Done():
 	case err := <-serverErrors:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serveErr = fmt.Errorf("serve HTTP: %w", err)
+			serveErr = fmt.Errorf("serve HTTPS: %w", err)
 		}
 	}
 	stop()
@@ -91,7 +85,7 @@ func run() error {
 	defer cancel()
 	shutdownErr := server.Shutdown(shutdownContext)
 	if shutdownErr != nil {
-		shutdownErr = fmt.Errorf("shutdown HTTP server: %w", shutdownErr)
+		shutdownErr = fmt.Errorf("shutdown HTTPS server: %w", shutdownErr)
 	}
 	if err := errors.Join(serveErr, shutdownErr); err != nil {
 		return err

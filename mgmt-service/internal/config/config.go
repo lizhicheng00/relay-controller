@@ -20,7 +20,6 @@ type Config struct {
 }
 
 type TLS struct {
-	Enabled            bool
 	KeyStoreBase64     string
 	KeyStorePassword   string
 	TrustStoreBase64   string
@@ -32,7 +31,6 @@ func Load() (Config, error) {
 		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		DatabaseDSN: os.Getenv("DATABASE_DSN"),
 		TLS: TLS{
-			Enabled:            !strings.EqualFold(strings.TrimSpace(os.Getenv("SERVER_TLS_ENABLED")), "false"),
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
 			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
 			TrustStoreBase64:   os.Getenv("SERVER_SSL_TRUST_STORE_BASE64"),
@@ -45,14 +43,10 @@ func Load() (Config, error) {
 	}
 	fields := []field{
 		{"DATABASE_DSN", &cfg.DatabaseDSN},
-	}
-	if cfg.TLS.Enabled {
-		fields = append(fields,
-			field{"SERVER_SSL_KEY_STORE_BASE64", &cfg.TLS.KeyStoreBase64},
-			field{"SERVER_SSL_KEY_STORE_PASSWORD", &cfg.TLS.KeyStorePassword},
-			field{"SERVER_SSL_TRUST_STORE_BASE64", &cfg.TLS.TrustStoreBase64},
-			field{"SERVER_SSL_TRUST_STORE_PASSWORD", &cfg.TLS.TrustStorePassword},
-		)
+		{"SERVER_SSL_KEY_STORE_BASE64", &cfg.TLS.KeyStoreBase64},
+		{"SERVER_SSL_KEY_STORE_PASSWORD", &cfg.TLS.KeyStorePassword},
+		{"SERVER_SSL_TRUST_STORE_BASE64", &cfg.TLS.TrustStoreBase64},
+		{"SERVER_SSL_TRUST_STORE_PASSWORD", &cfg.TLS.TrustStorePassword},
 	}
 	var codec *secret.Codec
 	for _, field := range fields {
