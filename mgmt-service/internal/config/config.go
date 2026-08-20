@@ -10,7 +10,7 @@ import (
 
 const (
 	defaultAddress = ":8443"
-	defaultKeyFile = "/run/secrets/mgmt_config_key"
+	defaultKeyFile = "/opt/cloud/dog/beta"
 )
 
 type Config struct {

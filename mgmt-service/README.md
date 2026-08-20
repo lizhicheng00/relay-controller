@@ -70,7 +70,7 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
-| `MGMT_CONFIG_KEY_FILE` | no | Root-key file, default `/run/secrets/mgmt_config_key` |
+| `MGMT_CONFIG_KEY_FILE` | no | Root-key file, default `/opt/cloud/dog/beta` |
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
@@ -111,7 +111,7 @@ unset CONFIG_VALUE
 
 `encrypt` reads the plaintext from standard input so it is not passed as a process argument.
 Use `printf` rather than `echo`, because a trailing newline changes the encrypted value. For
-production, mount the same key read-only at `/run/secrets/mgmt_config_key`; only this file needs
+production, mount the same key read-only at `/opt/cloud/dog/beta`; only this file needs
 secret mounting. The independently encrypted configuration entries can then be changed without
 changing or remounting the key. Plain values do not require a key file.
 

@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"relay-controller/common/crypto"
 )
 
 const (
@@ -57,23 +59,31 @@ func Load() (Config, error) {
 		Database: Database{
 			URL:      os.Getenv("DATASOURCE_URL"),
 			Username: os.Getenv("DATASOURCE_USERNAME"),
-			Password: os.Getenv("DATASOURCE_PASSWORD"),
+			Password: getSecret("DATASOURCE_PASSWORD"),
 		},
 		Relay: Relay{
 			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
 			Region:            os.Getenv("RELAY_REGION"),
 			RequestsPerMinute: requestsPerMinute,
-			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
+			JWTPrivateKey:     getSecret("RELAY_JWT_PRIVATE_KEY"),
 		},
 		Management: Management{
 			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
 			ServerName:        strings.TrimSpace(os.Getenv("MGMT_SERVER_NAME")),
 			ClientCertBase64:  strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
-			ClientKeyBase64:   strings.TrimSpace(os.Getenv("MGMT_CLIENT_KEY_BASE64")),
-			ClientKeyPassword: os.Getenv("MGMT_CLIENT_KEY_PASSWORD"),
+			ClientKeyBase64:   strings.TrimSpace(getSecret("MGMT_CLIENT_KEY_BASE64")),
+			ClientKeyPassword: getSecret("MGMT_CLIENT_KEY_PASSWORD"),
 			CACertBase64:      strings.TrimSpace(os.Getenv("MGMT_CA_CERT_BASE64")),
 		},
 	}, nil
+}
+
+func getSecret(key string) string {
+	value, err := crypto.GetEncryptedEnv(key)
+	if err != nil {
+		return ""
+	}
+	return value
 }
 
 func valueOrDefault(name, fallback string) string {

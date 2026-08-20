@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"relay-controller/common/crypto"
 	"relay-controller/internal/auth"
 	"relay-controller/internal/config"
 	"relay-controller/internal/httpapi"
@@ -31,6 +32,9 @@ func main() {
 }
 
 func run() error {
+	if err := crypto.Init(); err != nil {
+		return fmt.Errorf("failed to initialize crypto module: %w", err)
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
