@@ -36,10 +36,10 @@ type Relay struct {
 
 type Management struct {
 	URL               string
-	ClientCertFile    string
-	ClientKeyFile     string
+	ClientCertBase64  string
+	ClientKeyBase64   string
 	ClientKeyPassword string
-	CACertFile        string
+	CACertBase64      string
 }
 
 func Load() (Config, error) {
@@ -66,10 +66,10 @@ func Load() (Config, error) {
 		},
 		Management: Management{
 			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
-			ClientCertFile:    strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_FILE")),
-			ClientKeyFile:     strings.TrimSpace(os.Getenv("MGMT_CLIENT_KEY_FILE")),
+			ClientCertBase64:  strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
+			ClientKeyBase64:   strings.TrimSpace(os.Getenv("MGMT_CLIENT_KEY_BASE64")),
 			ClientKeyPassword: os.Getenv("MGMT_CLIENT_KEY_PASSWORD"),
-			CACertFile:        strings.TrimSpace(os.Getenv("MGMT_CA_CERT_FILE")),
+			CACertBase64:      strings.TrimSpace(os.Getenv("MGMT_CA_CERT_BASE64")),
 		},
 	}, nil
 }

@@ -43,10 +43,10 @@ func run() error {
 		return err
 	}
 	identityResolver, err := auth.NewClient(cfg.Management.URL, auth.TLSConfig{
-		ClientCertFile:    cfg.Management.ClientCertFile,
-		ClientKeyFile:     cfg.Management.ClientKeyFile,
+		ClientCertBase64:  cfg.Management.ClientCertBase64,
+		ClientKeyBase64:   cfg.Management.ClientKeyBase64,
 		ClientKeyPassword: cfg.Management.ClientKeyPassword,
-		CACertFile:        cfg.Management.CACertFile,
+		CACertBase64:      cfg.Management.CACertBase64,
 	})
 	if err != nil {
 		return err

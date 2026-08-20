@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -11,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/youmark/pkcs8"
@@ -37,10 +37,10 @@ type Client struct {
 }
 
 type TLSConfig struct {
-	ClientCertFile    string
-	ClientKeyFile     string
+	ClientCertBase64  string
+	ClientKeyBase64   string
 	ClientKeyPassword string
-	CACertFile        string
+	CACertBase64      string
 }
 
 func NewClient(baseURL string, cfg TLSConfig) (*Client, error) {
@@ -75,16 +75,16 @@ func newClient(endpoint string, httpClient *http.Client) *Client {
 }
 
 func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
-	if cfg.ClientCertFile == "" || cfg.ClientKeyFile == "" {
+	if cfg.ClientCertBase64 == "" || cfg.ClientKeyBase64 == "" {
 		return nil, fmt.Errorf("management service client certificate and key are required")
 	}
-	certificatePEM, err := os.ReadFile(cfg.ClientCertFile)
+	certificatePEM, err := base64.StdEncoding.DecodeString(cfg.ClientCertBase64)
 	if err != nil {
-		return nil, fmt.Errorf("read management service client certificate: %w", err)
+		return nil, fmt.Errorf("decode management service client certificate: %w", err)
 	}
-	privateKeyPEM, err := os.ReadFile(cfg.ClientKeyFile)
+	privateKeyPEM, err := base64.StdEncoding.DecodeString(cfg.ClientKeyBase64)
 	if err != nil {
-		return nil, fmt.Errorf("read management service client key: %w", err)
+		return nil, fmt.Errorf("decode management service client key: %w", err)
 	}
 	certificate, err := loadKeyPair(certificatePEM, privateKeyPEM, cfg.ClientKeyPassword)
 	if err != nil {
@@ -95,10 +95,10 @@ func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load system certificate pool: %w", err)
 	}
-	if cfg.CACertFile != "" {
-		caPEM, err := os.ReadFile(cfg.CACertFile)
+	if cfg.CACertBase64 != "" {
+		caPEM, err := base64.StdEncoding.DecodeString(cfg.CACertBase64)
 		if err != nil {
-			return nil, fmt.Errorf("read management service CA certificate: %w", err)
+			return nil, fmt.Errorf("decode management service CA certificate: %w", err)
 		}
 		if !roots.AppendCertsFromPEM(caPEM) {
 			return nil, fmt.Errorf("management service CA certificate is invalid")

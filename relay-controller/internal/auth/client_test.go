@@ -6,12 +6,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -74,30 +73,25 @@ func TestTLSConfigLoadsEncryptedClientKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	directory := t.TempDir()
-	certificateFile := filepath.Join(directory, "client.crt")
-	keyFile := filepath.Join(directory, "client.key")
-	caFile := filepath.Join(directory, "ca.crt")
 	certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
-	if err := os.WriteFile(certificateFile, certificatePEM, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: encryptedKey}), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(caFile, certificatePEM, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: encryptedKey})
 	tlsConfig, err := newTLSConfig(TLSConfig{
-		ClientCertFile:    certificateFile,
-		ClientKeyFile:     keyFile,
+		ClientCertBase64:  base64.StdEncoding.EncodeToString(certificatePEM),
+		ClientKeyBase64:   base64.StdEncoding.EncodeToString(privateKeyPEM),
 		ClientKeyPassword: "password",
-		CACertFile:        caFile,
+		CACertBase64:      base64.StdEncoding.EncodeToString(certificatePEM),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(tlsConfig.Certificates) != 1 || tlsConfig.RootCAs == nil {
 		t.Fatal("client certificate or CA pool was not loaded")
+	}
+	if _, err := newTLSConfig(TLSConfig{
+		ClientCertBase64:  base64.StdEncoding.EncodeToString(certificatePEM),
+		ClientKeyBase64:   base64.StdEncoding.EncodeToString(privateKeyPEM),
+		ClientKeyPassword: "password",
+	}); err != nil {
+		t.Fatalf("newTLSConfig() without custom CA error = %v", err)
 	}
 }

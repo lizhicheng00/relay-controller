@@ -33,10 +33,10 @@ func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "240")
 	t.Setenv("SERVER_ADDRESS", "10.0.0.1:9443")
 	t.Setenv("MGMT_SERVICE_URL", "https://mgmt.example.com")
-	t.Setenv("MGMT_CLIENT_CERT_FILE", "/run/secrets/client.crt")
-	t.Setenv("MGMT_CLIENT_KEY_FILE", "/run/secrets/client.key")
+	t.Setenv("MGMT_CLIENT_CERT_BASE64", "certificate")
+	t.Setenv("MGMT_CLIENT_KEY_BASE64", "private-key")
 	t.Setenv("MGMT_CLIENT_KEY_PASSWORD", "secret")
-	t.Setenv("MGMT_CA_CERT_FILE", "/run/secrets/ca.crt")
+	t.Setenv("MGMT_CA_CERT_BASE64", "ca-certificate")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -45,9 +45,9 @@ func TestLoadReadsOverrides(t *testing.T) {
 		cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 {
 		t.Fatalf("relay overrides = %#v", cfg.Relay)
 	}
-	if cfg.Management.ClientCertFile != "/run/secrets/client.crt" ||
-		cfg.Management.ClientKeyFile != "/run/secrets/client.key" ||
-		cfg.Management.ClientKeyPassword != "secret" || cfg.Management.CACertFile != "/run/secrets/ca.crt" {
+	if cfg.Management.ClientCertBase64 != "certificate" ||
+		cfg.Management.ClientKeyBase64 != "private-key" ||
+		cfg.Management.ClientKeyPassword != "secret" || cfg.Management.CACertBase64 != "ca-certificate" {
 		t.Fatalf("management overrides = %#v", cfg.Management)
 	}
 }
