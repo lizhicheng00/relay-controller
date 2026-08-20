@@ -37,6 +37,7 @@ type Client struct {
 }
 
 type TLSConfig struct {
+	ServerName        string
 	ClientCertBase64  string
 	ClientKeyBase64   string
 	ClientKeyPassword string
@@ -112,6 +113,7 @@ func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	}
 	return &tls.Config{
 		MinVersion:   tls.VersionTLS12,
+		ServerName:   cfg.ServerName,
 		Certificates: []tls.Certificate{certificate},
 		RootCAs:      roots,
 	}, nil
