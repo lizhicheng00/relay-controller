@@ -103,6 +103,12 @@ func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		if !roots.AppendCertsFromPEM(caPEM) {
 			return nil, fmt.Errorf("management service CA certificate is invalid")
 		}
+	} else if len(certificate.Certificate) > 1 {
+		issuer, err := x509.ParseCertificate(certificate.Certificate[len(certificate.Certificate)-1])
+		if err != nil {
+			return nil, fmt.Errorf("parse client certificate issuer: %w", err)
+		}
+		roots.AddCert(issuer)
 	}
 	return &tls.Config{
 		MinVersion:   tls.VersionTLS12,

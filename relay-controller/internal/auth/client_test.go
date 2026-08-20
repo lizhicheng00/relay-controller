@@ -73,7 +73,8 @@ func TestTLSConfigLoadsEncryptedClientKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
+	certificateBlock := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
+	certificatePEM := append(append([]byte{}, certificateBlock...), certificateBlock...)
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: encryptedKey})
 	tlsConfig, err := newTLSConfig(TLSConfig{
 		ClientCertBase64:  base64.StdEncoding.EncodeToString(certificatePEM),
@@ -87,11 +88,22 @@ func TestTLSConfigLoadsEncryptedClientKey(t *testing.T) {
 	if len(tlsConfig.Certificates) != 1 || tlsConfig.RootCAs == nil {
 		t.Fatal("client certificate or CA pool was not loaded")
 	}
-	if _, err := newTLSConfig(TLSConfig{
+	withoutCustomCA, err := newTLSConfig(TLSConfig{
 		ClientCertBase64:  base64.StdEncoding.EncodeToString(certificatePEM),
 		ClientKeyBase64:   base64.StdEncoding.EncodeToString(privateKeyPEM),
 		ClientKeyPassword: "password",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("newTLSConfig() without custom CA error = %v", err)
+	}
+	parsedCertificate, err := x509.ParseCertificate(certificateDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parsedCertificate.Verify(x509.VerifyOptions{
+		Roots:     withoutCustomCA.RootCAs,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}); err != nil {
+		t.Fatalf("client certificate chain issuer was not trusted: %v", err)
 	}
 }

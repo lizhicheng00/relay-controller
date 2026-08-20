@@ -66,7 +66,7 @@ Environment variables:
 | `MGMT_CLIENT_CERT_BASE64` | Base64-encoded client certificate PEM used for Management Service mTLS |
 | `MGMT_CLIENT_KEY_BASE64` | Base64-encoded client private-key PEM used for Management Service mTLS |
 | `MGMT_CLIENT_KEY_PASSWORD` | Client-key password when the key is encrypted PKCS#8; omit for an unencrypted key |
-| `MGMT_CA_CERT_BASE64` | Optional Base64-encoded PEM CA for the Management Service certificate; system roots are always retained |
+| `MGMT_CA_CERT_BASE64` | Optional Base64-encoded PEM CA for the Management Service certificate; otherwise the issuer bundled in `MGMT_CLIENT_CERT_BASE64` and system roots are used |
 | `DATASOURCE_URL` | `jdbc:mariadb://host:3306/database` or `jdbc:mysql://...` |
 | `DATASOURCE_USERNAME` | Database user |
 | `DATASOURCE_PASSWORD` | Database password |
@@ -116,6 +116,6 @@ The service applies embedded migrations before opening the application store. Ap
 
 The caller supplies only `X-API-Key`. Relay Controller resolves it through Management Service over mTLS, requires `scope=devbridge`, and places the returned namespace identity in request context. Caller-supplied namespace headers are ignored. Missing or invalid credentials return `401`, an incompatible scope returns `403`, and a Management Service failure returns `503`.
 
-The API key Check endpoint remains owned by Management Service because it owns key hashes and identity mappings. Relay Controller owns when that check is required. Public HTTPS terminates at the gateway; the Relay HTTP listener remains private. Relay authenticates itself to Management Service with its client certificate and verifies the Management Service certificate against the configured private CA or the system trust store.
+The API key Check endpoint remains owned by Management Service because it owns key hashes and identity mappings. Relay Controller owns when that check is required. Public HTTPS terminates at the gateway; the Relay HTTP listener remains private. Relay authenticates itself to Management Service with its client certificate and verifies the Management Service certificate against an explicitly configured CA, the issuer bundled in the client certificate chain, or the system trust store.
 
 Gateway enforces data-plane limits such as one Host per tunnel, bandwidth, HTTP request rate, and concurrent connections. The Controller's in-memory request limiter is only a bounded per-instance safety limit; strict cross-replica API limiting belongs at ingress.
