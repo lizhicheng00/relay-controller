@@ -59,20 +59,16 @@ func NewClient(baseURL string, cfg TLSConfig) (*Client, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = tlsConfig
-	return newClient(endpoint, &http.Client{
-		Transport: transport,
-		Timeout:   3 * time.Second,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}), nil
-}
-
-func newClient(endpoint string, httpClient *http.Client) *Client {
 	return &Client{
-		endpoint:   endpoint,
-		httpClient: httpClient,
-	}
+		endpoint: endpoint,
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   3 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+	}, nil
 }
 
 func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
@@ -120,13 +116,12 @@ func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 }
 
 func loadKeyPair(certificatePEM, privateKeyPEM []byte, password string) (tls.Certificate, error) {
-	certificate, err := tls.X509KeyPair(certificatePEM, privateKeyPEM)
-	if err == nil || password == "" {
-		return certificate, err
-	}
 	block, _ := pem.Decode(privateKeyPEM)
 	if block == nil || block.Type != "ENCRYPTED PRIVATE KEY" {
-		return tls.Certificate{}, err
+		return tls.X509KeyPair(certificatePEM, privateKeyPEM)
+	}
+	if password == "" {
+		return tls.Certificate{}, fmt.Errorf("client key password is required")
 	}
 	privateKey, err := pkcs8.ParsePKCS8PrivateKey(block.Bytes, []byte(password))
 	if err != nil {
@@ -151,12 +146,11 @@ func (c *Client) ResolveAPIKey(ctx context.Context, apiKey string) (Principal, e
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode == http.StatusUnauthorized {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		return Principal{}, ErrUnauthorized
-	}
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+		if response.StatusCode == http.StatusUnauthorized {
+			return Principal{}, ErrUnauthorized
+		}
 		return Principal{}, fmt.Errorf("check API key: management service returned %s", response.Status)
 	}
 	var principal Principal

@@ -35,11 +35,6 @@ func MaskAPIKey(value string) string {
 	return prefix + "_" + payload[:4] + "..." + payload[len(payload)-4:]
 }
 
-func DigestAPIKey(value string) ([]byte, error) {
-	_, digest, err := ParseAPIKey(value)
-	return digest, err
-}
-
 func ParseAPIKey(value string) (core.APIKeyScope, []byte, error) {
 	scope, _, ok := splitAPIKey(value)
 	if !ok {

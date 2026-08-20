@@ -80,10 +80,6 @@ func NewError(status int, code, message string) *AppError {
 	return &AppError{Status: status, Code: code, Message: message}
 }
 
-func Invalid(message string) *AppError {
-	return NewError(http.StatusBadRequest, CodeParamInvalid, message)
-}
-
 func InvalidField(target, message string) *AppError {
 	return &AppError{
 		Status: http.StatusBadRequest, Code: CodeParamInvalid, Message: "request validation failed",

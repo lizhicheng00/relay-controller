@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -26,6 +27,11 @@ type repository interface {
 type Service struct {
 	store repository
 }
+
+var (
+	identityPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	keyIDPattern    = regexp.MustCompile(`^[a-z2-7]{26}$`)
+)
 
 func New(repository repository) *Service {
 	return &Service{store: repository}
@@ -123,7 +129,7 @@ func (s *Service) DeleteAPIKey(
 	assertion core.IdentityAssertion,
 	keyID string,
 ) error {
-	if !validKeyID(keyID) {
+	if !keyIDPattern.MatchString(keyID) {
 		return core.Invalid("keyId", "keyId is invalid")
 	}
 	identity, err := s.resolveIdentity(ctx, assertion)
@@ -175,10 +181,8 @@ func validateAPIKeyName(value string) (string, error) {
 	if value == "" || utf8.RuneCountInString(value) > 64 {
 		return "", core.Invalid("name", "name must contain 1 to 64 characters")
 	}
-	for _, char := range value {
-		if unicode.IsControl(char) {
-			return "", core.Invalid("name", "name contains an invalid character")
-		}
+	if strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		return "", core.Invalid("name", "name contains an invalid character")
 	}
 	if strings.EqualFold(value, core.DefaultAPIKeyName) {
 		return "", core.Invalid("name", "name is reserved")
@@ -187,31 +191,7 @@ func validateAPIKeyName(value string) (string, error) {
 }
 
 func validIdentifier(value string) bool {
-	if len(value) == 0 || len(value) > 128 {
-		return false
-	}
-	for index, char := range value {
-		if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' ||
-			char >= '0' && char <= '9' || index > 0 && strings.ContainsRune("._:-", char) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func validKeyID(value string) bool {
-	if len(value) != 26 {
-		return false
-	}
-	for _, char := range value {
-		if char < 'a' || char > 'z' {
-			if char < '2' || char > '7' {
-				return false
-			}
-		}
-	}
-	return true
+	return identityPattern.MatchString(value)
 }
 
 func mapStoreError(operation, target string, err error) error {

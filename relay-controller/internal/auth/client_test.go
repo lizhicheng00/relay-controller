@@ -26,7 +26,7 @@ func TestClientResolvesAPIKey(t *testing.T) {
 		_, _ = response.Write([]byte(`{"accountNamespace":"ns-account","namespace":"ns-user","scope":"devbridge"}`))
 	}))
 	defer server.Close()
-	client := newClient(server.URL+checkPath, server.Client())
+	client := &Client{endpoint: server.URL + checkPath, httpClient: server.Client()}
 	principal, err := client.ResolveAPIKey(context.Background(), "devbridge_test")
 	if err != nil || principal.Namespace != "ns-user" || principal.AccountNamespace != "ns-account" || principal.Scope != "devbridge" {
 		t.Fatalf("ResolveAPIKey() = %#v, %v", principal, err)
@@ -38,7 +38,7 @@ func TestClientMapsUnauthorized(t *testing.T) {
 		response.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
-	client := newClient(server.URL+checkPath, server.Client())
+	client := &Client{endpoint: server.URL + checkPath, httpClient: server.Client()}
 	if _, err := client.ResolveAPIKey(context.Background(), "invalid"); err != ErrUnauthorized {
 		t.Fatalf("ResolveAPIKey() error = %v", err)
 	}

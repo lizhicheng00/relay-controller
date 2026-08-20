@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"mgmt-service/internal/core"
-	"mgmt-service/internal/security"
 )
 
 //go:embed openapi.yaml
@@ -52,7 +51,7 @@ func New(api API, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET "+apiBase+"/api-keys", handler.listAPIKeys)
 	mux.HandleFunc("POST "+apiBase+"/api-keys", handler.createAPIKey)
 	mux.HandleFunc("DELETE "+apiBase+"/api-keys/{keyId}", handler.deleteAPIKey)
-	return handler.recover(handler.requestContext(mux))
+	return handler.recover(mux)
 }
 
 func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http.Request) {
@@ -61,15 +60,11 @@ func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.IssueDefaultAPIKey(request.Context(), core.IdentityAssertion{
-		DomainID: request.Header.Get("X-Domain-Id"),
-		UserID:   request.Header.Get("X-User-Id"),
-	}, input.Scope)
+	result, err := h.api.IssueDefaultAPIKey(request.Context(), identityAssertion(request), input.Scope)
 	if err != nil {
 		h.writeError(response, err)
 		return
 	}
-	response.Header().Set("Cache-Control", "no-store")
 	writeJSON(response, http.StatusOK, result)
 }
 
@@ -123,17 +118,10 @@ func (h *Handler) openapi(response http.ResponseWriter, _ *http.Request) {
 	_, _ = response.Write(openAPISpec)
 }
 
-func (h *Handler) requestContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("X-Request-Id", security.NewID("req_"))
-		response.Header().Set("X-Content-Type-Options", "nosniff")
-		response.Header().Set("Cache-Control", "no-store")
-		next.ServeHTTP(response, request)
-	})
-}
-
 func (h *Handler) recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("X-Content-Type-Options", "nosniff")
+		response.Header().Set("Cache-Control", "no-store")
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				h.log.Error("request panic", "method", request.Method, "path", request.URL.Path,

@@ -339,14 +339,8 @@ func ensurePeriod(ctx context.Context, tx *store.Store, accountID uint64, plan c
 }
 
 func validateCreateTunnel(request core.CreateTunnelRequest) (string, error) {
-	if strings.TrimSpace(request.Name) == "" {
-		return "", core.InvalidField("name", "must not be blank")
-	}
-	if utf8.RuneCountInString(request.Name) > 128 {
-		return "", core.InvalidField("name", "must not exceed 128 characters")
-	}
-	if request.Description != nil && utf8.RuneCountInString(*request.Description) > 512 {
-		return "", core.InvalidField("description", "must not exceed 512 characters")
+	if err := validateTunnelText(&request.Name, request.Description); err != nil {
+		return "", err
 	}
 	if request.Type == nil || strings.TrimSpace(*request.Type) == "" {
 		return "bridge", nil
@@ -355,15 +349,17 @@ func validateCreateTunnel(request core.CreateTunnelRequest) (string, error) {
 }
 
 func validateUpdateTunnel(request core.UpdateTunnelRequest) error {
-	if request.Name != nil {
-		if strings.TrimSpace(*request.Name) == "" {
-			return core.InvalidField("name", "must not be blank")
-		}
-		if utf8.RuneCountInString(*request.Name) > 128 {
-			return core.InvalidField("name", "must not exceed 128 characters")
-		}
+	return validateTunnelText(request.Name, request.Description)
+}
+
+func validateTunnelText(name, description *string) error {
+	if name != nil && strings.TrimSpace(*name) == "" {
+		return core.InvalidField("name", "must not be blank")
 	}
-	if request.Description != nil && utf8.RuneCountInString(*request.Description) > 512 {
+	if name != nil && utf8.RuneCountInString(*name) > 128 {
+		return core.InvalidField("name", "must not exceed 128 characters")
+	}
+	if description != nil && utf8.RuneCountInString(*description) > 512 {
 		return core.InvalidField("description", "must not exceed 512 characters")
 	}
 	return nil

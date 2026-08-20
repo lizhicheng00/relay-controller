@@ -52,14 +52,14 @@ func (s *Store) FindTunnel(ctx context.Context, tunnelID, region string) (core.T
 	row := s.exec.QueryRowContext(ctx, `SELECT `+tunnelColumns+`
 		FROM tunnel t INNER JOIN cluster c ON c.cluster_id = t.cluster_id
 		WHERE t.tunnel_id = ? AND c.region = ? AND t.deleted = 0 LIMIT 1`, tunnelID, region)
-	return scanTunnel(row)
+	return scanTunnel(row, false)
 }
 
 func (s *Store) LockTunnel(ctx context.Context, tunnelID, region string) (core.Tunnel, error) {
 	row := s.exec.QueryRowContext(ctx, `SELECT `+tunnelColumns+`
 		FROM tunnel t INNER JOIN cluster c ON c.cluster_id = t.cluster_id
 		WHERE t.tunnel_id = ? AND c.region = ? AND t.deleted = 0 LIMIT 1 FOR UPDATE`, tunnelID, region)
-	return scanTunnel(row)
+	return scanTunnel(row, false)
 }
 
 func (s *Store) ListActiveTunnels(ctx context.Context, namespace, clusterID, region string, now int64) ([]core.Tunnel, error) {
@@ -80,7 +80,7 @@ func (s *Store) ListActiveTunnels(ctx context.Context, namespace, clusterID, reg
 	defer rows.Close()
 	result := make([]core.Tunnel, 0)
 	for rows.Next() {
-		tunnel, err := scanTunnelWithPortCount(rows)
+		tunnel, err := scanTunnel(rows, true)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func (s *Store) LockNamespaceTunnels(ctx context.Context, namespace, region stri
 	defer rows.Close()
 	var result []core.Tunnel
 	for rows.Next() {
-		tunnel, err := scanTunnel(rows)
+		tunnel, err := scanTunnel(rows, false)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (s *Store) LockAgedTunnels(ctx context.Context, region string, cutoff int64
 	defer rows.Close()
 	var result []core.Tunnel
 	for rows.Next() {
-		tunnel, err := scanTunnel(rows)
+		tunnel, err := scanTunnel(rows, false)
 		if err != nil {
 			return nil, err
 		}
@@ -275,29 +275,16 @@ func (s *Store) DeletePort(ctx context.Context, id uint64) error {
 	return requireOneRow(result, "delete tunnel port")
 }
 
-func scanTunnel(row scanner) (core.Tunnel, error) {
+func scanTunnel(row scanner, withPortCount bool) (core.Tunnel, error) {
 	var tunnel core.Tunnel
 	var description sql.NullString
-	err := row.Scan(&tunnel.ID, &tunnel.Name, &tunnel.TunnelID, &tunnel.TunnelCode, &tunnel.ClusterID,
+	fields := []any{&tunnel.ID, &tunnel.Name, &tunnel.TunnelID, &tunnel.TunnelCode, &tunnel.ClusterID,
 		&tunnel.Expiration, &tunnel.ExpirationHours, &tunnel.Namespace, &tunnel.AccountID, &description,
-		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.CreatedAt, &tunnel.UpdatedAt)
-	if err != nil {
-		return core.Tunnel{}, err
+		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.CreatedAt, &tunnel.UpdatedAt}
+	if withPortCount {
+		fields = append(fields, &tunnel.PortCount)
 	}
-	if description.Valid {
-		tunnel.Description = &description.String
-	}
-	return tunnel, nil
-}
-
-func scanTunnelWithPortCount(row scanner) (core.Tunnel, error) {
-	var tunnel core.Tunnel
-	var description sql.NullString
-	err := row.Scan(&tunnel.ID, &tunnel.Name, &tunnel.TunnelID, &tunnel.TunnelCode, &tunnel.ClusterID,
-		&tunnel.Expiration, &tunnel.ExpirationHours, &tunnel.Namespace, &tunnel.AccountID, &description,
-		&tunnel.BandwidthUsed, &tunnel.URL, &tunnel.Type, &tunnel.CreatedAt, &tunnel.UpdatedAt,
-		&tunnel.PortCount)
-	if err != nil {
+	if err := row.Scan(fields...); err != nil {
 		return core.Tunnel{}, err
 	}
 	if description.Valid {

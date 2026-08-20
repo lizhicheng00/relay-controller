@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -14,29 +15,17 @@ const max40Bit = uint64(1<<40) - 1
 
 var shanghai = time.FixedZone("Asia/Shanghai", 8*60*60)
 
+var (
+	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	tunnelIDPattern   = regexp.MustCompile(`^[a-z2-7]{8}$`)
+)
+
 func ValidIdentifier(value string) bool {
-	if len(value) < 1 || len(value) > 128 || !asciiLetterOrDigit(value[0]) {
-		return false
-	}
-	for index := 1; index < len(value); index++ {
-		character := value[index]
-		if !asciiLetterOrDigit(character) && character != '.' && character != '_' && character != '-' {
-			return false
-		}
-	}
-	return true
+	return identifierPattern.MatchString(value)
 }
 
 func ValidTunnelID(value string) bool {
-	if len(value) != 8 {
-		return false
-	}
-	for index := range value {
-		if (value[index] < 'a' || value[index] > 'z') && (value[index] < '2' || value[index] > '7') {
-			return false
-		}
-	}
-	return true
+	return tunnelIDPattern.MatchString(value)
 }
 
 func NormalizeTunnelType(value string) (string, error) {
@@ -94,8 +83,4 @@ func AddBytes(first, second uint64) (uint64, error) {
 		return 0, fmt.Errorf("byte counter overflow")
 	}
 	return first + second, nil
-}
-
-func asciiLetterOrDigit(value byte) bool {
-	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z' || value >= '0' && value <= '9'
 }

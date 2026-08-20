@@ -18,10 +18,6 @@ func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	if !strings.HasPrefix(devbridge, "devbridge_") {
 		t.Fatalf("invalid DevBridge API key = %q", devbridge)
 	}
-	parsed, err := DigestAPIKey(first)
-	if err != nil || !bytes.Equal(parsed, firstDigest) {
-		t.Fatalf("DigestAPIKey() = %x, %v", parsed, err)
-	}
 	scope, parsed, err := ParseAPIKey(first)
 	if err != nil || scope != core.APIKeyScopeDevBox || !bytes.Equal(parsed, firstDigest) {
 		t.Fatalf("ParseAPIKey() = %q, %x, %v", scope, parsed, err)
@@ -32,15 +28,15 @@ func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	}
 }
 
-func TestDigestAPIKeyRejectsMalformedValues(t *testing.T) {
+func TestParseAPIKeyRejectsMalformedValues(t *testing.T) {
 	for _, value := range []string{
 		"short",
 		strings.Repeat("a", 32),
 		"unknown_" + strings.Repeat("a", 32),
 		"devbridge_" + strings.Repeat("+", 32),
 	} {
-		if _, err := DigestAPIKey(value); err == nil {
-			t.Fatalf("DigestAPIKey(%q) succeeded", value)
+		if _, _, err := ParseAPIKey(value); err == nil {
+			t.Fatalf("ParseAPIKey(%q) succeeded", value)
 		}
 	}
 }

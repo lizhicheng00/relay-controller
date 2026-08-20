@@ -1,9 +1,7 @@
 package httpapi
 
 import (
-	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 
 const (
 	rateWindow      = time.Minute
-	counterTTL      = 2 * rateWindow
 	maxRateCounters = 10_000
 )
 
@@ -27,7 +24,6 @@ type RateLimiter struct {
 
 type windowCounter struct {
 	windowStart time.Time
-	lastSeen    time.Time
 	count       int
 }
 
@@ -39,7 +35,8 @@ func NewRateLimiter(requestsPerMinute int) *RateLimiter {
 
 func (r *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if !isAPIPath(request.URL.Path) || r.Allow(rateKey(request)) {
+		principal, _ := auth.PrincipalFrom(request.Context())
+		if r.Allow(principal.Namespace) {
 			next.ServeHTTP(response, request)
 			return
 		}
@@ -54,7 +51,7 @@ func (r *RateLimiter) Allow(key string) bool {
 	defer r.mutex.Unlock()
 	if r.lastCleanup.IsZero() || now.Sub(r.lastCleanup) >= rateWindow {
 		for existingKey, counter := range r.counters {
-			if !counter.lastSeen.IsZero() && now.Sub(counter.lastSeen) > counterTTL {
+			if now.Sub(counter.windowStart) >= 2*rateWindow {
 				delete(r.counters, existingKey)
 			}
 		}
@@ -68,24 +65,7 @@ func (r *RateLimiter) Allow(key string) bool {
 		counter.windowStart = now
 		counter.count = 0
 	}
-	counter.lastSeen = now
 	counter.count++
 	r.counters[key] = counter
 	return counter.count <= r.limit
-}
-
-func rateKey(request *http.Request) string {
-	if principal, ok := auth.PrincipalFrom(request.Context()); ok {
-		return "namespace:" + principal.Namespace
-	}
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	if err == nil {
-		return "ip:" + host
-	}
-	return "ip:" + request.RemoteAddr
-}
-
-func isAPIPath(path string) bool {
-	return path == apiBase+"/auth/check" || path == apiBase+"/limits" ||
-		path == apiBase+"/tunnels" || strings.HasPrefix(path, apiBase+"/tunnels/")
 }

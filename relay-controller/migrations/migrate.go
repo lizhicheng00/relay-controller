@@ -6,7 +6,6 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"sort"
 	"strconv"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
@@ -17,12 +16,6 @@ import (
 
 //go:embed *.sql
 var files embed.FS
-
-type migration struct {
-	version uint64
-	name    string
-	script  string
-}
 
 func Run(ctx context.Context, database config.Database) error {
 	driverConfig, err := mysqldriver.ParseDSN(store.DataSourceName(database))
@@ -45,52 +38,40 @@ func Run(ctx context.Context, database config.Database) error {
 		return err
 	}
 
-	values, err := load()
+	entries, err := fs.ReadDir(files, ".")
 	if err != nil {
 		return err
 	}
-	for _, item := range values {
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		version, err := strconv.ParseUint(name[:6], 10, 64)
+		if err != nil {
+			return err
+		}
 		var applied bool
 		if err := db.QueryRowContext(ctx, `
 			SELECT EXISTS(SELECT 1 FROM schema_migration WHERE version = ?)`,
-			item.version).Scan(&applied); err != nil {
+			version).Scan(&applied); err != nil {
 			return err
 		}
 		if applied {
 			continue
 		}
-		if _, err := db.ExecContext(ctx, item.script); err != nil {
-			return fmt.Errorf("apply migration %s: %w", item.name, err)
+		script, err := files.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, string(script)); err != nil {
+			return fmt.Errorf("apply migration %s: %w", name, err)
 		}
 		if _, err := db.ExecContext(ctx, `
 			INSERT INTO schema_migration (version, name) VALUES (?, ?)`,
-			item.version, item.name); err != nil {
+			version, name); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func load() ([]migration, error) {
-	entries, err := fs.ReadDir(files, ".")
-	if err != nil {
-		return nil, err
-	}
-	values := make([]migration, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		version, err := strconv.ParseUint(entry.Name()[:6], 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		script, err := files.ReadFile(entry.Name())
-		if err != nil {
-			return nil, err
-		}
-		values = append(values, migration{version: version, name: entry.Name(), script: string(script)})
-	}
-	sort.Slice(values, func(left, right int) bool { return values[left].version < values[right].version })
-	return values, nil
 }

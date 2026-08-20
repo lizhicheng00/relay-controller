@@ -104,9 +104,9 @@ func TestIssueDefaultAPIKeyRotates(t *testing.T) {
 		!strings.HasPrefix(first.APIKey, "devbridge_") {
 		t.Fatalf("credentials = %#v, %#v", first, second)
 	}
-	digest, _ := security.DigestAPIKey(second.APIKey)
+	_, digest, _ := security.ParseAPIKey(second.APIKey)
 	if !bytes.Equal(digest, repository.defaultKey.Digest) ||
-		!validKeyID(repository.defaultKey.ID) ||
+		!keyIDPattern.MatchString(repository.defaultKey.ID) ||
 		repository.defaultKey.Name != core.DefaultAPIKeyName ||
 		repository.defaultKey.Scope != core.APIKeyScopeDevBridge {
 		t.Fatalf("default key = %#v", repository.defaultKey)
@@ -142,12 +142,12 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if issued.APIKey != created || !strings.HasPrefix(issued.Value, "devbox_") ||
-		!validKeyID(repository.createdKey.ID) ||
+		!keyIDPattern.MatchString(repository.createdKey.ID) ||
 		repository.createdKey.Name != "local-cli" ||
 		repository.createdKey.Scope != core.APIKeyScopeDevBox {
 		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKey)
 	}
-	digest, err := security.DigestAPIKey(issued.Value)
+	_, digest, err := security.ParseAPIKey(issued.Value)
 	if err != nil || !bytes.Equal(digest, repository.createdKey.Digest) {
 		t.Fatalf("issued digest = %x, %v", digest, err)
 	}

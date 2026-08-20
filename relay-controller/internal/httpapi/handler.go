@@ -74,11 +74,7 @@ func (*Handler) checkAuthentication(response http.ResponseWriter, _ *http.Reques
 }
 
 func (h *Handler) createTunnel(response http.ResponseWriter, request *http.Request) {
-	namespace, accountNamespace, err := requestContext(request)
-	if err != nil {
-		h.writeError(response, err)
-		return
-	}
+	namespace, accountNamespace := requestContext(request)
 	var body core.CreateTunnelRequest
 	if err := decodeJSON(response, request, &body); err != nil {
 		h.writeError(response, err)
@@ -89,11 +85,7 @@ func (h *Handler) createTunnel(response http.ResponseWriter, request *http.Reque
 }
 
 func (h *Handler) listTunnels(response http.ResponseWriter, request *http.Request) {
-	namespace, _, err := requestContext(request)
-	if err != nil {
-		h.writeError(response, err)
-		return
-	}
+	namespace, _ := requestContext(request)
 	result, err := h.api.ListTunnels(request.Context(), namespace, request.URL.Query().Get("clusterId"))
 	h.writeResult(response, result, err)
 }
@@ -134,11 +126,7 @@ func (h *Handler) deleteTunnel(response http.ResponseWriter, request *http.Reque
 }
 
 func (h *Handler) deleteTunnels(response http.ResponseWriter, request *http.Request) {
-	namespace, _, err := requestContext(request)
-	if err != nil {
-		h.writeError(response, err)
-		return
-	}
+	namespace, _ := requestContext(request)
 	result, err := h.api.DeleteTunnels(request.Context(), namespace)
 	h.writeResult(response, result, err)
 }
@@ -225,11 +213,7 @@ func (h *Handler) deletePort(response http.ResponseWriter, request *http.Request
 }
 
 func (h *Handler) getLimits(response http.ResponseWriter, request *http.Request) {
-	_, accountNamespace, err := requestContext(request)
-	if err != nil {
-		h.writeError(response, err)
-		return
-	}
+	_, accountNamespace := requestContext(request)
 	result, err := h.api.GetLimits(request.Context(), accountNamespace)
 	h.writeResult(response, result, err)
 }
@@ -262,19 +246,13 @@ func (h *Handler) recover(next http.Handler) http.Handler {
 	})
 }
 
-func requestContext(request *http.Request) (string, string, error) {
-	principal, ok := auth.PrincipalFrom(request.Context())
-	if !ok {
-		return "", "", core.Internal(errors.New("authenticated principal is missing"))
-	}
-	return principal.Namespace, principal.AccountNamespace, nil
+func requestContext(request *http.Request) (string, string) {
+	principal, _ := auth.PrincipalFrom(request.Context())
+	return principal.Namespace, principal.AccountNamespace
 }
 
 func tunnelContext(request *http.Request) (string, string, error) {
-	namespace, _, err := requestContext(request)
-	if err != nil {
-		return "", "", err
-	}
+	namespace, _ := requestContext(request)
 	tunnelID := request.PathValue("tunnelId")
 	if !core.ValidTunnelID(tunnelID) {
 		return "", "", core.InvalidField("tunnelId", "is invalid")

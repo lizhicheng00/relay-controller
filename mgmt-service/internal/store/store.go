@@ -61,45 +61,37 @@ func (s *Store) IssueDefaultAPIKey(
 	seed core.IdentitySeed,
 	defaultKey core.NewAPIKey,
 ) (core.Identity, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return core.Identity{}, fmt.Errorf("begin default API key transaction: %w", err)
-	}
-	defer rollback(tx)
-
-	identity, err := ensureIdentity(ctx, tx, assertion, seed)
-	if err != nil {
-		return core.Identity{}, err
-	}
-
-	var existingDefaultID string
-	err = tx.QueryRowContext(ctx, `
-		SELECT id FROM api_key
-		WHERE namespace = ? AND key_scope = ? AND slot = 0
-		FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefaultID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
-			VALUES (?, ?, 0, ?, ?, ?, ?)`,
-			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
-			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
-	case err == nil:
-		_, err = tx.ExecContext(ctx, `
-			UPDATE api_key
-			SET name = ?, key_mask = ?, key_hash = ?,
-			    created_at = UTC_TIMESTAMP(6), last_used_at = NULL
-			WHERE id = ?`,
-			core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
-	}
-	if err != nil {
-		return core.Identity{}, fmt.Errorf("store default API key: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return core.Identity{}, fmt.Errorf("commit default API key transaction: %w", err)
-	}
-	return identity, nil
+	var identity core.Identity
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		identity, err = ensureIdentity(ctx, tx, assertion, seed)
+		if err != nil {
+			return err
+		}
+		var existingDefaultID string
+		err = tx.QueryRowContext(ctx, `
+			SELECT id FROM api_key
+			WHERE namespace = ? AND key_scope = ? AND slot = 0
+			FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefaultID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			_, err = tx.ExecContext(ctx, `
+				INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
+				VALUES (?, ?, 0, ?, ?, ?, ?)`,
+				defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
+				defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
+		case err == nil:
+			_, err = tx.ExecContext(ctx, `
+				UPDATE api_key
+				SET name = ?, key_mask = ?, key_hash = ?, created_at = UTC_TIMESTAMP(6), last_used_at = NULL
+				WHERE id = ?`, core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
+		}
+		if err != nil {
+			return fmt.Errorf("store default API key: %w", err)
+		}
+		return nil
+	})
+	return identity, err
 }
 
 func (s *Store) EnsureIdentity(
@@ -107,20 +99,13 @@ func (s *Store) EnsureIdentity(
 	assertion core.IdentityAssertion,
 	seed core.IdentitySeed,
 ) (core.Identity, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return core.Identity{}, fmt.Errorf("begin identity transaction: %w", err)
-	}
-	defer rollback(tx)
-
-	identity, err := ensureIdentity(ctx, tx, assertion, seed)
-	if err != nil {
-		return core.Identity{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return core.Identity{}, fmt.Errorf("commit identity transaction: %w", err)
-	}
-	return identity, nil
+	var identity core.Identity
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		identity, err = ensureIdentity(ctx, tx, assertion, seed)
+		return err
+	})
+	return identity, err
 }
 
 func ensureIdentity(
@@ -265,69 +250,50 @@ func (s *Store) CreateAPIKey(
 	namespace string,
 	key core.NewAPIKey,
 ) (core.APIKey, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return core.APIKey{}, fmt.Errorf("begin API key transaction: %w", err)
-	}
-	defer rollback(tx)
-
-	if err := lockIdentity(ctx, tx, namespace); err != nil {
-		return core.APIKey{}, err
-	}
-	slot, err := availableSlot(ctx, tx, namespace, key.Scope, key.Name)
-	if err != nil {
-		return core.APIKey{}, err
-	}
-
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		key.ID, namespace, slot, key.Name, key.Scope, key.Mask, key.Digest)
-	if err != nil {
-		var mysqlError *mysqldriver.MySQLError
-		if errors.As(err, &mysqlError) && mysqlError.Number == 1062 {
-			return core.APIKey{}, ErrNameConflict
+	var created core.APIKey
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		if err := lockIdentity(ctx, tx, namespace); err != nil {
+			return err
 		}
-		return core.APIKey{}, fmt.Errorf("create API key: %w", err)
-	}
-	created, err := queryAPIKey(ctx, tx, namespace, key.ID)
-	if err != nil {
-		return core.APIKey{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return core.APIKey{}, fmt.Errorf("commit API key transaction: %w", err)
-	}
-	return created, nil
+		slot, err := availableSlot(ctx, tx, namespace, key.Scope, key.Name)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			key.ID, namespace, slot, key.Name, key.Scope, key.Mask, key.Digest)
+		if err != nil {
+			var mysqlError *mysqldriver.MySQLError
+			if errors.As(err, &mysqlError) && mysqlError.Number == 1062 {
+				return ErrNameConflict
+			}
+			return fmt.Errorf("create API key: %w", err)
+		}
+		created, err = queryAPIKey(ctx, tx, namespace, key.ID)
+		return err
+	})
+	return created, err
 }
 
 func (s *Store) DeleteAPIKey(ctx context.Context, namespace, keyID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin API key deletion: %w", err)
-	}
-	defer rollback(tx)
-
-	if err := lockIdentity(ctx, tx, namespace); err != nil {
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		if err := lockIdentity(ctx, tx, namespace); err != nil {
+			return err
+		}
+		var slot int
+		err := tx.QueryRowContext(ctx, `
+			SELECT slot FROM api_key WHERE namespace = ? AND id = ? FOR UPDATE`,
+			namespace, keyID).Scan(&slot)
+		if err != nil {
+			return mapQueryError("load API key", err)
+		}
+		if slot == 0 {
+			return ErrDefaultKey
+		}
+		_, err = tx.ExecContext(ctx, `DELETE FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID)
 		return err
-	}
-	var slot int
-	err = tx.QueryRowContext(ctx, `
-		SELECT slot FROM api_key WHERE namespace = ? AND id = ? FOR UPDATE`,
-		namespace, keyID).Scan(&slot)
-	if err != nil {
-		return mapQueryError("load API key", err)
-	}
-	if slot == 0 {
-		return ErrDefaultKey
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM api_key WHERE namespace = ? AND id = ?`,
-		namespace, keyID); err != nil {
-		return fmt.Errorf("delete API key: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit API key deletion: %w", err)
-	}
-	return nil
+	})
 }
 
 func lockIdentity(ctx context.Context, tx *sql.Tx, namespace string) error {
@@ -413,4 +379,14 @@ func mapQueryError(operation string, err error) error {
 	return fmt.Errorf("%s: %w", operation, err)
 }
 
-func rollback(tx *sql.Tx) { _ = tx.Rollback() }
+func (s *Store) inTx(ctx context.Context, operation func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := operation(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

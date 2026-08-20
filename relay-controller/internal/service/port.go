@@ -75,12 +75,9 @@ func (s *Service) GetPort(ctx context.Context, namespace, tunnelID string, port 
 	if err != nil {
 		return core.TunnelPortResponse{}, err
 	}
-	tunnelPort, err := s.store.FindPort(ctx, tunnel.TunnelCode, port)
-	if errors.Is(err, sql.ErrNoRows) {
-		return core.TunnelPortResponse{}, core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
-	}
+	tunnelPort, err := findPort(ctx, s.store, tunnel.TunnelCode, port)
 	if err != nil {
-		return core.TunnelPortResponse{}, internal("find tunnel port", err)
+		return core.TunnelPortResponse{}, err
 	}
 	return core.PortResponse(tunnel, tunnelPort), nil
 }
@@ -101,12 +98,9 @@ func (s *Service) UpdatePort(ctx context.Context, namespace, tunnelID string, po
 		if err != nil {
 			return err
 		}
-		tunnelPort, err = tx.FindPort(ctx, tunnel.TunnelCode, port)
-		if errors.Is(err, sql.ErrNoRows) {
-			return core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
-		}
+		tunnelPort, err = findPort(ctx, tx, tunnel.TunnelCode, port)
 		if err != nil {
-			return internal("find tunnel port", err)
+			return err
 		}
 		if request.Protocol == nil && request.AllowAnonymous == nil {
 			return nil
@@ -137,12 +131,9 @@ func (s *Service) DeletePort(ctx context.Context, namespace, tunnelID string, po
 		if err != nil {
 			return err
 		}
-		tunnelPort, err := tx.FindPort(ctx, tunnel.TunnelCode, port)
-		if errors.Is(err, sql.ErrNoRows) {
-			return core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
-		}
+		tunnelPort, err := findPort(ctx, tx, tunnel.TunnelCode, port)
 		if err != nil {
-			return internal("find tunnel port", err)
+			return err
 		}
 		if err := tx.DeletePort(ctx, tunnelPort.ID); err != nil {
 			return internal("delete tunnel port", err)
@@ -174,4 +165,15 @@ func validateCreatePort(request core.CreateTunnelPortRequest) (uint16, string, b
 		return 0, "", false, core.InvalidField("allowAnonymous", "is required")
 	}
 	return uint16(*request.Port), protocol, *request.AllowAnonymous, nil
+}
+
+func findPort(ctx context.Context, database *store.Store, tunnelCode uint64, port uint16) (core.TunnelPort, error) {
+	tunnelPort, err := database.FindPort(ctx, tunnelCode, port)
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.TunnelPort{}, core.NewError(http.StatusNotFound, core.CodeTunnelPortNotFound, "tunnel port not found")
+	}
+	if err != nil {
+		return core.TunnelPort{}, internal("find tunnel port", err)
+	}
+	return tunnelPort, nil
 }

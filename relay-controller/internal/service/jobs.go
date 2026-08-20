@@ -213,19 +213,14 @@ func (s *Service) MaintainPartitions(ctx context.Context, now int64) error {
 }
 
 func (s *Service) runSettlement(ctx context.Context) {
-	settled := 0
-	for {
-		count, err := s.SettleBatch(ctx, settlementBatchSize)
-		if err != nil {
-			if ctx.Err() == nil {
-				s.log.Error("billing settlement failed", "error", err)
-			}
-			return
+	settled, err := runBatches(ctx, settlementBatchSize, func(ctx context.Context) (int, error) {
+		return s.SettleBatch(ctx, settlementBatchSize)
+	})
+	if err != nil {
+		if ctx.Err() == nil {
+			s.log.Error("billing settlement failed", "error", err)
 		}
-		settled += count
-		if count < settlementBatchSize {
-			break
-		}
+		return
 	}
 	if settled > 0 {
 		s.log.Info("billing settlement completed", "records", settled)
@@ -233,19 +228,14 @@ func (s *Service) runSettlement(ctx context.Context) {
 }
 
 func (s *Service) runCleanup(ctx context.Context) {
-	deleted := 0
-	for {
-		count, err := s.CleanupAgedTunnels(ctx, s.now().Unix())
-		if err != nil {
-			if ctx.Err() == nil {
-				s.log.Error("tunnel cleanup failed", "error", err)
-			}
-			return
+	deleted, err := runBatches(ctx, cleanupBatchSize, func(ctx context.Context) (int, error) {
+		return s.CleanupAgedTunnels(ctx, s.now().Unix())
+	})
+	if err != nil {
+		if ctx.Err() == nil {
+			s.log.Error("tunnel cleanup failed", "error", err)
 		}
-		deleted += count
-		if count < cleanupBatchSize {
-			break
-		}
+		return
 	}
 	if deleted > 0 {
 		s.log.Info("aged tunnels deleted", "region", s.region, "count", deleted)
@@ -264,25 +254,32 @@ func startJob(ctx context.Context, waitGroup *sync.WaitGroup, initialDelay, inte
 	waitGroup.Add(1)
 	go func() {
 		defer waitGroup.Done()
-		initial := time.NewTimer(initialDelay)
-		defer initial.Stop()
-		select {
-		case <-ctx.Done():
-			return
-		case <-initial.C:
-		}
-		job(ctx)
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		timer := time.NewTimer(initialDelay)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-timer.C:
 				job(ctx)
+				timer.Reset(interval)
 			}
 		}
 	}()
+}
+
+func runBatches(ctx context.Context, size int, batch func(context.Context) (int, error)) (int, error) {
+	total := 0
+	for {
+		count, err := batch(ctx)
+		if err != nil {
+			return total, err
+		}
+		total += count
+		if count < size {
+			return total, nil
+		}
+	}
 }
 
 func partitionBoundaries(latest *int64, currentHour int64) []int64 {
