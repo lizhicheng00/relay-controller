@@ -68,9 +68,7 @@ Environment variables:
 | `MGMT_CLIENT_KEY_BASE64` | Base64-encoded client private-key PEM used for Management Service mTLS |
 | `MGMT_CLIENT_KEY_PASSWORD` | Client-key password when the key is encrypted PKCS#8; omit for an unencrypted key |
 | `MGMT_CA_CERT_BASE64` | Optional Base64-encoded PEM CA for the Management Service certificate; otherwise the issuer bundled in `MGMT_CLIENT_CERT_BASE64` and system roots are used |
-| `DATASOURCE_URL` | `jdbc:mariadb://host:3306/database` or `jdbc:mysql://...` |
-| `DATASOURCE_USERNAME` | Database user |
-| `DATASOURCE_PASSWORD` | Database password |
+| `DATABASE_DSN` | MySQL DSN, for example `user:password@tcp(host:3306)/database` |
 | `RELAY_REGION` | Region owned by this instance, default `cn-north-4` |
 | `RELAY_DOMAIN` | Tunnel DNS suffix, default `myhuaweicloud.com` |
 | `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute, default `120` |
@@ -94,9 +92,7 @@ go build -trimpath -ldflags '-s -w' -o bin/relay-controller ./cmd
 For local development:
 
 ```bash
-export DATASOURCE_URL='jdbc:mariadb://127.0.0.1:3306/relay_controller'
-export DATASOURCE_USERNAME='relay_controller'
-export DATASOURCE_PASSWORD='<secret>'
+export DATABASE_DSN='relay_controller:<secret>@tcp(127.0.0.1:3306)/relay_controller?timeout=10s&readTimeout=30s&writeTimeout=30s'
 export RELAY_REGION='cn-north-4'
 export RELAY_DOMAIN='myhuaweicloud.com'
 export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'

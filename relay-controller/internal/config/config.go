@@ -19,16 +19,10 @@ const (
 )
 
 type Config struct {
-	Address    string
-	Database   Database
-	Relay      Relay
-	Management Management
-}
-
-type Database struct {
-	URL      string
-	Username string
-	Password string
+	Address     string
+	DatabaseDSN string
+	Relay       Relay
+	Management  Management
 }
 
 type Relay struct {
@@ -57,12 +51,8 @@ func Load() (Config, error) {
 		requestsPerMinute = parsed
 	}
 	return Config{
-		Address: valueOrDefault("SERVER_ADDRESS", defaultAddress),
-		Database: Database{
-			URL:      os.Getenv("DATASOURCE_URL"),
-			Username: os.Getenv("DATASOURCE_USERNAME"),
-			Password: getSecret("DATASOURCE_PASSWORD"),
-		},
+		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
+		DatabaseDSN: strings.TrimSpace(getSecret("DATABASE_DSN")),
 		Relay: Relay{
 			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
 			Region:            valueOrDefault("RELAY_REGION", defaultRelayRegion),

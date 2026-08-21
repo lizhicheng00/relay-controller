@@ -17,22 +17,18 @@ import (
 	"testing"
 	"time"
 
-	"relay-controller/internal/config"
 	"relay-controller/internal/core"
 	"relay-controller/internal/security"
 	"relay-controller/internal/store"
 )
 
 func TestServiceAgainstMariaDB(t *testing.T) {
-	databaseURL := os.Getenv("RELAY_INTEGRATION_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("RELAY_INTEGRATION_DATABASE_URL is not set")
+	dsn := os.Getenv("RELAY_INTEGRATION_DATABASE_DSN")
+	if dsn == "" {
+		t.Skip("RELAY_INTEGRATION_DATABASE_DSN is not set")
 	}
 	ctx := context.Background()
-	database, err := store.Open(ctx, config.Database{
-		URL: databaseURL, Username: os.Getenv("RELAY_INTEGRATION_DATABASE_USERNAME"),
-		Password: os.Getenv("RELAY_INTEGRATION_DATABASE_PASSWORD"),
-	})
+	database, err := store.Open(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

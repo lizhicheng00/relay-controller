@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"relay-controller/internal/config"
 )
 
 type executor interface {
@@ -35,8 +34,12 @@ const (
 	lockReleaseTimeout = 5 * time.Second
 )
 
-func Open(ctx context.Context, cfg config.Database) (*Store, error) {
-	db, err := sql.Open("mysql", DataSourceName(cfg))
+func Open(ctx context.Context, dsn string) (*Store, error) {
+	dsn, err := dataSourceName(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse database DSN: %w", err)
+	}
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -123,24 +126,18 @@ func isDuplicateKey(err error, key string) bool {
 		strings.Contains(mysqlError.Message, key)
 }
 
-func DataSourceName(cfg config.Database) string {
-	address := strings.TrimPrefix(cfg.URL, "jdbc:mariadb://")
-	address = strings.TrimPrefix(address, "jdbc:mysql://")
-	address, _, _ = strings.Cut(address, "?")
-	address, database, _ := strings.Cut(address, "/")
-
-	driverConfig := mysql.NewConfig()
-	driverConfig.User = cfg.Username
-	driverConfig.Passwd = cfg.Password
-	driverConfig.Net = "tcp"
-	driverConfig.Addr = address
-	driverConfig.DBName = database
+func dataSourceName(dsn string) (string, error) {
+	driverConfig, err := mysql.ParseDSN(strings.TrimSpace(dsn))
+	if err != nil {
+		return "", err
+	}
 	driverConfig.ClientFoundRows = true
 	driverConfig.ParseTime = true
-	driverConfig.Timeout = 10 * time.Second
-	driverConfig.ReadTimeout = 30 * time.Second
-	driverConfig.WriteTimeout = 30 * time.Second
+	driverConfig.Loc = time.UTC
 	driverConfig.Collation = "utf8mb4_unicode_ci"
-	driverConfig.Params = map[string]string{"time_zone": "'+00:00'"}
-	return driverConfig.FormatDSN()
+	if driverConfig.Params == nil {
+		driverConfig.Params = make(map[string]string)
+	}
+	driverConfig.Params["time_zone"] = "'+00:00'"
+	return driverConfig.FormatDSN(), nil
 }

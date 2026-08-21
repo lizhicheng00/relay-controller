@@ -9,16 +9,13 @@ import (
 	"strconv"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
-
-	"relay-controller/internal/config"
-	"relay-controller/internal/store"
 )
 
 //go:embed *.sql
 var files embed.FS
 
-func Run(ctx context.Context, database config.Database) error {
-	driverConfig, err := mysqldriver.ParseDSN(store.DataSourceName(database))
+func Run(ctx context.Context, dsn string) error {
+	driverConfig, err := mysqldriver.ParseDSN(dsn)
 	if err != nil {
 		return err
 	}

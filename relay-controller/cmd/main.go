@@ -58,10 +58,10 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := migrations.Run(ctx, cfg.Database); err != nil {
+	if err := migrations.Run(ctx, cfg.DatabaseDSN); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
-	database, err := store.Open(ctx, cfg.Database)
+	database, err := store.Open(ctx, cfg.DatabaseDSN)
 	if err != nil {
 		return err
 	}

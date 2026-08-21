@@ -20,6 +20,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("RELAY_DOMAIN", "")
 	t.Setenv("RELAY_REGION", "")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "")
+	t.Setenv("DATABASE_DSN", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -42,11 +43,14 @@ func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("MGMT_CLIENT_KEY_BASE64", "private-key")
 	t.Setenv("MGMT_CLIENT_KEY_PASSWORD", "secret")
 	t.Setenv("MGMT_CA_CERT_BASE64", "ca-certificate")
+	t.Setenv("DATABASE_DSN", "relay:secret@tcp(database:3306)/relay_controller")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != "10.0.0.1:9443" || cfg.Management.URL != "https://mgmt.example.com" ||
+	if cfg.Address != "10.0.0.1:9443" ||
+		cfg.DatabaseDSN != "relay:secret@tcp(database:3306)/relay_controller" ||
+		cfg.Management.URL != "https://mgmt.example.com" ||
 		cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 {
 		t.Fatalf("relay overrides = %#v", cfg.Relay)
 	}

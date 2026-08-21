@@ -3,9 +3,9 @@ package store
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"relay-controller/internal/config"
 )
 
 func TestIsTunnelNameConflict(t *testing.T) {
@@ -22,17 +22,17 @@ func TestIsTunnelNameConflict(t *testing.T) {
 	}
 }
 
-func TestDataSourceNameIgnoresJDBCParameters(t *testing.T) {
-	dsn := DataSourceName(config.Database{
-		URL:      "jdbc:mariadb://database.example.com:3306/relay_controller?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC",
-		Username: "relay",
-		Password: "secret",
-	})
+func TestDataSourceNameAppliesRequiredParameters(t *testing.T) {
+	dsn, err := dataSourceName("relay:secret@tcp(database.example.com:3306)/relay_controller?timeout=5s")
+	if err != nil {
+		t.Fatal(err)
+	}
 	parsed, err := mysql.ParseDSN(dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Addr != "database.example.com:3306" || parsed.DBName != "relay_controller" {
-		t.Fatalf("unexpected datasource: address=%q database=%q", parsed.Addr, parsed.DBName)
+	if parsed.Addr != "database.example.com:3306" || parsed.DBName != "relay_controller" ||
+		!parsed.ParseTime || !parsed.ClientFoundRows || parsed.Loc != time.UTC {
+		t.Fatalf("unexpected datasource: %#v", parsed)
 	}
 }
