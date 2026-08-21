@@ -49,11 +49,12 @@ func TestDecryptRejectsModifiedValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encrypt() error = %v", err)
 	}
+	index := len(prefix) + 8
 	replacement := "A"
-	if encrypted[len(encrypted)-2] == 'A' {
+	if encrypted[index] == 'A' {
 		replacement = "B"
 	}
-	modified := encrypted[:len(encrypted)-2] + replacement + ")"
+	modified := encrypted[:index] + replacement + encrypted[index+1:]
 	if _, err := codec.Decrypt(modified); err == nil {
 		t.Fatal("Decrypt() error = nil for modified value")
 	}

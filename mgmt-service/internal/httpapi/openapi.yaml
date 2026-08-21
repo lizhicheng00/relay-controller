@@ -8,40 +8,6 @@ info:
 servers:
   - url: https://localhost:8443
 paths:
-  /open-api-inner/v1/mgmt-service/api-keys/cli-login:
-    post:
-      summary: Create a CLI login API key for a scope
-      description: >-
-        Called after CLI login. The service creates the user's namespace when needed and creates
-        a new permanent API key named `CLI login` on every request. Multiple login keys may coexist
-        and count toward the API key limit for the scope.
-      parameters:
-        - $ref: '#/components/parameters/DomainId'
-        - $ref: '#/components/parameters/UserId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateCLILoginAPIKeyRequest'
-      responses:
-        '201':
-          description: User identity, namespaces, and newly created CLI login API key
-          headers:
-            Cache-Control:
-              $ref: '#/components/headers/NoStore'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CLILoginCredential'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '500':
-          $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys/check:
     post:
       summary: Validate an API key and resolve its identity
@@ -82,11 +48,12 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
     post:
-      summary: Create a named API key
+      summary: Create an API key
       description: >-
-        Creates a named API key subject to the limit for the requested scope. Names are display labels
-        and may repeat. The complete value is returned only in this response and cannot be retrieved
-        later. The scope determines whether the value starts with `devbridge_` or `devbox_`.
+        Creates an API key subject to the limit for the requested scope. Names are display labels and
+        may repeat; callers can use names such as `CLI login` to identify the usage. The complete value
+        is returned only in this response and cannot be retrieved later. The scope determines whether
+        the value starts with `devbridge_` or `devbox_`.
       requestBody:
         required: true
         content:
@@ -95,7 +62,7 @@ paths:
               $ref: '#/components/schemas/CreateAPIKeyRequest'
       responses:
         '201':
-          description: Named API key created
+          description: API key created
           headers:
             Cache-Control:
               $ref: '#/components/headers/NoStore'
@@ -112,7 +79,7 @@ paths:
   /open-api-inner/v1/mgmt-service/api-keys/{keyId}:
     delete:
       summary: Delete an API key
-      description: Deletes a CLI login or named API key by its unique ID.
+      description: Deletes an API key by its unique ID.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -180,19 +147,9 @@ components:
           properties:
             scope:
               $ref: '#/components/schemas/APIKeyScope'
-    CLILoginCredential:
-      allOf:
-        - $ref: '#/components/schemas/Identity'
-        - type: object
-          required: [scope, apiKey]
-          properties:
-            scope:
-              $ref: '#/components/schemas/APIKeyScope'
-            apiKey:
-              $ref: '#/components/schemas/APIKeyValue'
     APIKey:
       type: object
-      required: [id, name, scope, source, mask, createdAt, lastUsedAt]
+      required: [id, name, scope, mask, createdAt, lastUsedAt]
       properties:
         id:
           type: string
@@ -204,8 +161,6 @@ components:
         mask:
           type: string
           example: devbridge_abcd...1234
-        source:
-          $ref: '#/components/schemas/APIKeySource'
         createdAt:
           type: string
           format: date-time
@@ -229,16 +184,6 @@ components:
     APIKeyScope:
       type: string
       enum: [devbridge, devbox]
-    APIKeySource:
-      type: string
-      enum: [cli_login, user_created]
-    CreateCLILoginAPIKeyRequest:
-      type: object
-      required: [scope]
-      additionalProperties: false
-      properties:
-        scope:
-          $ref: '#/components/schemas/APIKeyScope'
     CreateAPIKeyRequest:
       type: object
       required: [name, scope]

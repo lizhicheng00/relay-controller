@@ -26,13 +26,11 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	firstLoginKey := newTestKey("login_a_"+suffix, core.CLILoginAPIKeyName)
-	firstLoginKey.Source = core.APIKeySourceCLILogin
-	secondLoginKey := newTestKey("login_b_"+suffix, core.CLILoginAPIKeyName)
-	secondLoginKey.Source = core.APIKeySourceCLILogin
+	firstLoginKey := newTestKey("login_a_"+suffix, "CLI login")
+	secondLoginKey := newTestKey("login_b_"+suffix, "CLI login")
 	for _, key := range []core.NewAPIKey{firstLoginKey, secondLoginKey} {
 		created, err := repository.CreateAPIKey(ctx, identity.Namespace, key)
-		if err != nil || created.Source != core.APIKeySourceCLILogin || created.Name != core.CLILoginAPIKeyName {
+		if err != nil || created.Name != "CLI login" {
 			t.Fatalf("CreateAPIKey(CLI login) = %#v, %v", created, err)
 		}
 	}
@@ -59,20 +57,16 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		key := newTestKey(fmt.Sprintf("devbox_%02d_%s", index, suffix), "repeated-name")
 		key.Scope = core.APIKeyScopeDevBox
 		key.Mask = "devbox_test...mask"
-		if index < 2 {
-			key.Source = core.APIKeySourceCLILogin
-			key.Name = core.CLILoginAPIKeyName
-		}
 		if _, err := repository.CreateAPIKey(ctx, identity.Namespace, key); err != nil {
 			t.Fatalf("CreateAPIKey(devbox %d) error = %v", index, err)
 		}
 	}
 
 	keys, err := repository.ListAPIKeys(ctx, identity.Namespace)
-	if err != nil || len(keys) != core.MaxAPIKeysPerScope*2 || countKeysBySource(keys, core.APIKeySourceCLILogin) != 4 ||
+	if err != nil || len(keys) != core.MaxAPIKeysPerScope*2 ||
 		keysWithScope(keys, core.APIKeyScopeDevBridge) != core.MaxAPIKeysPerScope ||
 		keysWithScope(keys, core.APIKeyScopeDevBox) != core.MaxAPIKeysPerScope {
-		t.Fatalf("ListAPIKeys() count=%d loginKeys=%d error=%v", len(keys), countKeysBySource(keys, core.APIKeySourceCLILogin), err)
+		t.Fatalf("ListAPIKeys() count=%d error=%v", len(keys), err)
 	}
 	if keyByID(keys, firstLoginKey.ID).LastUsedAt == nil {
 		t.Fatal("authenticated key has no last-used time")
@@ -86,18 +80,11 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatalf("second identity = %#v, %v", secondIdentity, err)
 	}
 	if _, err := repository.db.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, name, key_scope, source, key_mask, key_hash)
-		VALUES (?, ?, 'invalid-scope', 'unknown', 'user_created', 'unknown_test...mask', ?)`,
+		INSERT INTO api_key (id, namespace, name, key_scope, key_mask, key_hash)
+		VALUES (?, ?, 'invalid-scope', 'unknown', 'unknown_test...mask', ?)`,
 		"invalid_"+suffix, secondIdentity.Namespace, bytes.Repeat([]byte{98}, 32)); err == nil {
 		t.Fatal("database accepted an unknown API key scope")
 	}
-	if _, err := repository.db.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, name, key_scope, source, key_mask, key_hash)
-		VALUES (?, ?, 'invalid-source', 'devbridge', 'unknown', 'devbridge_test...mask', ?)`,
-		"source_"+suffix, secondIdentity.Namespace, bytes.Repeat([]byte{97}, 32)); err == nil {
-		t.Fatal("database accepted an unknown API key source")
-	}
-
 	if err := repository.DeleteAPIKey(ctx, secondIdentity.Namespace, firstLoginKey.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-namespace delete error = %v", err)
 	}
@@ -134,7 +121,6 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 			defer group.Done()
 			<-start
 			key := newTestKey(fmt.Sprintf("concurrent_%02d_%s", index, suffix), "CLI login")
-			key.Source = core.APIKeySourceCLILogin
 			_, err := repository.CreateAPIKey(ctx, identity.Namespace, key)
 			results <- err
 		}(index)
@@ -187,18 +173,8 @@ func newTestKey(id, name string) core.NewAPIKey {
 	digest := sha256.Sum256([]byte(id))
 	return core.NewAPIKey{
 		ID: id, Name: name, Scope: core.APIKeyScopeDevBridge,
-		Mask: "devbridge_test...mask", Digest: digest[:], Source: core.APIKeySourceUserCreated,
+		Mask: "devbridge_test...mask", Digest: digest[:],
 	}
-}
-
-func countKeysBySource(keys []core.APIKey, source core.APIKeySource) int {
-	count := 0
-	for _, key := range keys {
-		if key.Source == source {
-			count++
-		}
-	}
-	return count
 }
 
 func keysWithScope(keys []core.APIKey, scope core.APIKeyScope) int {

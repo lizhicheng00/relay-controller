@@ -8,8 +8,8 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
 - Each namespace has an API key limit for each scope.
-- Every CLI login request creates a permanent API key named `CLI login`. Multiple login keys may coexist.
-- Login and named API keys can both be deleted by ID when they are no longer needed.
+- CLI login and the management page create API keys through the same API. The caller supplies a descriptive name such as `CLI login`.
+- API keys can be deleted by ID when they are no longer needed.
 - API key names are display labels and may repeat. All keys currently grant the same namespace access.
 - API key scopes are `devbridge` and `devbox`. Each scope has an independent allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
@@ -27,25 +27,23 @@ Users in the same cloud domain receive different namespaces but share one `accou
 All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
-POST /open-api-inner/v1/mgmt-service/api-keys/cli-login  create a CLI login API key
 POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
-POST /open-api-inner/v1/mgmt-service/api-keys  create a named API key
+POST /open-api-inner/v1/mgmt-service/api-keys  create an API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an API key
 ```
 
-All endpoints require mTLS. The upper identity layer confirms the user's login session before CLI key issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
+All endpoints require mTLS. The upper identity layer confirms the user before API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 
-Opening the management page does not create an identity or an API key. Listing keys for a new user returns an empty list. Creating a named key creates the user's namespace when needed; the login key endpoint is called explicitly after CLI login.
+Opening the management page does not create an identity or an API key. Listing keys for a new user returns an empty list. Creating a key creates the user's namespace when needed.
 
 ## Data Ownership
 
 - `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
 - `user_identity` owns the `(domainId, userId)` mapping and user namespace.
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
-- `api_key.source` identifies keys created by `cli_login` and `user_created` flows.
 
 Every creation produces a new key. Creating and deleting keys locks the user identity while checking the per-scope count, preserving the limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 

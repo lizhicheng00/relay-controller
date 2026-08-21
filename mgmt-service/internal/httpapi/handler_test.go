@@ -14,31 +14,18 @@ import (
 )
 
 type fakeAPI struct {
-	loginKey     core.CLILoginCredential
 	identity     core.APIKeyIdentity
 	keys         []core.APIKey
 	issued       core.IssuedAPIKey
 	assertion    core.IdentityAssertion
 	createdName  string
-	issuedScope  core.APIKeyScope
 	createdScope core.APIKeyScope
 	deletedID    string
 	checkedKey   string
 	authError    error
-	issueError   error
 	listError    error
 	createError  error
 	deleteError  error
-}
-
-func (f *fakeAPI) CreateCLILoginAPIKey(
-	_ context.Context,
-	assertion core.IdentityAssertion,
-	scope core.APIKeyScope,
-) (core.CLILoginCredential, error) {
-	f.assertion = assertion
-	f.issuedScope = scope
-	return f.loginKey, f.issueError
 }
 
 func (f *fakeAPI) CheckAPIKey(_ context.Context, value string) (core.APIKeyIdentity, error) {
@@ -76,43 +63,10 @@ func (f *fakeAPI) DeleteAPIKey(
 	return f.deleteError
 }
 
-func TestCreateCLILoginAPIKeyUsesDomainUserAndScope(t *testing.T) {
-	application := &fakeAPI{loginKey: core.CLILoginCredential{
-		Identity: core.Identity{
-			DomainID: "domain-1", UserID: "user-1",
-			AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
-		},
-		Scope: core.APIKeyScopeDevBox, APIKey: strings.Repeat("a", 32),
-	}}
-	server := newTestServer(application)
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/cli-login",
-		strings.NewReader(`{"scope":"devbox"}`))
-	request.Header.Set("X-Domain-Id", "domain-1")
-	request.Header.Set("X-User-Id", "user-1")
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-
-	server.ServeHTTP(response, request)
-
-	if response.Code != http.StatusCreated || response.Header().Get("Cache-Control") != "no-store" {
-		t.Fatalf("status = %d, headers = %#v, body = %s", response.Code, response.Header(), response.Body)
-	}
-	if application.assertion.DomainID != "domain-1" || application.assertion.UserID != "user-1" {
-		t.Fatalf("assertion = %#v", application.assertion)
-	}
-	if application.issuedScope != core.APIKeyScopeDevBox {
-		t.Fatalf("scope = %q", application.issuedScope)
-	}
-	var result core.CLILoginCredential
-	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.APIKey == "" {
-		t.Fatalf("response = %#v, %v", result, err)
-	}
-}
-
 func TestValidationErrorUsesRelayFormat(t *testing.T) {
-	server := newTestServer(&fakeAPI{issueError: core.Invalid("X-User-Id", "user ID is invalid")})
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/cli-login",
-		strings.NewReader(`{"scope":"devbridge"}`))
+	server := newTestServer(&fakeAPI{createError: core.Invalid("X-User-Id", "user ID is invalid")})
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys",
+		strings.NewReader(`{"name":"CLI login","scope":"devbridge"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 
@@ -173,8 +127,8 @@ func TestCheckAPIKeyRejectsInvalidKey(t *testing.T) {
 func TestAPIKeyManagementRoutes(t *testing.T) {
 	application := &fakeAPI{
 		keys: []core.APIKey{{
-			ID: "abcdefghijklmnopqrstuvwxyz", Name: core.CLILoginAPIKeyName,
-			Scope: core.APIKeyScopeDevBridge, Source: core.APIKeySourceCLILogin,
+			ID: "abcdefghijklmnopqrstuvwxyz", Name: "CLI login",
+			Scope: core.APIKeyScopeDevBridge,
 		}},
 		issued: core.IssuedAPIKey{
 			APIKey: core.APIKey{

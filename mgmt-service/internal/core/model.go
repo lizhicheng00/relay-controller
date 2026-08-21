@@ -2,23 +2,13 @@ package core
 
 import "time"
 
-const (
-	CLILoginAPIKeyName = "CLI login"
-	MaxAPIKeysPerScope = 20
-)
+const MaxAPIKeysPerScope = 20
 
 type APIKeyScope string
 
 const (
 	APIKeyScopeDevBridge APIKeyScope = "devbridge"
 	APIKeyScopeDevBox    APIKeyScope = "devbox"
-)
-
-type APIKeySource string
-
-const (
-	APIKeySourceCLILogin    APIKeySource = "cli_login"
-	APIKeySourceUserCreated APIKeySource = "user_created"
 )
 
 type IdentityAssertion struct {
@@ -44,29 +34,21 @@ type APIKeyIdentity struct {
 	Scope APIKeyScope `json:"scope"`
 }
 
-type CLILoginCredential struct {
-	Identity
-	Scope  APIKeyScope `json:"scope"`
-	APIKey string      `json:"apiKey"`
-}
-
 type NewAPIKey struct {
 	ID     string
 	Name   string
 	Scope  APIKeyScope
 	Mask   string
 	Digest []byte
-	Source APIKeySource
 }
 
 type APIKey struct {
-	ID         string       `json:"id"`
-	Name       string       `json:"name"`
-	Scope      APIKeyScope  `json:"scope"`
-	Mask       string       `json:"mask"`
-	Source     APIKeySource `json:"source"`
-	CreatedAt  time.Time    `json:"createdAt"`
-	LastUsedAt *time.Time   `json:"lastUsedAt"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Scope      APIKeyScope `json:"scope"`
+	Mask       string      `json:"mask"`
+	CreatedAt  time.Time   `json:"createdAt"`
+	LastUsedAt *time.Time  `json:"lastUsedAt"`
 }
 
 type IssuedAPIKey struct {

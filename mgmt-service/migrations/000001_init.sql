@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS api_key (
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
     name VARCHAR(64) NOT NULL,
     key_scope VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
-    source VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
     key_mask VARCHAR(32) NOT NULL,
     key_hash BINARY(32) NOT NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -35,7 +34,6 @@ CREATE TABLE IF NOT EXISTS api_key (
     KEY idx_api_key_namespace_scope (namespace, key_scope),
     UNIQUE KEY uk_api_key_hash (key_hash),
     CONSTRAINT chk_api_key_scope CHECK (key_scope IN ('devbridge', 'devbox')),
-    CONSTRAINT chk_api_key_source CHECK (source IN ('cli_login', 'user_created')),
     CONSTRAINT fk_api_key_identity
         FOREIGN KEY (namespace) REFERENCES user_identity (namespace)
         ON DELETE CASCADE

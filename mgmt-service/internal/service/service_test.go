@@ -75,44 +75,23 @@ func (f *fakeRepository) DeleteAPIKey(_ context.Context, _ string, keyID string)
 	return f.deleteErr
 }
 
-func TestCreateCLILoginAPIKeyCreatesPermanentKey(t *testing.T) {
+func TestCreateAPIKeyAllowsRepeatedNames(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity}
 	application := newTestService(repository)
 
-	credential, err := application.CreateCLILoginAPIKey(
-		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
-	if err != nil {
-		t.Fatalf("CreateCLILoginAPIKey() error = %v", err)
-	}
-	if credential.Identity != testIdentity || !strings.HasPrefix(credential.APIKey, "devbridge_") {
-		t.Fatalf("credential = %#v", credential)
-	}
-	created := repository.createdKeys[0]
-	_, digest, _ := security.ParseAPIKey(credential.APIKey)
-	if !bytes.Equal(digest, created.Digest) || !keyIDPattern.MatchString(created.ID) ||
-		created.Name != core.CLILoginAPIKeyName || created.Scope != core.APIKeyScopeDevBridge ||
-		created.Source != core.APIKeySourceCLILogin {
-		t.Fatalf("CLI login key = %#v", created)
-	}
-}
-
-func TestCreateCLILoginAPIKeyCreatesAnotherKeyOnEachLogin(t *testing.T) {
-	repository := &fakeRepository{identity: testIdentity}
-	application := newTestService(repository)
-
-	first, err := application.CreateCLILoginAPIKey(
-		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
+	first, err := application.CreateAPIKey(
+		context.Background(), testAssertion, "CLI login", core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := application.CreateCLILoginAPIKey(
-		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
+	second, err := application.CreateAPIKey(
+		context.Background(), testAssertion, "CLI login", core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.APIKey == second.APIKey || len(repository.createdKeys) != 2 ||
+	if first.Value == second.Value || len(repository.createdKeys) != 2 ||
 		repository.createdKeys[0].ID == repository.createdKeys[1].ID {
-		t.Fatalf("credentials were reused: first=%#v second=%#v", first, second)
+		t.Fatalf("API keys were reused: first=%#v second=%#v", first, second)
 	}
 }
 
@@ -147,8 +126,7 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 	if issued.APIKey != created || !strings.HasPrefix(issued.Value, "devbox_") ||
 		!keyIDPattern.MatchString(repository.createdKeys[0].ID) ||
 		repository.createdKeys[0].Name != "local-cli" ||
-		repository.createdKeys[0].Scope != core.APIKeyScopeDevBox ||
-		repository.createdKeys[0].Source != core.APIKeySourceUserCreated {
+		repository.createdKeys[0].Scope != core.APIKeyScopeDevBox {
 		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKeys[0])
 	}
 	_, digest, err := security.ParseAPIKey(issued.Value)
@@ -186,20 +164,20 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 
 func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
 	application := newTestService(&fakeRepository{})
-	_, err := application.CreateCLILoginAPIKey(context.Background(), core.IdentityAssertion{
+	_, err := application.CreateAPIKey(context.Background(), core.IdentityAssertion{
 		DomainID: "invalid value", UserID: "user-1",
-	}, core.APIKeyScopeDevBridge)
+	}, "CLI login", core.APIKeyScopeDevBridge)
 	var appError *core.AppError
 	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
 		appError.Details[0].Target != "X-Domain-Id" {
-		t.Fatalf("CreateCLILoginAPIKey() error = %#v", err)
+		t.Fatalf("CreateAPIKey() error = %#v", err)
 	}
-	_, err = application.CreateCLILoginAPIKey(context.Background(), core.IdentityAssertion{
+	_, err = application.CreateAPIKey(context.Background(), core.IdentityAssertion{
 		DomainID: "domain-1", UserID: "user-1",
-	}, "unknown")
+	}, "CLI login", "unknown")
 	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
 		appError.Details[0].Target != "scope" {
-		t.Fatalf("CreateCLILoginAPIKey(scope) error = %#v", err)
+		t.Fatalf("CreateAPIKey(scope) error = %#v", err)
 	}
 	if _, err := application.CheckAPIKey(context.Background(), "invalid"); err == nil {
 		t.Fatal("CheckAPIKey() accepted an invalid API key")

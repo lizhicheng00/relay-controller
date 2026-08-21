@@ -36,19 +36,6 @@ func New(repository repository) *Service {
 	return &Service{store: repository}
 }
 
-func (s *Service) CreateCLILoginAPIKey(
-	ctx context.Context,
-	assertion core.IdentityAssertion,
-	scope core.APIKeyScope,
-) (core.CLILoginCredential, error) {
-	identity, key, err := s.issueAPIKey(
-		ctx, assertion, core.CLILoginAPIKeyName, scope, core.APIKeySourceCLILogin)
-	if err != nil {
-		return core.CLILoginCredential{}, err
-	}
-	return core.CLILoginCredential{Identity: identity, Scope: scope, APIKey: key.Value}, nil
-}
-
 func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.APIKeyIdentity, error) {
 	scope, digest, err := security.ParseAPIKey(strings.TrimSpace(value))
 	if err != nil {
@@ -92,36 +79,25 @@ func (s *Service) CreateAPIKey(
 	if err != nil {
 		return core.IssuedAPIKey{}, err
 	}
-	_, key, err := s.issueAPIKey(ctx, assertion, name, scope, core.APIKeySourceUserCreated)
-	return key, err
-}
-
-func (s *Service) issueAPIKey(
-	ctx context.Context,
-	assertion core.IdentityAssertion,
-	name string,
-	scope core.APIKeyScope,
-	source core.APIKeySource,
-) (core.Identity, core.IssuedAPIKey, error) {
 	if !security.ValidAPIKeyScope(scope) {
-		return core.Identity{}, core.IssuedAPIKey{}, core.Invalid("scope", "scope must be devbridge or devbox")
+		return core.IssuedAPIKey{}, core.Invalid("scope", "scope must be devbridge or devbox")
 	}
 	if err := validateIdentity(assertion); err != nil {
-		return core.Identity{}, core.IssuedAPIKey{}, err
+		return core.IssuedAPIKey{}, err
 	}
 	identity, err := s.store.EnsureIdentity(ctx, assertion, newIdentitySeed())
 	if err != nil {
-		return core.Identity{}, core.IssuedAPIKey{}, mapStoreError("ensure identity", "X-User-Id", err)
+		return core.IssuedAPIKey{}, mapStoreError("ensure identity", "X-User-Id", err)
 	}
 	value, digest := security.NewAPIKey(scope)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
 		ID: security.NewID(""), Name: name, Scope: scope,
-		Mask: security.MaskAPIKey(value), Digest: digest, Source: source,
+		Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
-		return core.Identity{}, core.IssuedAPIKey{}, mapAPIKeyStoreError("create API key", err)
+		return core.IssuedAPIKey{}, mapAPIKeyStoreError("create API key", err)
 	}
-	return identity, core.IssuedAPIKey{APIKey: key, Value: value}, nil
+	return core.IssuedAPIKey{APIKey: key, Value: value}, nil
 }
 
 func (s *Service) DeleteAPIKey(
