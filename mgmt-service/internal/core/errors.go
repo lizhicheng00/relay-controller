@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	CodeParamInvalid       = "40000"
-	CodeUnauthorized       = "40100"
-	CodeAPIKeyNotFound     = "13001"
-	CodeAPIKeyNameConflict = "13002"
-	CodeAPIKeyLimitReached = "13003"
-	CodeDefaultAPIKey      = "13004"
-	CodeIdentityNotFound   = "13005"
-	CodeInternal           = "50000"
+	CodeParamInvalid        = "40000"
+	CodeUnauthorized        = "40100"
+	CodeAPIKeyNotFound      = "13001"
+	CodeAPIKeyNameConflict  = "13002"
+	CodeAPIKeyLimitReached  = "13003"
+	CodeDefaultAPIKeyExists = "13004"
+	CodeIdentityNotFound    = "13005"
+	CodeInternal            = "50000"
 )
 
 type AppError struct {

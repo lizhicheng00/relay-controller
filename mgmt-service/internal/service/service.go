@@ -55,6 +55,10 @@ func (s *Service) IssueDefaultAPIKey(
 		Scope: scope, Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrDefaultKeyExists) {
+			return core.DefaultAPIKeyCredential{}, core.Conflict(
+				core.CodeDefaultAPIKeyExists, "scope", "default API key already exists")
+		}
 		return core.DefaultAPIKeyCredential{}, mapStoreError("issue default API key", "X-User-Id", err)
 	}
 	return core.DefaultAPIKeyCredential{Identity: identity, Scope: scope, APIKey: value}, nil
@@ -207,8 +211,6 @@ func mapAPIKeyStoreError(operation string, err error) error {
 		return core.Conflict(core.CodeAPIKeyLimitReached, "apiKeys", "an API key scope can have at most five keys")
 	case errors.Is(err, store.ErrNameConflict):
 		return core.Conflict(core.CodeAPIKeyNameConflict, "name", "an API key with this name already exists")
-	case errors.Is(err, store.ErrDefaultKey):
-		return core.Conflict(core.CodeDefaultAPIKey, "keyId", "the default API key cannot be deleted")
 	case errors.Is(err, store.ErrNotFound):
 		return core.NotFound("keyId", "API key not found")
 	case errors.Is(err, store.ErrUnauthorized):

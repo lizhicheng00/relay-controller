@@ -87,24 +87,19 @@ func (f *fakeRepository) DeleteAPIKey(_ context.Context, _ string, keyID string)
 	return f.deleteErr
 }
 
-func TestIssueDefaultAPIKeyRotates(t *testing.T) {
+func TestIssueDefaultAPIKeyCreatesPermanentKey(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity}
 	application := New(repository)
-	assertion := testAssertion
 
-	first, err := application.IssueDefaultAPIKey(context.Background(), assertion, core.APIKeyScopeDevBridge)
+	credential, err := application.IssueDefaultAPIKey(
+		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatalf("IssueDefaultAPIKey() error = %v", err)
 	}
-	second, err := application.IssueDefaultAPIKey(context.Background(), assertion, core.APIKeyScopeDevBridge)
-	if err != nil {
-		t.Fatalf("second IssueDefaultAPIKey() error = %v", err)
+	if credential.Identity != testIdentity || !strings.HasPrefix(credential.APIKey, "devbridge_") {
+		t.Fatalf("credential = %#v", credential)
 	}
-	if first.APIKey == second.APIKey || first.Identity != testIdentity || second.Identity != testIdentity ||
-		!strings.HasPrefix(first.APIKey, "devbridge_") {
-		t.Fatalf("credentials = %#v, %#v", first, second)
-	}
-	_, digest, _ := security.ParseAPIKey(second.APIKey)
+	_, digest, _ := security.ParseAPIKey(credential.APIKey)
 	if !bytes.Equal(digest, repository.defaultKey.Digest) ||
 		!keyIDPattern.MatchString(repository.defaultKey.ID) ||
 		repository.defaultKey.Name != core.DefaultAPIKeyName ||
@@ -172,10 +167,18 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 	_, err = application.CreateAPIKey(context.Background(), testAssertion, "invalid", "unknown")
 	assertAppError(t, err, 400, core.CodeParamInvalid)
 
-	repository = &fakeRepository{identity: testIdentity, deleteErr: store.ErrDefaultKey}
+	repository = &fakeRepository{identity: testIdentity, issueErr: store.ErrDefaultKeyExists}
+	application = New(repository)
+	_, err = application.IssueDefaultAPIKey(
+		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
+	assertAppError(t, err, 409, core.CodeDefaultAPIKeyExists)
+
+	repository = &fakeRepository{identity: testIdentity}
 	application = New(repository)
 	err = application.DeleteAPIKey(context.Background(), testAssertion, "abcdefghijklmnopqrstuvwxyz")
-	assertAppError(t, err, 409, core.CodeDefaultAPIKey)
+	if err != nil || repository.deletedKeyID != "abcdefghijklmnopqrstuvwxyz" {
+		t.Fatalf("DeleteAPIKey() id = %q, error = %v", repository.deletedKeyID, err)
+	}
 }
 
 func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {

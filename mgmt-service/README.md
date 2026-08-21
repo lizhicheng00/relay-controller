@@ -8,8 +8,8 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
 - Each namespace may have five API keys for each type: one default key and four additional keys.
-- An authenticated CLI or upper service may explicitly request a typed default API key as an immediate business credential. Each request replaces the previous default key of the same type.
-- The default API key cannot be deleted. Additional keys are intended for separate clients or usage scenarios.
+- An authenticated CLI or upper service may explicitly request a typed default API key as an immediate business credential. A default key remains valid until the user deletes it.
+- Default and additional API keys can both be deleted. Additional keys are intended for separate clients or usage scenarios.
 - Additional key names are unique within a namespace and type. All keys currently grant the same namespace access.
 - API key scopes are `devbridge` and `devbox`. Each scope has its own default key and additional-key allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
@@ -27,7 +27,7 @@ Users in the same cloud domain receive different namespaces but share one `accou
 All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
-POST /open-api-inner/v1/mgmt-service/api-keys/default  issue or rotate a typed default API key
+POST /open-api-inner/v1/mgmt-service/api-keys/default  issue a typed default API key
 POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
@@ -47,7 +47,7 @@ Opening the management page does not create an identity or a default API key. Li
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
 - Within each type, API key slot `0` is the default key and slots `1` through `4` are additional keys.
 
-Issuing a default key replaces only the previous default key of the requested scope. Creating and deleting additional keys locks the user identity while assigning a slot, preserving the five-key-per-scope limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
+Only one default key may exist per scope. It is never rotated automatically; after deletion, the default endpoint can issue a new one. Creating and deleting keys locks the user identity while assigning slots, preserving the five-key-per-scope limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
 For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each type creates its default API key without replacing the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 

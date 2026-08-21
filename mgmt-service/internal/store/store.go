@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrKeyLimit     = errors.New("API key limit reached")
-	ErrNameConflict = errors.New("API key name already exists")
-	ErrDefaultKey   = errors.New("default API key cannot be deleted")
+	ErrNotFound         = errors.New("not found")
+	ErrUnauthorized     = errors.New("unauthorized")
+	ErrKeyLimit         = errors.New("API key limit reached")
+	ErrNameConflict     = errors.New("API key name already exists")
+	ErrDefaultKeyExists = errors.New("default API key already exists")
 )
 
 type Store struct {
@@ -68,24 +68,22 @@ func (s *Store) IssueDefaultAPIKey(
 		if err != nil {
 			return err
 		}
-		var existingDefaultID string
+		var existingDefault int
 		err = tx.QueryRowContext(ctx, `
-			SELECT id FROM api_key
+			SELECT 1 FROM api_key
 			WHERE namespace = ? AND key_scope = ? AND slot = 0
-			FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefaultID)
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			_, err = tx.ExecContext(ctx, `
-				INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
-				VALUES (?, ?, 0, ?, ?, ?, ?)`,
-				defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
-				defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
-		case err == nil:
-			_, err = tx.ExecContext(ctx, `
-				UPDATE api_key
-				SET name = ?, key_mask = ?, key_hash = ?, created_at = UTC_TIMESTAMP(6), last_used_at = NULL
-				WHERE id = ?`, core.DefaultAPIKeyName, defaultKey.Mask, defaultKey.Digest, existingDefaultID)
+			FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefault)
+		if err == nil {
+			return ErrDefaultKeyExists
 		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("load default API key: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
+			VALUES (?, ?, 0, ?, ?, ?, ?)`,
+			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
+			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
 		if err != nil {
 			return fmt.Errorf("store default API key: %w", err)
 		}
@@ -281,18 +279,18 @@ func (s *Store) DeleteAPIKey(ctx context.Context, namespace, keyID string) error
 		if err := lockIdentity(ctx, tx, namespace); err != nil {
 			return err
 		}
-		var slot int
-		err := tx.QueryRowContext(ctx, `
-			SELECT slot FROM api_key WHERE namespace = ? AND id = ? FOR UPDATE`,
-			namespace, keyID).Scan(&slot)
+		result, err := tx.ExecContext(ctx, `DELETE FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID)
 		if err != nil {
-			return mapQueryError("load API key", err)
+			return fmt.Errorf("delete API key: %w", err)
 		}
-		if slot == 0 {
-			return ErrDefaultKey
+		deleted, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("read deleted API key count: %w", err)
 		}
-		_, err = tx.ExecContext(ctx, `DELETE FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID)
-		return err
+		if deleted == 0 {
+			return ErrNotFound
+		}
+		return nil
 	})
 }
 

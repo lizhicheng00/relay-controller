@@ -14,7 +14,8 @@ paths:
       description: >-
         Explicitly requested by an authenticated CLI or upper identity layer when an immediate
         business credential is needed. The service creates the user's namespace on first use
-        and replaces the requested scope's previous default API key.
+        and creates a permanent default API key. An existing default key must be deleted before
+        another can be issued for the same scope.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -38,6 +39,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys/check:
@@ -110,8 +113,8 @@ paths:
           $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys/{keyId}:
     delete:
-      summary: Delete an additional API key
-      description: The default API key cannot be deleted.
+      summary: Delete an API key
+      description: Deletes either a default or an additional API key.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -128,8 +131,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
 components:
@@ -297,7 +298,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: API key name, per-scope limit, or default-key conflict
+      description: API key name, per-scope limit, or existing default-key conflict
       content:
         application/json:
           schema:
