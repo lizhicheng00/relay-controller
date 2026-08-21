@@ -10,12 +10,12 @@ servers:
 paths:
   /open-api-inner/v1/mgmt-service/api-keys/default:
     post:
-      summary: Issue a cloud user's default API key for a scope
+      summary: Get or create a cloud user's default API key for a scope
       description: >-
         Explicitly requested by an authenticated CLI or upper identity layer when an immediate
-        business credential is needed. The service creates the user's namespace on first use
-        and creates a permanent default API key. An existing default key must be deleted before
-        another can be issued for the same scope.
+        business credential is needed. The service creates the user's namespace and a permanent
+        default API key on first use. Repeated requests for the same identity and scope return the
+        same key. Deleting it allows a different key to be created.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -39,8 +39,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys/check:
@@ -298,7 +296,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: API key name, per-scope limit, or existing default-key conflict
+      description: API key name conflict or per-scope limit
       content:
         application/json:
           schema:

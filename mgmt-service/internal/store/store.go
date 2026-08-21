@@ -13,11 +13,10 @@ import (
 )
 
 var (
-	ErrNotFound         = errors.New("not found")
-	ErrUnauthorized     = errors.New("unauthorized")
-	ErrKeyLimit         = errors.New("API key limit reached")
-	ErrNameConflict     = errors.New("API key name already exists")
-	ErrDefaultKeyExists = errors.New("default API key already exists")
+	ErrNotFound     = errors.New("not found")
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrKeyLimit     = errors.New("API key limit reached")
+	ErrNameConflict = errors.New("API key name already exists")
 )
 
 type Store struct {
@@ -55,26 +54,23 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) IssueDefaultAPIKey(
+func (s *Store) GetOrCreateDefaultAPIKey(
 	ctx context.Context,
-	assertion core.IdentityAssertion,
-	seed core.IdentitySeed,
+	namespace string,
 	defaultKey core.NewAPIKey,
-) (core.Identity, error) {
-	var identity core.Identity
+) (core.NewAPIKey, error) {
+	var stored core.NewAPIKey
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		identity, err = ensureIdentity(ctx, tx, assertion, seed)
-		if err != nil {
+		if err := lockIdentity(ctx, tx, namespace); err != nil {
 			return err
 		}
-		var existingDefault int
-		err = tx.QueryRowContext(ctx, `
-			SELECT 1 FROM api_key
+		err := tx.QueryRowContext(ctx, `
+			SELECT id, key_hash FROM api_key
 			WHERE namespace = ? AND key_scope = ? AND slot = 0
-			FOR UPDATE`, identity.Namespace, defaultKey.Scope).Scan(&existingDefault)
+			FOR UPDATE`, namespace, defaultKey.Scope).Scan(&stored.ID, &stored.Digest)
 		if err == nil {
-			return ErrDefaultKeyExists
+			stored.Scope = defaultKey.Scope
+			return nil
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("load default API key: %w", err)
@@ -82,14 +78,15 @@ func (s *Store) IssueDefaultAPIKey(
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
 			VALUES (?, ?, 0, ?, ?, ?, ?)`,
-			defaultKey.ID, identity.Namespace, core.DefaultAPIKeyName,
+			defaultKey.ID, namespace, core.DefaultAPIKeyName,
 			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
 		if err != nil {
 			return fmt.Errorf("store default API key: %w", err)
 		}
+		stored = defaultKey
 		return nil
 	})
-	return identity, err
+	return stored, err
 }
 
 func (s *Store) EnsureIdentity(

@@ -3,7 +3,9 @@ package secret
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -18,6 +20,7 @@ const (
 
 type Codec struct {
 	gcm cipher.AEAD
+	key [keySize]byte
 }
 
 func Load(keyFile string) (*Codec, error) {
@@ -37,7 +40,17 @@ func Load(keyFile string) (*Codec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize configuration cipher: %w", err)
 	}
-	return &Codec{gcm: gcm}, nil
+	codec := &Codec{gcm: gcm}
+	copy(codec.key[:], key)
+	return codec, nil
+}
+
+func (c *Codec) DeriveKey(purpose string) [keySize]byte {
+	mac := hmac.New(sha256.New, c.key[:])
+	_, _ = mac.Write([]byte(purpose))
+	var derived [keySize]byte
+	copy(derived[:], mac.Sum(nil))
+	return derived
 }
 
 func GenerateKeyFile(path string) error {

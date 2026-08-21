@@ -28,6 +28,28 @@ func TestNewAPIKeyIsRandomAndMasked(t *testing.T) {
 	}
 }
 
+func TestDeriveDefaultAPIKeyIsStableAndSeparated(t *testing.T) {
+	master := [32]byte{1, 2, 3}
+	first, firstDigest := DeriveDefaultAPIKey(
+		master, "ns-u-one", core.APIKeyScopeDevBridge, "abcdefghijklmnopqrstuvwxyz")
+	repeated, repeatedDigest := DeriveDefaultAPIKey(
+		master, "ns-u-one", core.APIKeyScopeDevBridge, "abcdefghijklmnopqrstuvwxyz")
+	otherID, _ := DeriveDefaultAPIKey(
+		master, "ns-u-one", core.APIKeyScopeDevBridge, "bcdefghijklmnopqrstuvwxyza")
+	otherScope, _ := DeriveDefaultAPIKey(
+		master, "ns-u-one", core.APIKeyScopeDevBox, "abcdefghijklmnopqrstuvwxyz")
+
+	if first != repeated || !bytes.Equal(firstDigest, repeatedDigest) {
+		t.Fatal("same inputs produced different API keys")
+	}
+	if first == otherID || first == otherScope {
+		t.Fatal("key ID or scope did not separate derived API keys")
+	}
+	if _, _, err := ParseAPIKey(first); err != nil {
+		t.Fatalf("derived API key is invalid: %v", err)
+	}
+}
+
 func TestParseAPIKeyRejectsMalformedValues(t *testing.T) {
 	for _, value := range []string{
 		"short",

@@ -76,7 +76,7 @@ func (f *fakeAPI) DeleteAPIKey(
 	return f.deleteError
 }
 
-func TestIssueDefaultAPIKeyUsesDomainUserAndType(t *testing.T) {
+func TestIssueDefaultAPIKeyUsesDomainUserAndScope(t *testing.T) {
 	application := &fakeAPI{defaultKey: core.DefaultAPIKeyCredential{
 		Identity: core.Identity{
 			DomainID: "domain-1", UserID: "user-1",

@@ -12,7 +12,6 @@ const (
 	CodeAPIKeyNotFound      = "13001"
 	CodeAPIKeyNameConflict  = "13002"
 	CodeAPIKeyLimitReached  = "13003"
-	CodeDefaultAPIKeyExists = "13004"
 	CodeIdentityNotFound    = "13005"
 	CodeInternal            = "50000"
 )

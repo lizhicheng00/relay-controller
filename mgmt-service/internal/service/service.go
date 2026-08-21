@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"regexp"
@@ -15,7 +16,7 @@ import (
 )
 
 type repository interface {
-	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.IdentitySeed, core.NewAPIKey) (core.Identity, error)
+	GetOrCreateDefaultAPIKey(context.Context, string, core.NewAPIKey) (core.NewAPIKey, error)
 	EnsureIdentity(context.Context, core.IdentityAssertion, core.IdentitySeed) (core.Identity, error)
 	FindIdentity(context.Context, core.IdentityAssertion) (core.Identity, error)
 	FindIdentityByAPIKey(context.Context, []byte) (core.Identity, error)
@@ -25,7 +26,8 @@ type repository interface {
 }
 
 type Service struct {
-	store repository
+	store        repository
+	apiKeyMaster [32]byte
 }
 
 var (
@@ -33,8 +35,8 @@ var (
 	keyIDPattern    = regexp.MustCompile(`^[a-z2-7]{26}$`)
 )
 
-func New(repository repository) *Service {
-	return &Service{store: repository}
+func New(repository repository, apiKeyMaster [32]byte) *Service {
+	return &Service{store: repository, apiKeyMaster: apiKeyMaster}
 }
 
 func (s *Service) IssueDefaultAPIKey(
@@ -48,18 +50,22 @@ func (s *Service) IssueDefaultAPIKey(
 	if !security.ValidAPIKeyScope(scope) {
 		return core.DefaultAPIKeyCredential{}, core.Invalid("scope", "scope must be devbridge or devbox")
 	}
-	seed := newIdentitySeed()
-	value, digest := security.NewAPIKey(scope)
-	identity, err := s.store.IssueDefaultAPIKey(ctx, assertion, seed, core.NewAPIKey{
-		ID: security.NewID(""), Name: core.DefaultAPIKeyName,
+	identity, err := s.store.EnsureIdentity(ctx, assertion, newIdentitySeed())
+	if err != nil {
+		return core.DefaultAPIKeyCredential{}, mapStoreError("ensure identity", "X-User-Id", err)
+	}
+	keyID := security.NewID("")
+	value, digest := security.DeriveDefaultAPIKey(s.apiKeyMaster, identity.Namespace, scope, keyID)
+	stored, err := s.store.GetOrCreateDefaultAPIKey(ctx, identity.Namespace, core.NewAPIKey{
+		ID: keyID, Name: core.DefaultAPIKeyName,
 		Scope: scope, Mask: security.MaskAPIKey(value), Digest: digest,
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrDefaultKeyExists) {
-			return core.DefaultAPIKeyCredential{}, core.Conflict(
-				core.CodeDefaultAPIKeyExists, "scope", "default API key already exists")
-		}
 		return core.DefaultAPIKeyCredential{}, mapStoreError("issue default API key", "X-User-Id", err)
+	}
+	value, digest = security.DeriveDefaultAPIKey(s.apiKeyMaster, identity.Namespace, scope, stored.ID)
+	if subtle.ConstantTimeCompare(digest, stored.Digest) != 1 {
+		return core.DefaultAPIKeyCredential{}, core.Internal(errors.New("default API key master does not match stored key"))
 	}
 	return core.DefaultAPIKeyCredential{Identity: identity, Scope: scope, APIKey: value}, nil
 }

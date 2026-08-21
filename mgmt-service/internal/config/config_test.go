@@ -9,15 +9,25 @@ import (
 
 func TestLoadPlainValues(t *testing.T) {
 	setEnvironment(t)
-	t.Setenv("MGMT_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
+	keyFile, _ := testCodec(t)
+	t.Setenv("MGMT_CONFIG_KEY_FILE", keyFile)
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if cfg.Address != ":8443" || cfg.DatabaseDSN != "plain-dsn" ||
-		cfg.TLS.KeyStorePassword != "key-password" || cfg.TLS.TrustStorePassword != "trust-password" {
+		cfg.TLS.KeyStorePassword != "key-password" || cfg.TLS.TrustStorePassword != "trust-password" ||
+		cfg.APIKeyMaster == [32]byte{} {
 		t.Fatalf("Load() = %#v", cfg)
+	}
+}
+
+func TestLoadRequiresKeyFile(t *testing.T) {
+	setEnvironment(t)
+	t.Setenv("MGMT_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want missing key error")
 	}
 }
 

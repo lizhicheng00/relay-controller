@@ -7,14 +7,14 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One cloud domain maps to one shared `accountNamespace`.
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
-- Each namespace may have five API keys for each type: one default key and four additional keys.
-- An authenticated CLI or upper service may explicitly request a typed default API key as an immediate business credential. A default key remains valid until the user deletes it.
+- Each namespace may have five API keys for each scope: one default key and four additional keys.
+- An authenticated CLI or upper service may explicitly request a scoped default API key as an immediate business credential. Repeated requests return the same key until it is deleted.
 - Default and additional API keys can both be deleted. Additional keys are intended for separate clients or usage scenarios.
-- Additional key names are unique within a namespace and type. All keys currently grant the same namespace access.
+- Additional key names are unique within a namespace and scope. All keys currently grant the same namespace access.
 - API key scopes are `devbridge` and `devbox`. Each scope has its own default key and additional-key allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
 - MySQL stores only API key metadata and SHA-256 digests.
-- Default and additional keys are generated randomly. Complete values are returned only when issued.
+- Default keys are derived from the root key, namespace, scope, and key ID. Additional keys are random. Complete additional-key values are returned only when issued.
 
 ## Namespace Ownership
 
@@ -27,11 +27,11 @@ Users in the same cloud domain receive different namespaces but share one `accou
 All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
-POST /open-api-inner/v1/mgmt-service/api-keys/default  issue a typed default API key
+POST /open-api-inner/v1/mgmt-service/api-keys/default  get or create a scoped default API key
 POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
-DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an additional API key
+DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an API key
 ```
 
 All endpoints require mTLS. The upper identity layer confirms the user's login session before default issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
@@ -45,11 +45,11 @@ Opening the management page does not create an identity or a default API key. Li
 - `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
 - `user_identity` owns the `(domainId, userId)` mapping and user namespace.
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
-- Within each type, API key slot `0` is the default key and slots `1` through `4` are additional keys.
+- Within each scope, API key slot `0` is the default key and slots `1` through `4` are additional keys.
 
-Only one default key may exist per scope. It is never rotated automatically; after deletion, the default endpoint can issue a new one. Creating and deleting keys locks the user identity while assigning slots, preserving the five-key-per-scope limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
+Only one default key may exist per scope. It is never rotated automatically; repeated requests return the existing value, while deletion followed by another request creates a different value. Creating and deleting keys locks the user identity while assigning slots, preserving the five-key-per-scope limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
-For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each type creates its default API key without replacing the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
+For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each scope creates its default API key without replacing the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 
 ## Structure
 
@@ -70,7 +70,7 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
-| `MGMT_CONFIG_KEY_FILE` | no | Root-key file, default `/opt/cloud/dog/beta` |
+| `MGMT_CONFIG_KEY_FILE` | yes | Base64 root-key file, default path `/opt/cloud/dog/beta` |
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
@@ -82,7 +82,8 @@ The key store contains the server private key and certificate chain; the trust s
 the accepted client CA.
 
 Each sensitive configuration entry accepts either a plain value or an AES-256-GCM `ENC(...)`
-value. One root-key file decrypts all encrypted entries in the environment.
+value. The same root-key file supplies purpose-separated keys for configuration decryption and
+idempotent default API key issuance.
 
 Build the service and its small configuration tool:
 

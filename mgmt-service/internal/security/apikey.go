@@ -1,6 +1,7 @@
 package security
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -23,6 +24,23 @@ func NewAPIKey(scope core.APIKeyScope) (string, []byte) {
 		panic(err)
 	}
 	value := string(scope) + "_" + base64.RawURLEncoding.EncodeToString(random)
+	return value, apiKeyDigest(value)
+}
+
+func DeriveDefaultAPIKey(
+	master [sha256.Size]byte,
+	namespace string,
+	scope core.APIKeyScope,
+	keyID string,
+) (string, []byte) {
+	mac := hmac.New(sha256.New, master[:])
+	_, _ = mac.Write([]byte(namespace))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(scope))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(keyID))
+	payload := mac.Sum(nil)[:apiKeyPayloadBytes]
+	value := string(scope) + "_" + base64.RawURLEncoding.EncodeToString(payload)
 	return value, apiKeyDigest(value)
 }
 

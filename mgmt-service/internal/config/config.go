@@ -14,9 +14,10 @@ const (
 )
 
 type Config struct {
-	Address     string
-	DatabaseDSN string
-	TLS         TLS
+	Address      string
+	DatabaseDSN  string
+	APIKeyMaster [32]byte
+	TLS          TLS
 }
 
 type TLS struct {
@@ -27,9 +28,15 @@ type TLS struct {
 }
 
 func Load() (Config, error) {
+	keyFile := valueOrDefault("MGMT_CONFIG_KEY_FILE", defaultKeyFile)
+	codec, err := secret.Load(keyFile)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
-		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
-		DatabaseDSN: os.Getenv("DATABASE_DSN"),
+		Address:      valueOrDefault("SERVER_ADDRESS", defaultAddress),
+		DatabaseDSN:  os.Getenv("DATABASE_DSN"),
+		APIKeyMaster: codec.DeriveKey("mgmt-default-api-key-v1"),
 		TLS: TLS{
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
 			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
@@ -48,18 +55,9 @@ func Load() (Config, error) {
 		{"SERVER_SSL_TRUST_STORE_BASE64", &cfg.TLS.TrustStoreBase64},
 		{"SERVER_SSL_TRUST_STORE_PASSWORD", &cfg.TLS.TrustStorePassword},
 	}
-	var codec *secret.Codec
 	for _, field := range fields {
 		if !secret.IsEncrypted(*field.value) {
 			continue
-		}
-		if codec == nil {
-			keyFile := valueOrDefault("MGMT_CONFIG_KEY_FILE", defaultKeyFile)
-			var err error
-			codec, err = secret.Load(keyFile)
-			if err != nil {
-				return Config{}, err
-			}
 		}
 		value, err := codec.Decrypt(*field.value)
 		if err != nil {

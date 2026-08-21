@@ -39,17 +39,22 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		Namespace:        "ns-u-a-" + suffix,
 	}
 	defaultKey := newTestKey("key_default_"+suffix, "default")
-	identity, err := repository.IssueDefaultAPIKey(ctx, assertion, seed, defaultKey)
+	identity, storedDefault, err := issueDefaultAPIKey(repository, ctx, assertion, seed, defaultKey)
 	if err != nil {
 		t.Fatalf("IssueDefaultAPIKey() error = %v", err)
 	}
+	if storedDefault.ID != defaultKey.ID {
+		t.Fatalf("stored default = %#v", storedDefault)
+	}
 
-	_, err = repository.IssueDefaultAPIKey(ctx, assertion, core.IdentitySeed{
+	repeatedKey := newTestKey("key_repeated_"+suffix, "default")
+	repeatedIdentity, repeatedDefault, err := issueDefaultAPIKey(repository, ctx, assertion, core.IdentitySeed{
 		AccountID: "acc-unused", AccountNamespace: "ns-a-unused-" + suffix,
 		Namespace: "ns-u-unused-" + suffix,
-	}, defaultKey)
-	if !errors.Is(err, ErrDefaultKeyExists) {
-		t.Fatalf("IssueDefaultAPIKey(repeated) error = %v", err)
+	}, repeatedKey)
+	if err != nil || repeatedIdentity != identity || repeatedDefault.ID != defaultKey.ID ||
+		!bytes.Equal(repeatedDefault.Digest, defaultKey.Digest) {
+		t.Fatalf("IssueDefaultAPIKey(repeated) = %#v, %#v, %v", repeatedIdentity, repeatedDefault, err)
 	}
 	if found, err := repository.FindIdentity(ctx, assertion); err != nil || found != identity {
 		t.Fatalf("FindIdentity() = %#v, %v", found, err)
@@ -62,7 +67,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatalf("FindIdentityByAPIKey(default) = %#v, %v", found, err)
 	}
 
-	secondIdentity, err := repository.IssueDefaultAPIKey(ctx, core.IdentityAssertion{
+	secondIdentity, _, err := issueDefaultAPIKey(repository, ctx, core.IdentityAssertion{
 		DomainID: assertion.DomainID, UserID: "user-b-" + suffix,
 	}, core.IdentitySeed{
 		AccountID: "acc-other", AccountNamespace: "ns-a-other-" + suffix,
@@ -84,7 +89,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preload identity error = %v", err)
 	}
-	imported, err := repository.IssueDefaultAPIKey(ctx, core.IdentityAssertion{
+	imported, _, err := issueDefaultAPIKey(repository, ctx, core.IdentityAssertion{
 		DomainID: assertion.DomainID, UserID: importedUserID,
 	}, core.IdentitySeed{
 		AccountID: "acc-unused-import", AccountNamespace: "ns-a-unused-import-" + suffix,
@@ -98,7 +103,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	devboxDefault := newTestKey("key_devbox_default_"+suffix, "default")
 	devboxDefault.Scope = core.APIKeyScopeDevBox
 	devboxDefault.Mask = "devbox_test...mask"
-	if _, err := repository.IssueDefaultAPIKey(ctx, assertion, seed, devboxDefault); err != nil {
+	if _, _, err := issueDefaultAPIKey(repository, ctx, assertion, seed, devboxDefault); err != nil {
 		t.Fatalf("IssueDefaultAPIKey(devbox default) error = %v", err)
 	}
 
@@ -177,7 +182,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	}
 
 	replacementDefault := newTestKey("key_unused_"+suffix, "default")
-	if _, err := repository.IssueDefaultAPIKey(ctx, assertion, seed, replacementDefault); err != nil {
+	if _, _, err := issueDefaultAPIKey(repository, ctx, assertion, seed, replacementDefault); err != nil {
 		t.Fatalf("IssueDefaultAPIKey(replacement default) error = %v", err)
 	}
 	if _, err := repository.FindIdentityByAPIKey(ctx, defaultKey.Digest); !errors.Is(err, ErrNotFound) {
@@ -212,7 +217,7 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 
 	ctx := context.Background()
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
-	identity, err := repository.IssueDefaultAPIKey(ctx,
+	identity, _, err := issueDefaultAPIKey(repository, ctx,
 		core.IdentityAssertion{DomainID: "concurrent-domain-" + suffix, UserID: "user-" + suffix},
 		core.IdentitySeed{
 			AccountID: "acc-c-" + suffix, AccountNamespace: "ns-a-c-" + suffix,
@@ -267,6 +272,21 @@ func newTestKey(id, name string) core.NewAPIKey {
 		ID: id, Name: name, Scope: core.APIKeyScopeDevBridge,
 		Mask: "devbridge_test...mask", Digest: digest[:],
 	}
+}
+
+func issueDefaultAPIKey(
+	repository *Store,
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+	seed core.IdentitySeed,
+	key core.NewAPIKey,
+) (core.Identity, core.NewAPIKey, error) {
+	identity, err := repository.EnsureIdentity(ctx, assertion, seed)
+	if err != nil {
+		return core.Identity{}, core.NewAPIKey{}, err
+	}
+	stored, err := repository.GetOrCreateDefaultAPIKey(ctx, identity.Namespace, key)
+	return identity, stored, err
 }
 
 func countDefaultKeys(keys []core.APIKey) int {
