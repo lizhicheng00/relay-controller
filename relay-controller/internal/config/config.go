@@ -11,6 +11,7 @@ import (
 
 const (
 	defaultRelayDomain       = "myhuaweicloud.com"
+	defaultRelayRegion       = "cn-north-4"
 	defaultRequestsPerMinute = 120
 	defaultManagementURL     = "https://127.0.0.1:8444"
 	defaultManagementName    = "mgmt.developer.myhuaweicloud.com"
@@ -64,7 +65,7 @@ func Load() (Config, error) {
 		},
 		Relay: Relay{
 			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
-			Region:            os.Getenv("RELAY_REGION"),
+			Region:            valueOrDefault("RELAY_REGION", defaultRelayRegion),
 			RequestsPerMinute: requestsPerMinute,
 			JWTPrivateKey:     getSecret("RELAY_JWT_PRIVATE_KEY"),
 		},

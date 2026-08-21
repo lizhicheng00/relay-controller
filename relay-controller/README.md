@@ -71,7 +71,7 @@ Environment variables:
 | `DATASOURCE_URL` | `jdbc:mariadb://host:3306/database` or `jdbc:mysql://...` |
 | `DATASOURCE_USERNAME` | Database user |
 | `DATASOURCE_PASSWORD` | Database password |
-| `RELAY_REGION` | Region owned by this instance |
+| `RELAY_REGION` | Region owned by this instance, default `cn-north-4` |
 | `RELAY_DOMAIN` | Tunnel DNS suffix, default `myhuaweicloud.com` |
 | `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute, default `120` |
 | `RELAY_JWT_PRIVATE_KEY` | PKCS8 RSA private key, PEM or Base64 DER, at least 2048 bits |
