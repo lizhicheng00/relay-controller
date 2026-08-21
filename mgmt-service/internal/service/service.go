@@ -36,16 +36,17 @@ func New(repository repository) *Service {
 	return &Service{store: repository}
 }
 
-func (s *Service) IssueDefaultAPIKey(
+func (s *Service) CreateCLILoginAPIKey(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
 	scope core.APIKeyScope,
-) (core.DefaultAPIKeyCredential, error) {
-	identity, key, err := s.issueAPIKey(ctx, assertion, core.DefaultAPIKeyName, scope, true)
+) (core.CLILoginCredential, error) {
+	identity, key, err := s.issueAPIKey(
+		ctx, assertion, core.CLILoginAPIKeyName, scope, core.APIKeySourceCLILogin)
 	if err != nil {
-		return core.DefaultAPIKeyCredential{}, err
+		return core.CLILoginCredential{}, err
 	}
-	return core.DefaultAPIKeyCredential{Identity: identity, Scope: scope, APIKey: key.Value}, nil
+	return core.CLILoginCredential{Identity: identity, Scope: scope, APIKey: key.Value}, nil
 }
 
 func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.APIKeyIdentity, error) {
@@ -91,7 +92,7 @@ func (s *Service) CreateAPIKey(
 	if err != nil {
 		return core.IssuedAPIKey{}, err
 	}
-	_, key, err := s.issueAPIKey(ctx, assertion, name, scope, false)
+	_, key, err := s.issueAPIKey(ctx, assertion, name, scope, core.APIKeySourceUserCreated)
 	return key, err
 }
 
@@ -100,7 +101,7 @@ func (s *Service) issueAPIKey(
 	assertion core.IdentityAssertion,
 	name string,
 	scope core.APIKeyScope,
-	isDefault bool,
+	source core.APIKeySource,
 ) (core.Identity, core.IssuedAPIKey, error) {
 	if !security.ValidAPIKeyScope(scope) {
 		return core.Identity{}, core.IssuedAPIKey{}, core.Invalid("scope", "scope must be devbridge or devbox")
@@ -115,7 +116,7 @@ func (s *Service) issueAPIKey(
 	value, digest := security.NewAPIKey(scope)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
 		ID: security.NewID(""), Name: name, Scope: scope,
-		Mask: security.MaskAPIKey(value), Digest: digest, Default: isDefault,
+		Mask: security.MaskAPIKey(value), Digest: digest, Source: source,
 	})
 	if err != nil {
 		return core.Identity{}, core.IssuedAPIKey{}, mapAPIKeyStoreError("create API key", err)

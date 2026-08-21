@@ -27,14 +27,14 @@ Users in the same cloud domain receive different namespaces but share one `accou
 All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
-POST /open-api-inner/v1/mgmt-service/api-keys/default  create a CLI login API key
+POST /open-api-inner/v1/mgmt-service/api-keys/cli-login  create a CLI login API key
 POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create a named API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an API key
 ```
 
-All endpoints require mTLS. The upper identity layer confirms the user's login session before default issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
+All endpoints require mTLS. The upper identity layer confirms the user's login session before CLI key issuance or API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 
@@ -45,7 +45,7 @@ Opening the management page does not create an identity or an API key. Listing k
 - `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
 - `user_identity` owns the `(domainId, userId)` mapping and user namespace.
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
-- `api_key.is_default` identifies keys created by the CLI login flow.
+- `api_key.source` identifies keys created by `cli_login` and `user_created` flows.
 
 Every creation produces a new key. Creating and deleting keys locks the user identity while checking the per-scope count, preserving the 20-key limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 

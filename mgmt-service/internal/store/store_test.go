@@ -26,21 +26,21 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	firstDefault := newTestKey("default_a_"+suffix, core.DefaultAPIKeyName)
-	firstDefault.Default = true
-	secondDefault := newTestKey("default_b_"+suffix, core.DefaultAPIKeyName)
-	secondDefault.Default = true
-	for _, key := range []core.NewAPIKey{firstDefault, secondDefault} {
+	firstLoginKey := newTestKey("login_a_"+suffix, core.CLILoginAPIKeyName)
+	firstLoginKey.Source = core.APIKeySourceCLILogin
+	secondLoginKey := newTestKey("login_b_"+suffix, core.CLILoginAPIKeyName)
+	secondLoginKey.Source = core.APIKeySourceCLILogin
+	for _, key := range []core.NewAPIKey{firstLoginKey, secondLoginKey} {
 		created, err := repository.CreateAPIKey(ctx, identity.Namespace, key)
-		if err != nil || !created.Default || created.Name != core.DefaultAPIKeyName {
-			t.Fatalf("CreateAPIKey(default) = %#v, %v", created, err)
+		if err != nil || created.Source != core.APIKeySourceCLILogin || created.Name != core.CLILoginAPIKeyName {
+			t.Fatalf("CreateAPIKey(CLI login) = %#v, %v", created, err)
 		}
 	}
 
 	if found, err := repository.FindIdentity(ctx, assertion); err != nil || found != identity {
 		t.Fatalf("FindIdentity() = %#v, %v", found, err)
 	}
-	if found, err := repository.FindIdentityByAPIKey(ctx, firstDefault.Digest); err != nil || found != identity {
+	if found, err := repository.FindIdentityByAPIKey(ctx, firstLoginKey.Digest); err != nil || found != identity {
 		t.Fatalf("FindIdentityByAPIKey() = %#v, %v", found, err)
 	}
 
@@ -60,8 +60,8 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		key.Scope = core.APIKeyScopeDevBox
 		key.Mask = "devbox_test...mask"
 		if index < 2 {
-			key.Default = true
-			key.Name = core.DefaultAPIKeyName
+			key.Source = core.APIKeySourceCLILogin
+			key.Name = core.CLILoginAPIKeyName
 		}
 		if _, err := repository.CreateAPIKey(ctx, identity.Namespace, key); err != nil {
 			t.Fatalf("CreateAPIKey(devbox %d) error = %v", index, err)
@@ -69,12 +69,12 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	}
 
 	keys, err := repository.ListAPIKeys(ctx, identity.Namespace)
-	if err != nil || len(keys) != core.MaxAPIKeysPerScope*2 || countDefaultKeys(keys) != 4 ||
+	if err != nil || len(keys) != core.MaxAPIKeysPerScope*2 || countKeysBySource(keys, core.APIKeySourceCLILogin) != 4 ||
 		keysWithScope(keys, core.APIKeyScopeDevBridge) != core.MaxAPIKeysPerScope ||
 		keysWithScope(keys, core.APIKeyScopeDevBox) != core.MaxAPIKeysPerScope {
-		t.Fatalf("ListAPIKeys() count=%d defaults=%d error=%v", len(keys), countDefaultKeys(keys), err)
+		t.Fatalf("ListAPIKeys() count=%d loginKeys=%d error=%v", len(keys), countKeysBySource(keys, core.APIKeySourceCLILogin), err)
 	}
-	if keyByID(keys, firstDefault.ID).LastUsedAt == nil {
+	if keyByID(keys, firstLoginKey.ID).LastUsedAt == nil {
 		t.Fatal("authenticated key has no last-used time")
 	}
 
@@ -86,19 +86,25 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatalf("second identity = %#v, %v", secondIdentity, err)
 	}
 	if _, err := repository.db.ExecContext(ctx, `
-		INSERT INTO api_key (id, namespace, name, key_scope, is_default, key_mask, key_hash)
-		VALUES (?, ?, 'invalid-scope', 'unknown', FALSE, 'unknown_test...mask', ?)`,
+		INSERT INTO api_key (id, namespace, name, key_scope, source, key_mask, key_hash)
+		VALUES (?, ?, 'invalid-scope', 'unknown', 'user_created', 'unknown_test...mask', ?)`,
 		"invalid_"+suffix, secondIdentity.Namespace, bytes.Repeat([]byte{98}, 32)); err == nil {
 		t.Fatal("database accepted an unknown API key scope")
 	}
+	if _, err := repository.db.ExecContext(ctx, `
+		INSERT INTO api_key (id, namespace, name, key_scope, source, key_mask, key_hash)
+		VALUES (?, ?, 'invalid-source', 'devbridge', 'unknown', 'devbridge_test...mask', ?)`,
+		"source_"+suffix, secondIdentity.Namespace, bytes.Repeat([]byte{97}, 32)); err == nil {
+		t.Fatal("database accepted an unknown API key source")
+	}
 
-	if err := repository.DeleteAPIKey(ctx, secondIdentity.Namespace, firstDefault.ID); !errors.Is(err, ErrNotFound) {
+	if err := repository.DeleteAPIKey(ctx, secondIdentity.Namespace, firstLoginKey.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-namespace delete error = %v", err)
 	}
-	if err := repository.DeleteAPIKey(ctx, identity.Namespace, firstDefault.ID); err != nil {
+	if err := repository.DeleteAPIKey(ctx, identity.Namespace, firstLoginKey.ID); err != nil {
 		t.Fatalf("DeleteAPIKey() error = %v", err)
 	}
-	if _, err := repository.FindIdentityByAPIKey(ctx, firstDefault.Digest); !errors.Is(err, ErrNotFound) {
+	if _, err := repository.FindIdentityByAPIKey(ctx, firstLoginKey.Digest); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleted key authentication error = %v", err)
 	}
 	if _, err := repository.CreateAPIKey(ctx, identity.Namespace,
@@ -128,7 +134,7 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 			defer group.Done()
 			<-start
 			key := newTestKey(fmt.Sprintf("concurrent_%02d_%s", index, suffix), "CLI login")
-			key.Default = true
+			key.Source = core.APIKeySourceCLILogin
 			_, err := repository.CreateAPIKey(ctx, identity.Namespace, key)
 			results <- err
 		}(index)
@@ -181,14 +187,14 @@ func newTestKey(id, name string) core.NewAPIKey {
 	digest := sha256.Sum256([]byte(id))
 	return core.NewAPIKey{
 		ID: id, Name: name, Scope: core.APIKeyScopeDevBridge,
-		Mask: "devbridge_test...mask", Digest: digest[:],
+		Mask: "devbridge_test...mask", Digest: digest[:], Source: core.APIKeySourceUserCreated,
 	}
 }
 
-func countDefaultKeys(keys []core.APIKey) int {
+func countKeysBySource(keys []core.APIKey, source core.APIKeySource) int {
 	count := 0
 	for _, key := range keys {
-		if key.Default {
+		if key.Source == source {
 			count++
 		}
 	}

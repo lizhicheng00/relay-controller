@@ -181,7 +181,7 @@ func (s *Store) FindIdentityByAPIKey(ctx context.Context, apiKeyHash []byte) (co
 
 func (s *Store) ListAPIKeys(ctx context.Context, namespace string) ([]core.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, key_scope, key_mask, is_default, created_at, last_used_at
+		SELECT id, name, key_scope, key_mask, source, created_at, last_used_at
 		FROM api_key
 		WHERE namespace = ?
 		ORDER BY key_scope, created_at DESC, id`, namespace)
@@ -224,9 +224,9 @@ func (s *Store) CreateAPIKey(
 			return ErrKeyLimit
 		}
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, name, key_scope, is_default, key_mask, key_hash)
+			INSERT INTO api_key (id, namespace, name, key_scope, source, key_mask, key_hash)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			key.ID, namespace, key.Name, key.Scope, key.Default, key.Mask, key.Digest)
+			key.ID, namespace, key.Name, key.Scope, key.Source, key.Mask, key.Digest)
 		if err != nil {
 			return fmt.Errorf("create API key: %w", err)
 		}
@@ -277,7 +277,7 @@ func lockIdentity(ctx context.Context, tx *sql.Tx, namespace string) error {
 
 func queryAPIKey(ctx context.Context, tx *sql.Tx, namespace, keyID string) (core.APIKey, error) {
 	return scanAPIKey(tx.QueryRowContext(ctx, `
-		SELECT id, name, key_scope, key_mask, is_default, created_at, last_used_at
+		SELECT id, name, key_scope, key_mask, source, created_at, last_used_at
 		FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID))
 }
 
@@ -288,7 +288,7 @@ type scanner interface {
 func scanAPIKey(row scanner) (core.APIKey, error) {
 	var key core.APIKey
 	if err := row.Scan(
-		&key.ID, &key.Name, &key.Scope, &key.Mask, &key.Default, &key.CreatedAt, &key.LastUsedAt,
+		&key.ID, &key.Name, &key.Scope, &key.Mask, &key.Source, &key.CreatedAt, &key.LastUsedAt,
 	); err != nil {
 		return core.APIKey{}, mapQueryError("load API key", err)
 	}

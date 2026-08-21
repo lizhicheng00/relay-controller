@@ -21,7 +21,7 @@ var openAPISpec []byte
 const apiBase = "/open-api-inner/v1/mgmt-service"
 
 type API interface {
-	IssueDefaultAPIKey(context.Context, core.IdentityAssertion, core.APIKeyScope) (core.DefaultAPIKeyCredential, error)
+	CreateCLILoginAPIKey(context.Context, core.IdentityAssertion, core.APIKeyScope) (core.CLILoginCredential, error)
 	CheckAPIKey(context.Context, string) (core.APIKeyIdentity, error)
 	ListAPIKeys(context.Context, core.IdentityAssertion) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, core.IdentityAssertion, string, core.APIKeyScope) (core.IssuedAPIKey, error)
@@ -33,7 +33,7 @@ type Handler struct {
 	log *slog.Logger
 }
 
-type issueDefaultAPIKeyRequest struct {
+type createCLILoginAPIKeyRequest struct {
 	Scope core.APIKeyScope `json:"scope"`
 }
 
@@ -46,7 +46,7 @@ func New(api API, logger *slog.Logger) http.Handler {
 	handler := &Handler{api: api, log: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
-	mux.HandleFunc("POST "+apiBase+"/api-keys/default", handler.issueDefaultAPIKey)
+	mux.HandleFunc("POST "+apiBase+"/api-keys/cli-login", handler.createCLILoginAPIKey)
 	mux.HandleFunc("POST "+apiBase+"/api-keys/check", handler.checkAPIKey)
 	mux.HandleFunc("GET "+apiBase+"/api-keys", handler.listAPIKeys)
 	mux.HandleFunc("POST "+apiBase+"/api-keys", handler.createAPIKey)
@@ -54,13 +54,13 @@ func New(api API, logger *slog.Logger) http.Handler {
 	return handler.recover(mux)
 }
 
-func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http.Request) {
-	var input issueDefaultAPIKeyRequest
+func (h *Handler) createCLILoginAPIKey(response http.ResponseWriter, request *http.Request) {
+	var input createCLILoginAPIKeyRequest
 	if err := decodeJSON(response, request, &input); err != nil {
 		h.writeError(response, err)
 		return
 	}
-	result, err := h.api.IssueDefaultAPIKey(request.Context(), identityAssertion(request), input.Scope)
+	result, err := h.api.CreateCLILoginAPIKey(request.Context(), identityAssertion(request), input.Scope)
 	if err != nil {
 		h.writeError(response, err)
 		return

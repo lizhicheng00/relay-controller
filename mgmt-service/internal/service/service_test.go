@@ -75,14 +75,14 @@ func (f *fakeRepository) DeleteAPIKey(_ context.Context, _ string, keyID string)
 	return f.deleteErr
 }
 
-func TestIssueDefaultAPIKeyCreatesPermanentKey(t *testing.T) {
+func TestCreateCLILoginAPIKeyCreatesPermanentKey(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity}
 	application := newTestService(repository)
 
-	credential, err := application.IssueDefaultAPIKey(
+	credential, err := application.CreateCLILoginAPIKey(
 		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
 	if err != nil {
-		t.Fatalf("IssueDefaultAPIKey() error = %v", err)
+		t.Fatalf("CreateCLILoginAPIKey() error = %v", err)
 	}
 	if credential.Identity != testIdentity || !strings.HasPrefix(credential.APIKey, "devbridge_") {
 		t.Fatalf("credential = %#v", credential)
@@ -90,22 +90,22 @@ func TestIssueDefaultAPIKeyCreatesPermanentKey(t *testing.T) {
 	created := repository.createdKeys[0]
 	_, digest, _ := security.ParseAPIKey(credential.APIKey)
 	if !bytes.Equal(digest, created.Digest) || !keyIDPattern.MatchString(created.ID) ||
-		created.Name != core.DefaultAPIKeyName || created.Scope != core.APIKeyScopeDevBridge ||
-		!created.Default {
-		t.Fatalf("default key = %#v", created)
+		created.Name != core.CLILoginAPIKeyName || created.Scope != core.APIKeyScopeDevBridge ||
+		created.Source != core.APIKeySourceCLILogin {
+		t.Fatalf("CLI login key = %#v", created)
 	}
 }
 
-func TestIssueDefaultAPIKeyCreatesAnotherKeyOnEachLogin(t *testing.T) {
+func TestCreateCLILoginAPIKeyCreatesAnotherKeyOnEachLogin(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity}
 	application := newTestService(repository)
 
-	first, err := application.IssueDefaultAPIKey(
+	first, err := application.CreateCLILoginAPIKey(
 		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := application.IssueDefaultAPIKey(
+	second, err := application.CreateCLILoginAPIKey(
 		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +148,7 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 		!keyIDPattern.MatchString(repository.createdKeys[0].ID) ||
 		repository.createdKeys[0].Name != "local-cli" ||
 		repository.createdKeys[0].Scope != core.APIKeyScopeDevBox ||
-		repository.createdKeys[0].Default {
+		repository.createdKeys[0].Source != core.APIKeySourceUserCreated {
 		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKeys[0])
 	}
 	_, digest, err := security.ParseAPIKey(issued.Value)
@@ -186,20 +186,20 @@ func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 
 func TestRejectsInvalidIdentityAndAPIKey(t *testing.T) {
 	application := newTestService(&fakeRepository{})
-	_, err := application.IssueDefaultAPIKey(context.Background(), core.IdentityAssertion{
+	_, err := application.CreateCLILoginAPIKey(context.Background(), core.IdentityAssertion{
 		DomainID: "invalid value", UserID: "user-1",
 	}, core.APIKeyScopeDevBridge)
 	var appError *core.AppError
 	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
 		appError.Details[0].Target != "X-Domain-Id" {
-		t.Fatalf("IssueDefaultAPIKey() error = %#v", err)
+		t.Fatalf("CreateCLILoginAPIKey() error = %#v", err)
 	}
-	_, err = application.IssueDefaultAPIKey(context.Background(), core.IdentityAssertion{
+	_, err = application.CreateCLILoginAPIKey(context.Background(), core.IdentityAssertion{
 		DomainID: "domain-1", UserID: "user-1",
 	}, "unknown")
 	if !errors.As(err, &appError) || len(appError.Details) != 1 ||
 		appError.Details[0].Target != "scope" {
-		t.Fatalf("IssueDefaultAPIKey(scope) error = %#v", err)
+		t.Fatalf("CreateCLILoginAPIKey(scope) error = %#v", err)
 	}
 	if _, err := application.CheckAPIKey(context.Background(), "invalid"); err == nil {
 		t.Fatal("CheckAPIKey() accepted an invalid API key")

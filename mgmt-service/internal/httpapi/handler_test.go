@@ -14,7 +14,7 @@ import (
 )
 
 type fakeAPI struct {
-	defaultKey   core.DefaultAPIKeyCredential
+	loginKey     core.CLILoginCredential
 	identity     core.APIKeyIdentity
 	keys         []core.APIKey
 	issued       core.IssuedAPIKey
@@ -31,14 +31,14 @@ type fakeAPI struct {
 	deleteError  error
 }
 
-func (f *fakeAPI) IssueDefaultAPIKey(
+func (f *fakeAPI) CreateCLILoginAPIKey(
 	_ context.Context,
 	assertion core.IdentityAssertion,
 	scope core.APIKeyScope,
-) (core.DefaultAPIKeyCredential, error) {
+) (core.CLILoginCredential, error) {
 	f.assertion = assertion
 	f.issuedScope = scope
-	return f.defaultKey, f.issueError
+	return f.loginKey, f.issueError
 }
 
 func (f *fakeAPI) CheckAPIKey(_ context.Context, value string) (core.APIKeyIdentity, error) {
@@ -76,8 +76,8 @@ func (f *fakeAPI) DeleteAPIKey(
 	return f.deleteError
 }
 
-func TestIssueDefaultAPIKeyUsesDomainUserAndScope(t *testing.T) {
-	application := &fakeAPI{defaultKey: core.DefaultAPIKeyCredential{
+func TestCreateCLILoginAPIKeyUsesDomainUserAndScope(t *testing.T) {
+	application := &fakeAPI{loginKey: core.CLILoginCredential{
 		Identity: core.Identity{
 			DomainID: "domain-1", UserID: "user-1",
 			AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
@@ -85,7 +85,7 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndScope(t *testing.T) {
 		Scope: core.APIKeyScopeDevBox, APIKey: strings.Repeat("a", 32),
 	}}
 	server := newTestServer(application)
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default",
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/cli-login",
 		strings.NewReader(`{"scope":"devbox"}`))
 	request.Header.Set("X-Domain-Id", "domain-1")
 	request.Header.Set("X-User-Id", "user-1")
@@ -103,7 +103,7 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndScope(t *testing.T) {
 	if application.issuedScope != core.APIKeyScopeDevBox {
 		t.Fatalf("scope = %q", application.issuedScope)
 	}
-	var result core.DefaultAPIKeyCredential
+	var result core.CLILoginCredential
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.APIKey == "" {
 		t.Fatalf("response = %#v, %v", result, err)
 	}
@@ -111,7 +111,7 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndScope(t *testing.T) {
 
 func TestValidationErrorUsesRelayFormat(t *testing.T) {
 	server := newTestServer(&fakeAPI{issueError: core.Invalid("X-User-Id", "user ID is invalid")})
-	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/default",
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/api-keys/cli-login",
 		strings.NewReader(`{"scope":"devbridge"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -173,8 +173,8 @@ func TestCheckAPIKeyRejectsInvalidKey(t *testing.T) {
 func TestAPIKeyManagementRoutes(t *testing.T) {
 	application := &fakeAPI{
 		keys: []core.APIKey{{
-			ID: "abcdefghijklmnopqrstuvwxyz", Name: "default",
-			Scope: core.APIKeyScopeDevBridge, Default: true,
+			ID: "abcdefghijklmnopqrstuvwxyz", Name: core.CLILoginAPIKeyName,
+			Scope: core.APIKeyScopeDevBridge, Source: core.APIKeySourceCLILogin,
 		}},
 		issued: core.IssuedAPIKey{
 			APIKey: core.APIKey{

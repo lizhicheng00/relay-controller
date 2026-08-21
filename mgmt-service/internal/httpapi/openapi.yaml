@@ -8,7 +8,7 @@ info:
 servers:
   - url: https://localhost:8443
 paths:
-  /open-api-inner/v1/mgmt-service/api-keys/default:
+  /open-api-inner/v1/mgmt-service/api-keys/cli-login:
     post:
       summary: Create a CLI login API key for a scope
       description: >-
@@ -23,7 +23,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IssueDefaultAPIKeyRequest'
+              $ref: '#/components/schemas/CreateCLILoginAPIKeyRequest'
       responses:
         '201':
           description: User identity, namespaces, and newly created CLI login API key
@@ -33,7 +33,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefaultAPIKeyCredential'
+                $ref: '#/components/schemas/CLILoginCredential'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -181,7 +181,7 @@ components:
           properties:
             scope:
               $ref: '#/components/schemas/APIKeyScope'
-    DefaultAPIKeyCredential:
+    CLILoginCredential:
       allOf:
         - $ref: '#/components/schemas/Identity'
         - type: object
@@ -193,7 +193,7 @@ components:
               $ref: '#/components/schemas/APIKeyValue'
     APIKey:
       type: object
-      required: [id, name, scope, mask, isDefault, createdAt, lastUsedAt]
+      required: [id, name, scope, source, mask, createdAt, lastUsedAt]
       properties:
         id:
           type: string
@@ -205,8 +205,8 @@ components:
         mask:
           type: string
           example: devbridge_abcd...1234
-        isDefault:
-          type: boolean
+        source:
+          $ref: '#/components/schemas/APIKeySource'
         createdAt:
           type: string
           format: date-time
@@ -230,7 +230,10 @@ components:
     APIKeyScope:
       type: string
       enum: [devbridge, devbox]
-    IssueDefaultAPIKeyRequest:
+    APIKeySource:
+      type: string
+      enum: [cli_login, user_created]
+    CreateCLILoginAPIKeyRequest:
       type: object
       required: [scope]
       additionalProperties: false
