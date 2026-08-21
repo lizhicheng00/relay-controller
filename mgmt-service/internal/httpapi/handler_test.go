@@ -94,7 +94,7 @@ func TestIssueDefaultAPIKeyUsesDomainUserAndScope(t *testing.T) {
 
 	server.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+	if response.Code != http.StatusCreated || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("status = %d, headers = %#v, body = %s", response.Code, response.Header(), response.Body)
 	}
 	if application.assertion.DomainID != "domain-1" || application.assertion.UserID != "user-1" {

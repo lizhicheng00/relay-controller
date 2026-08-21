@@ -3,9 +3,8 @@ package core
 import "time"
 
 const (
-	DefaultAPIKeyName            = "default"
-	MaxAPIKeysPerScope           = 5
-	MaxAdditionalAPIKeysPerScope = MaxAPIKeysPerScope - 1
+	DefaultAPIKeyName  = "CLI login"
+	MaxAPIKeysPerScope = 20
 )
 
 type APIKeyScope string
@@ -45,11 +44,12 @@ type DefaultAPIKeyCredential struct {
 }
 
 type NewAPIKey struct {
-	ID     string
-	Name   string
-	Scope  APIKeyScope
-	Mask   string
-	Digest []byte
+	ID      string
+	Name    string
+	Scope   APIKeyScope
+	Mask    string
+	Digest  []byte
+	Default bool
 }
 
 type APIKey struct {

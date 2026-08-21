@@ -16,7 +16,6 @@ var (
 	ErrNotFound     = errors.New("not found")
 	ErrUnauthorized = errors.New("unauthorized")
 	ErrKeyLimit     = errors.New("API key limit reached")
-	ErrNameConflict = errors.New("API key name already exists")
 )
 
 type Store struct {
@@ -53,41 +52,6 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
-
-func (s *Store) GetOrCreateDefaultAPIKey(
-	ctx context.Context,
-	namespace string,
-	defaultKey core.NewAPIKey,
-) (core.NewAPIKey, error) {
-	var stored core.NewAPIKey
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		if err := lockIdentity(ctx, tx, namespace); err != nil {
-			return err
-		}
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, key_hash FROM api_key
-			WHERE namespace = ? AND key_scope = ? AND slot = 0
-			FOR UPDATE`, namespace, defaultKey.Scope).Scan(&stored.ID, &stored.Digest)
-		if err == nil {
-			stored.Scope = defaultKey.Scope
-			return nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("load default API key: %w", err)
-		}
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
-			VALUES (?, ?, 0, ?, ?, ?, ?)`,
-			defaultKey.ID, namespace, core.DefaultAPIKeyName,
-			defaultKey.Scope, defaultKey.Mask, defaultKey.Digest)
-		if err != nil {
-			return fmt.Errorf("store default API key: %w", err)
-		}
-		stored = defaultKey
-		return nil
-	})
-	return stored, err
-}
 
 func (s *Store) EnsureIdentity(
 	ctx context.Context,
@@ -217,10 +181,10 @@ func (s *Store) FindIdentityByAPIKey(ctx context.Context, apiKeyHash []byte) (co
 
 func (s *Store) ListAPIKeys(ctx context.Context, namespace string) ([]core.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, key_scope, key_mask, slot, created_at, last_used_at
+		SELECT id, name, key_scope, key_mask, is_default, created_at, last_used_at
 		FROM api_key
 		WHERE namespace = ?
-		ORDER BY key_scope, slot`, namespace)
+		ORDER BY key_scope, created_at DESC, id`, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("list API keys: %w", err)
 	}
@@ -250,23 +214,27 @@ func (s *Store) CreateAPIKey(
 		if err := lockIdentity(ctx, tx, namespace); err != nil {
 			return err
 		}
-		slot, err := availableSlot(ctx, tx, namespace, key.Scope, key.Name)
-		if err != nil {
-			return err
+		var count int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM api_key
+			WHERE namespace = ? AND key_scope = ?`, namespace, key.Scope).Scan(&count); err != nil {
+			return fmt.Errorf("count API keys: %w", err)
 		}
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO api_key (id, namespace, slot, name, key_scope, key_mask, key_hash)
+		if count >= core.MaxAPIKeysPerScope {
+			return ErrKeyLimit
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO api_key (id, namespace, name, key_scope, is_default, key_mask, key_hash)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			key.ID, namespace, slot, key.Name, key.Scope, key.Mask, key.Digest)
+			key.ID, namespace, key.Name, key.Scope, key.Default, key.Mask, key.Digest)
 		if err != nil {
-			var mysqlError *mysqldriver.MySQLError
-			if errors.As(err, &mysqlError) && mysqlError.Number == 1062 {
-				return ErrNameConflict
-			}
 			return fmt.Errorf("create API key: %w", err)
 		}
 		created, err = queryAPIKey(ctx, tx, namespace, key.ID)
-		return err
+		if err != nil {
+			return err
+		}
+		return nil
 	})
 	return created, err
 }
@@ -307,47 +275,9 @@ func lockIdentity(ctx context.Context, tx *sql.Tx, namespace string) error {
 	return nil
 }
 
-func availableSlot(
-	ctx context.Context,
-	tx *sql.Tx,
-	namespace string,
-	scope core.APIKeyScope,
-	name string,
-) (int, error) {
-	var occupied [core.MaxAPIKeysPerScope]bool
-	rows, err := tx.QueryContext(ctx, `
-		SELECT slot, name FROM api_key
-		WHERE namespace = ? AND key_scope = ?
-		FOR UPDATE`, namespace, scope)
-	if err != nil {
-		return 0, fmt.Errorf("list API key slots: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var slot int
-		var existingName string
-		if err := rows.Scan(&slot, &existingName); err != nil {
-			return 0, fmt.Errorf("scan API key slot: %w", err)
-		}
-		if existingName == name {
-			return 0, ErrNameConflict
-		}
-		occupied[slot] = true
-	}
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("iterate API key slots: %w", err)
-	}
-	for slot := 1; slot < core.MaxAPIKeysPerScope; slot++ {
-		if !occupied[slot] {
-			return slot, nil
-		}
-	}
-	return 0, ErrKeyLimit
-}
-
 func queryAPIKey(ctx context.Context, tx *sql.Tx, namespace, keyID string) (core.APIKey, error) {
 	return scanAPIKey(tx.QueryRowContext(ctx, `
-		SELECT id, name, key_scope, key_mask, slot, created_at, last_used_at
+		SELECT id, name, key_scope, key_mask, is_default, created_at, last_used_at
 		FROM api_key WHERE namespace = ? AND id = ?`, namespace, keyID))
 }
 
@@ -357,13 +287,11 @@ type scanner interface {
 
 func scanAPIKey(row scanner) (core.APIKey, error) {
 	var key core.APIKey
-	var slot int
 	if err := row.Scan(
-		&key.ID, &key.Name, &key.Scope, &key.Mask, &slot, &key.CreatedAt, &key.LastUsedAt,
+		&key.ID, &key.Name, &key.Scope, &key.Mask, &key.Default, &key.CreatedAt, &key.LastUsedAt,
 	); err != nil {
 		return core.APIKey{}, mapQueryError("load API key", err)
 	}
-	key.Default = slot == 0
 	return key, nil
 }
 

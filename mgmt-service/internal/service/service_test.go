@@ -21,35 +21,17 @@ var testIdentity = core.Identity{
 var testAssertion = core.IdentityAssertion{DomainID: "domain-1", UserID: "user-1"}
 
 type fakeRepository struct {
-	identity      core.Identity
-	keys          []core.APIKey
-	created       core.APIKey
-	defaultKey    core.NewAPIKey
-	storedDefault core.NewAPIKey
-	createdKey    core.NewAPIKey
-	findDigest    []byte
-	deletedKeyID  string
-	issueErr      error
-	identityErr   error
-	apiKeyErr     error
-	listErr       error
-	createErr     error
-	deleteErr     error
-}
-
-func (f *fakeRepository) GetOrCreateDefaultAPIKey(
-	_ context.Context,
-	_ string,
-	key core.NewAPIKey,
-) (core.NewAPIKey, error) {
-	f.defaultKey = key
-	if f.issueErr != nil {
-		return core.NewAPIKey{}, f.issueErr
-	}
-	if f.storedDefault.ID == "" {
-		f.storedDefault = key
-	}
-	return f.storedDefault, nil
+	identity     core.Identity
+	keys         []core.APIKey
+	created      core.APIKey
+	createdKeys  []core.NewAPIKey
+	findDigest   []byte
+	deletedKeyID string
+	identityErr  error
+	apiKeyErr    error
+	listErr      error
+	createErr    error
+	deleteErr    error
 }
 
 func (f *fakeRepository) EnsureIdentity(
@@ -84,7 +66,7 @@ func (f *fakeRepository) CreateAPIKey(
 	_ string,
 	key core.NewAPIKey,
 ) (core.APIKey, error) {
-	f.createdKey = key
+	f.createdKeys = append(f.createdKeys, key)
 	return f.created, f.createErr
 }
 
@@ -105,16 +87,16 @@ func TestIssueDefaultAPIKeyCreatesPermanentKey(t *testing.T) {
 	if credential.Identity != testIdentity || !strings.HasPrefix(credential.APIKey, "devbridge_") {
 		t.Fatalf("credential = %#v", credential)
 	}
+	created := repository.createdKeys[0]
 	_, digest, _ := security.ParseAPIKey(credential.APIKey)
-	if !bytes.Equal(digest, repository.defaultKey.Digest) ||
-		!keyIDPattern.MatchString(repository.defaultKey.ID) ||
-		repository.defaultKey.Name != core.DefaultAPIKeyName ||
-		repository.defaultKey.Scope != core.APIKeyScopeDevBridge {
-		t.Fatalf("default key = %#v", repository.defaultKey)
+	if !bytes.Equal(digest, created.Digest) || !keyIDPattern.MatchString(created.ID) ||
+		created.Name != core.DefaultAPIKeyName || created.Scope != core.APIKeyScopeDevBridge ||
+		!created.Default {
+		t.Fatalf("default key = %#v", created)
 	}
 }
 
-func TestIssueDefaultAPIKeyIsIdempotent(t *testing.T) {
+func TestIssueDefaultAPIKeyCreatesAnotherKeyOnEachLogin(t *testing.T) {
 	repository := &fakeRepository{identity: testIdentity}
 	application := newTestService(repository)
 
@@ -128,22 +110,10 @@ func TestIssueDefaultAPIKeyIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first != second {
-		t.Fatalf("credentials differ: first=%#v second=%#v", first, second)
+	if first.APIKey == second.APIKey || len(repository.createdKeys) != 2 ||
+		repository.createdKeys[0].ID == repository.createdKeys[1].ID {
+		t.Fatalf("credentials were reused: first=%#v second=%#v", first, second)
 	}
-}
-
-func TestIssueDefaultAPIKeyRejectsChangedMaster(t *testing.T) {
-	repository := &fakeRepository{
-		identity: testIdentity,
-		storedDefault: core.NewAPIKey{
-			ID: "abcdefghijklmnopqrstuvwxyz", Scope: core.APIKeyScopeDevBridge,
-			Digest: bytes.Repeat([]byte{1}, 32),
-		},
-	}
-	_, err := newTestService(repository).IssueDefaultAPIKey(
-		context.Background(), testAssertion, core.APIKeyScopeDevBridge)
-	assertAppError(t, err, 500, core.CodeInternal)
 }
 
 func TestCheckAPIKeyReturnsMappedIdentity(t *testing.T) {
@@ -175,20 +145,21 @@ func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if issued.APIKey != created || !strings.HasPrefix(issued.Value, "devbox_") ||
-		!keyIDPattern.MatchString(repository.createdKey.ID) ||
-		repository.createdKey.Name != "local-cli" ||
-		repository.createdKey.Scope != core.APIKeyScopeDevBox {
-		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKey)
+		!keyIDPattern.MatchString(repository.createdKeys[0].ID) ||
+		repository.createdKeys[0].Name != "local-cli" ||
+		repository.createdKeys[0].Scope != core.APIKeyScopeDevBox ||
+		repository.createdKeys[0].Default {
+		t.Fatalf("issued key = %#v, stored = %#v", issued, repository.createdKeys[0])
 	}
 	_, digest, err := security.ParseAPIKey(issued.Value)
-	if err != nil || !bytes.Equal(digest, repository.createdKey.Digest) {
+	if err != nil || !bytes.Equal(digest, repository.createdKeys[0].Digest) {
 		t.Fatalf("issued digest = %x, %v", digest, err)
 	}
 }
 
 func TestAPIKeyValidationAndBusinessErrors(t *testing.T) {
 	application := newTestService(&fakeRepository{})
-	for _, name := range []string{"", "default", "bad\nname"} {
+	for _, name := range []string{"", "bad\nname"} {
 		if _, err := application.CreateAPIKey(
 			context.Background(), testAssertion, name, core.APIKeyScopeDevBridge,
 		); err == nil {
@@ -262,5 +233,5 @@ func assertAppError(t *testing.T, err error, status int, code string) {
 }
 
 func newTestService(repository repository) *Service {
-	return New(repository, [32]byte{1, 2, 3})
+	return New(repository)
 }

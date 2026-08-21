@@ -34,12 +34,6 @@ func TestKeyFileAndEncryption(t *testing.T) {
 	if decrypted != "secret-value" {
 		t.Fatalf("Decrypt() = %q", decrypted)
 	}
-	first := codec.DeriveKey("default-api-key")
-	second := codec.DeriveKey("default-api-key")
-	other := codec.DeriveKey("configuration")
-	if first != second || first == other {
-		t.Fatal("derived keys are not stable and purpose-separated")
-	}
 }
 
 func TestDecryptRejectsModifiedValue(t *testing.T) {

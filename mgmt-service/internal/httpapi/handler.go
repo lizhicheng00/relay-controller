@@ -65,7 +65,7 @@ func (h *Handler) issueDefaultAPIKey(response http.ResponseWriter, request *http
 		h.writeError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, result)
+	writeJSON(response, http.StatusCreated, result)
 }
 
 func (h *Handler) checkAPIKey(response http.ResponseWriter, request *http.Request) {

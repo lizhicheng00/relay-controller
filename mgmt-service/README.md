@@ -7,14 +7,14 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One cloud domain maps to one shared `accountNamespace`.
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
-- Each namespace may have five API keys for each scope: one default key and four additional keys.
-- An authenticated CLI or upper service may explicitly request a scoped default API key as an immediate business credential. Repeated requests return the same key until it is deleted.
-- Default and additional API keys can both be deleted. Additional keys are intended for separate clients or usage scenarios.
-- Additional key names are unique within a namespace and scope. All keys currently grant the same namespace access.
-- API key scopes are `devbridge` and `devbox`. Each scope has its own default key and additional-key allowance.
+- Each namespace may have 20 API keys for each scope.
+- Every CLI login request creates a permanent API key named `CLI login`. Multiple login keys may coexist.
+- Login and named API keys can both be deleted by ID when they are no longer needed.
+- API key names are display labels and may repeat. All keys currently grant the same namespace access.
+- API key scopes are `devbridge` and `devbox`. Each scope has an independent 20-key allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
 - MySQL stores only API key metadata and SHA-256 digests.
-- Default keys are derived from the root key, namespace, scope, and key ID. Additional keys are random. Complete additional-key values are returned only when issued.
+- All API keys are generated randomly. Complete values are returned only when issued.
 
 ## Namespace Ownership
 
@@ -27,10 +27,10 @@ Users in the same cloud domain receive different namespaces but share one `accou
 All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
-POST /open-api-inner/v1/mgmt-service/api-keys/default  get or create a scoped default API key
+POST /open-api-inner/v1/mgmt-service/api-keys/default  create a CLI login API key
 POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
-POST /open-api-inner/v1/mgmt-service/api-keys  create an additional API key
+POST /open-api-inner/v1/mgmt-service/api-keys  create a named API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an API key
 ```
 
@@ -38,18 +38,18 @@ All endpoints require mTLS. The upper identity layer confirms the user's login s
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 
-Opening the management page does not create an identity or a default API key. Listing keys for a new user returns an empty list. Creating an additional key creates the user's namespace when needed; issuing a default key remains an explicit login-redirect operation.
+Opening the management page does not create an identity or an API key. Listing keys for a new user returns an empty list. Creating a named key creates the user's namespace when needed; the login key endpoint is called explicitly after CLI login.
 
 ## Data Ownership
 
 - `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
 - `user_identity` owns the `(domainId, userId)` mapping and user namespace.
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
-- Within each scope, API key slot `0` is the default key and slots `1` through `4` are additional keys.
+- `api_key.is_default` identifies keys created by the CLI login flow.
 
-Only one default key may exist per scope. It is never rotated automatically; repeated requests return the existing value, while deletion followed by another request creates a different value. Creating and deleting keys locks the user identity while assigning slots, preserving the five-key-per-scope limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
+Every creation produces a new key. Creating and deleting keys locks the user identity while checking the per-scope count, preserving the 20-key limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
-For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. The first request for each scope creates its default API key without replacing the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
+For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. Creating the first API key does not replace the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 
 ## Structure
 
@@ -70,7 +70,7 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
-| `MGMT_CONFIG_KEY_FILE` | yes | Base64 root-key file, default path `/opt/cloud/dog/beta` |
+| `MGMT_CONFIG_KEY_FILE` | no | Root-key file for encrypted values, default `/opt/cloud/dog/beta` |
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
@@ -82,8 +82,7 @@ The key store contains the server private key and certificate chain; the trust s
 the accepted client CA.
 
 Each sensitive configuration entry accepts either a plain value or an AES-256-GCM `ENC(...)`
-value. The same root-key file supplies purpose-separated keys for configuration decryption and
-idempotent default API key issuance.
+value. The root-key file is read only when at least one encrypted value is configured.
 
 Build the service and its small configuration tool:
 

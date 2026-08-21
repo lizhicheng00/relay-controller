@@ -10,12 +10,11 @@ servers:
 paths:
   /open-api-inner/v1/mgmt-service/api-keys/default:
     post:
-      summary: Get or create a cloud user's default API key for a scope
+      summary: Create a CLI login API key for a scope
       description: >-
-        Explicitly requested by an authenticated CLI or upper identity layer when an immediate
-        business credential is needed. The service creates the user's namespace and a permanent
-        default API key on first use. Repeated requests for the same identity and scope return the
-        same key. Deleting it allows a different key to be created.
+        Called after CLI login. The service creates the user's namespace when needed and creates
+        a new permanent API key named `CLI login` on every request. Multiple login keys may coexist
+        and count toward the 20-key limit for the scope.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -26,8 +25,8 @@ paths:
             schema:
               $ref: '#/components/schemas/IssueDefaultAPIKeyRequest'
       responses:
-        '200':
-          description: User identity, namespaces, and default API key
+        '201':
+          description: User identity, namespaces, and newly created CLI login API key
           headers:
             Cache-Control:
               $ref: '#/components/headers/NoStore'
@@ -39,6 +38,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys/check:
@@ -69,12 +70,12 @@ paths:
       description: Returns metadata and masks only. Complete API key values are never listed.
       responses:
         '200':
-          description: API keys grouped by scope with each default key first
+          description: API keys grouped by scope and ordered newest first
           content:
             application/json:
               schema:
                 type: array
-                maxItems: 10
+                maxItems: 40
                 items:
                   $ref: '#/components/schemas/APIKey'
         '400':
@@ -82,11 +83,11 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
     post:
-      summary: Create an additional API key
+      summary: Create a named API key
       description: >-
-        Creates one of at most four additional API keys for the requested scope. The complete
-        value is returned only in this response and cannot be retrieved later. The scope determines
-        whether the value starts with `devbridge_` or `devbox_`.
+        Creates a named API key within the 20-key limit for the requested scope. Names are display
+        labels and may repeat. The complete value is returned only in this response and cannot be
+        retrieved later. The scope determines whether the value starts with `devbridge_` or `devbox_`.
       requestBody:
         required: true
         content:
@@ -95,7 +96,7 @@ paths:
               $ref: '#/components/schemas/CreateAPIKeyRequest'
       responses:
         '201':
-          description: Additional API key created
+          description: Named API key created
           headers:
             Cache-Control:
               $ref: '#/components/headers/NoStore'
@@ -112,7 +113,7 @@ paths:
   /open-api-inner/v1/mgmt-service/api-keys/{keyId}:
     delete:
       summary: Delete an API key
-      description: Deletes either a default or an additional API key.
+      description: Deletes a CLI login or named API key by its unique ID.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -245,7 +246,7 @@ components:
           type: string
           minLength: 1
           maxLength: 64
-          description: A client or usage label. The name `default` is reserved within each scope.
+          description: A client or usage label. Names may repeat within a scope.
         scope:
           $ref: '#/components/schemas/APIKeyScope'
     ErrorResponse:
@@ -296,7 +297,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: API key name conflict or per-scope limit
+      description: Per-scope API key limit reached
       content:
         application/json:
           schema:

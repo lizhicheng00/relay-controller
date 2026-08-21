@@ -10,9 +10,8 @@ const (
 	CodeParamInvalid        = "40000"
 	CodeUnauthorized        = "40100"
 	CodeAPIKeyNotFound      = "13001"
-	CodeAPIKeyNameConflict  = "13002"
-	CodeAPIKeyLimitReached  = "13003"
-	CodeIdentityNotFound    = "13005"
+	CodeAPIKeyLimitReached  = "13002"
+	CodeIdentityNotFound    = "13003"
 	CodeInternal            = "50000"
 )
 
