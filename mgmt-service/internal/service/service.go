@@ -201,7 +201,7 @@ func mapStoreError(operation, target string, err error) error {
 func mapAPIKeyStoreError(operation string, err error) error {
 	switch {
 	case errors.Is(err, store.ErrKeyLimit):
-		return core.Conflict(core.CodeAPIKeyLimitReached, "apiKeys", "an API key scope can have at most 20 keys")
+		return core.Conflict(core.CodeAPIKeyLimitReached, "apiKeys", "API key limit exceeded for this scope")
 	case errors.Is(err, store.ErrNotFound):
 		return core.NotFound("keyId", "API key not found")
 	case errors.Is(err, store.ErrUnauthorized):

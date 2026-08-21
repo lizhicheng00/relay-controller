@@ -15,7 +15,7 @@ import (
 var (
 	ErrNotFound     = errors.New("not found")
 	ErrUnauthorized = errors.New("unauthorized")
-	ErrKeyLimit     = errors.New("API key limit reached")
+	ErrKeyLimit     = errors.New("API key limit exceeded")
 )
 
 type Store struct {

@@ -7,11 +7,11 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 - One cloud domain maps to one shared `accountNamespace`.
 - One `(domainId, userId)` maps to one permanent `namespace`.
 - Callers never submit or select a namespace.
-- Each namespace may have 20 API keys for each scope.
+- Each namespace has an API key limit for each scope.
 - Every CLI login request creates a permanent API key named `CLI login`. Multiple login keys may coexist.
 - Login and named API keys can both be deleted by ID when they are no longer needed.
 - API key names are display labels and may repeat. All keys currently grant the same namespace access.
-- API key scopes are `devbridge` and `devbox`. Each scope has an independent 20-key allowance.
+- API key scopes are `devbridge` and `devbox`. Each scope has an independent allowance.
 - Keys use `devbridge_<payload>` or `devbox_<payload>`. The payload is 32-character unpadded Base64URL generated from 24 bytes of key material.
 - MySQL stores only API key metadata and SHA-256 digests.
 - All API keys are generated randomly. Complete values are returned only when issued.
@@ -47,7 +47,7 @@ Opening the management page does not create an identity or an API key. Listing k
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
 - `api_key.source` identifies keys created by `cli_login` and `user_created` flows.
 
-Every creation produces a new key. Creating and deleting keys locks the user identity while checking the per-scope count, preserving the 20-key limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
+Every creation produces a new key. Creating and deleting keys locks the user identity while checking the per-scope count, preserving the limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
 For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. Creating the first API key does not replace the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 

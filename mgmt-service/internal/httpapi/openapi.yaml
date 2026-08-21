@@ -14,7 +14,7 @@ paths:
       description: >-
         Called after CLI login. The service creates the user's namespace when needed and creates
         a new permanent API key named `CLI login` on every request. Multiple login keys may coexist
-        and count toward the 20-key limit for the scope.
+        and count toward the API key limit for the scope.
       parameters:
         - $ref: '#/components/parameters/DomainId'
         - $ref: '#/components/parameters/UserId'
@@ -75,7 +75,6 @@ paths:
             application/json:
               schema:
                 type: array
-                maxItems: 40
                 items:
                   $ref: '#/components/schemas/APIKey'
         '400':
@@ -85,9 +84,9 @@ paths:
     post:
       summary: Create a named API key
       description: >-
-        Creates a named API key within the 20-key limit for the requested scope. Names are display
-        labels and may repeat. The complete value is returned only in this response and cannot be
-        retrieved later. The scope determines whether the value starts with `devbridge_` or `devbox_`.
+        Creates a named API key subject to the limit for the requested scope. Names are display labels
+        and may repeat. The complete value is returned only in this response and cannot be retrieved
+        later. The scope determines whether the value starts with `devbridge_` or `devbox_`.
       requestBody:
         required: true
         content:
@@ -300,7 +299,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: Per-scope API key limit reached
+      description: API key limit exceeded for the requested scope
       content:
         application/json:
           schema:
