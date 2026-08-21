@@ -24,7 +24,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != "127.0.0.1:8443" || cfg.Management.URL != "https://127.0.0.1:8444" ||
+	if cfg.Address != ":8443" || cfg.Management.URL != "https://127.0.0.1:8444" ||
 		cfg.Management.ServerName != "mgmt.developer.myhuaweicloud.com" ||
 		cfg.Relay.Domain != "myhuaweicloud.com" || cfg.Relay.Region != "cn-north-4" ||
 		cfg.Relay.RequestsPerMinute != 120 {

@@ -15,7 +15,7 @@ const (
 	defaultRequestsPerMinute = 120
 	defaultManagementURL     = "https://127.0.0.1:8444"
 	defaultManagementName    = "mgmt.developer.myhuaweicloud.com"
-	defaultAddress           = "127.0.0.1:8443"
+	defaultAddress           = ":8443"
 )
 
 type Config struct {

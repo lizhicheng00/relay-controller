@@ -61,7 +61,7 @@ Environment variables:
 
 | Variable | Meaning |
 | --- | --- |
-| `SERVER_ADDRESS` | HTTP listen address, default `127.0.0.1:8443` |
+| `SERVER_ADDRESS` | HTTP listen address, default `:8443` |
 | `MGMT_SERVICE_URL` | Management Service internal HTTPS address, default `https://127.0.0.1:8444` |
 | `MGMT_SERVER_NAME` | TLS SNI and certificate name, default `mgmt.developer.myhuaweicloud.com` |
 | `MGMT_CLIENT_CERT_BASE64` | Base64-encoded client certificate PEM used for Management Service mTLS |
