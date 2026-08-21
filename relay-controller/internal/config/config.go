@@ -12,7 +12,7 @@ import (
 const (
 	defaultRelayDomain       = "myhuaweicloud.com"
 	defaultRequestsPerMinute = 120
-	defaultManagementURL     = "https://127.0.0.1:8444"
+	defaultManagementURL     = "https://mgmt.developer.myhuaweicloud.com"
 	defaultAddress           = "127.0.0.1:8443"
 )
 
