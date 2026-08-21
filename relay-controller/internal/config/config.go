@@ -12,7 +12,8 @@ import (
 const (
 	defaultRelayDomain       = "myhuaweicloud.com"
 	defaultRequestsPerMinute = 120
-	defaultManagementURL     = "https://mgmt.developer.myhuaweicloud.com"
+	defaultManagementURL     = "https://127.0.0.1:8444"
+	defaultManagementName    = "mgmt.developer.myhuaweicloud.com"
 	defaultAddress           = "127.0.0.1:8443"
 )
 
@@ -69,7 +70,7 @@ func Load() (Config, error) {
 		},
 		Management: Management{
 			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
-			ServerName:        strings.TrimSpace(os.Getenv("MGMT_SERVER_NAME")),
+			ServerName:        valueOrDefault("MGMT_SERVER_NAME", defaultManagementName),
 			ClientCertBase64:  strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
 			ClientKeyBase64:   strings.TrimSpace(getSecret("MGMT_CLIENT_KEY_BASE64")),
 			ClientKeyPassword: getSecret("MGMT_CLIENT_KEY_PASSWORD"),

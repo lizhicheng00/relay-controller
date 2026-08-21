@@ -16,13 +16,15 @@ func TestLoadRejectsInvalidRateLimit(t *testing.T) {
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("SERVER_ADDRESS", "")
 	t.Setenv("MGMT_SERVICE_URL", "")
+	t.Setenv("MGMT_SERVER_NAME", "")
 	t.Setenv("RELAY_DOMAIN", "")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != "127.0.0.1:8443" || cfg.Management.URL != "https://mgmt.developer.myhuaweicloud.com" ||
+	if cfg.Address != "127.0.0.1:8443" || cfg.Management.URL != "https://127.0.0.1:8444" ||
+		cfg.Management.ServerName != "mgmt.developer.myhuaweicloud.com" ||
 		cfg.Relay.Domain != "myhuaweicloud.com" || cfg.Relay.RequestsPerMinute != 120 {
 		t.Fatalf("relay defaults = %#v", cfg.Relay)
 	}

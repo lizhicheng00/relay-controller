@@ -62,8 +62,8 @@ Environment variables:
 | Variable | Meaning |
 | --- | --- |
 | `SERVER_ADDRESS` | HTTP listen address, default `127.0.0.1:8443` |
-| `MGMT_SERVICE_URL` | Management Service HTTPS base URL, default `https://mgmt.developer.myhuaweicloud.com` |
-| `MGMT_SERVER_NAME` | Optional TLS SNI and certificate name when the URL uses an IP address |
+| `MGMT_SERVICE_URL` | Management Service internal HTTPS address, default `https://127.0.0.1:8444` |
+| `MGMT_SERVER_NAME` | TLS SNI and certificate name, default `mgmt.developer.myhuaweicloud.com` |
 | `MGMT_CLIENT_CERT_BASE64` | Base64-encoded client certificate PEM used for Management Service mTLS |
 | `MGMT_CLIENT_KEY_BASE64` | Base64-encoded client private-key PEM used for Management Service mTLS |
 | `MGMT_CLIENT_KEY_PASSWORD` | Client-key password when the key is encrypted PKCS#8; omit for an unencrypted key |
@@ -103,7 +103,7 @@ export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'
 export RELAY_JWT_PRIVATE_KEY='<PKCS8 PEM or Base64 DER>'
 export SERVER_ADDRESS='127.0.0.1:8443'
 export MGMT_SERVICE_URL='https://127.0.0.1:8444'
-export MGMT_SERVER_NAME='huaweicloud.com'
+export MGMT_SERVER_NAME='mgmt.developer.myhuaweicloud.com'
 export MGMT_CLIENT_CERT_BASE64="$(base64 -w 0 client.crt)"
 export MGMT_CLIENT_KEY_BASE64="$(base64 -w 0 client.key)"
 export MGMT_CLIENT_KEY_PASSWORD='<secret>'
