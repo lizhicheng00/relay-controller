@@ -1,6 +1,12 @@
 package config
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"relay-controller/common/crypto"
+)
 
 func TestLoadRejectsInvalidRateLimit(t *testing.T) {
 	for _, value := range []string{"0", "invalid"} {
@@ -58,5 +64,17 @@ func TestLoadReadsOverrides(t *testing.T) {
 		cfg.Management.ClientKeyBase64 != "private-key" ||
 		cfg.Management.ClientKeyPassword != "secret" || cfg.Management.CACertBase64 != "ca-certificate" {
 		t.Fatalf("management overrides = %#v", cfg.Management)
+	}
+}
+
+func TestLoadReportsSecretDecryptionFailure(t *testing.T) {
+	t.Setenv("RELAY_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
+	t.Setenv("DATABASE_DSN", "ENC(invalid)")
+	if err := crypto.Init(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "DATABASE_DSN") {
+		t.Fatalf("Load() error = %v", err)
 	}
 }

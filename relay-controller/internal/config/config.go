@@ -50,32 +50,39 @@ func Load() (Config, error) {
 		}
 		requestsPerMinute = parsed
 	}
-	return Config{
-		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
-		DatabaseDSN: strings.TrimSpace(getSecret("DATABASE_DSN")),
+	cfg := Config{
+		Address: valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		Relay: Relay{
 			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
 			Region:            valueOrDefault("RELAY_REGION", defaultRelayRegion),
 			RequestsPerMinute: requestsPerMinute,
-			JWTPrivateKey:     getSecret("RELAY_JWT_PRIVATE_KEY"),
 		},
 		Management: Management{
-			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
-			ServerName:        valueOrDefault("MGMT_SERVER_NAME", defaultManagementName),
-			ClientCertBase64:  strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
-			ClientKeyBase64:   strings.TrimSpace(getSecret("MGMT_CLIENT_KEY_BASE64")),
-			ClientKeyPassword: getSecret("MGMT_CLIENT_KEY_PASSWORD"),
-			CACertBase64:      strings.TrimSpace(os.Getenv("MGMT_CA_CERT_BASE64")),
+			URL:              valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
+			ServerName:       valueOrDefault("MGMT_SERVER_NAME", defaultManagementName),
+			ClientCertBase64: strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
+			CACertBase64:     strings.TrimSpace(os.Getenv("MGMT_CA_CERT_BASE64")),
 		},
-	}, nil
-}
-
-func getSecret(key string) string {
-	value, err := crypto.GetEncryptedEnv(key)
-	if err != nil {
-		return ""
 	}
-	return value
+	fields := []struct {
+		name  string
+		value *string
+	}{
+		{"DATABASE_DSN", &cfg.DatabaseDSN},
+		{"RELAY_JWT_PRIVATE_KEY", &cfg.Relay.JWTPrivateKey},
+		{"MGMT_CLIENT_KEY_BASE64", &cfg.Management.ClientKeyBase64},
+		{"MGMT_CLIENT_KEY_PASSWORD", &cfg.Management.ClientKeyPassword},
+	}
+	for _, field := range fields {
+		value, err := crypto.GetEncryptedEnv(field.name)
+		if err != nil {
+			return Config{}, fmt.Errorf("load %s: %w", field.name, err)
+		}
+		*field.value = value
+	}
+	cfg.DatabaseDSN = strings.TrimSpace(cfg.DatabaseDSN)
+	cfg.Management.ClientKeyBase64 = strings.TrimSpace(cfg.Management.ClientKeyBase64)
+	return cfg, nil
 }
 
 func valueOrDefault(name, fallback string) string {
