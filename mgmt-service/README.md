@@ -68,7 +68,8 @@ migrations           embedded forward-only database migrations
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
-| `MGMT_CONFIG_KEY_FILE` | no | Root-key file for encrypted values, default `/opt/cloud/dog/beta` |
+| `MGMT_CONFIG_DOG_FILE` | no | Dog key-component file, default `/opt/cloud/dog/beta` |
+| `MGMT_CONFIG_PIG` | when using `ENC(...)` | Base64-encoded 32-byte pig key component |
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |
@@ -80,8 +81,9 @@ The key store contains the server private key and certificate chain; the trust s
 the accepted client CA.
 
 Each sensitive configuration entry accepts either a plain value or an AES-256-GCM value in
-`ENC(v1.<nonce>.<ciphertext+tag>)` format. The root-key file is read only when at least one
-encrypted value is configured.
+`ENC(v1.<nonce>.<ciphertext+tag>)` format. Its working key is reconstructed from three independent
+32-byte components: dog from a read-only file, cat embedded in the service, and pig from runtime
+configuration. Dog and pig are read only when at least one encrypted value is configured.
 
 Build the service and its small configuration tool:
 
@@ -95,8 +97,10 @@ For local use, create the key once in the ignored `secrets` directory:
 
 ```bash
 mkdir -p secrets
-bin/mgmt-config init-key secrets/mgmt_config_key
-export MGMT_CONFIG_KEY_FILE="$PWD/secrets/mgmt_config_key"
+bin/mgmt-config init-dog secrets/dog
+export CONFIG_PIG="$(bin/mgmt-config generate-pig)"
+export MGMT_CONFIG_DOG_FILE="$PWD/secrets/dog"
+export MGMT_CONFIG_PIG="$CONFIG_PIG"
 ```
 
 Encrypt one value and place the returned `ENC(...)` text directly in its configuration entry:
@@ -104,15 +108,16 @@ Encrypt one value and place the returned `ENC(...)` text directly in its configu
 ```bash
 read -rsp 'Value: ' CONFIG_VALUE
 printf '\n'
-printf '%s' "$CONFIG_VALUE" | bin/mgmt-config encrypt secrets/mgmt_config_key
+printf '%s' "$CONFIG_VALUE" | bin/mgmt-config encrypt secrets/dog
 unset CONFIG_VALUE
 ```
 
-`encrypt` reads the plaintext from standard input so it is not passed as a process argument.
+`encrypt` reads the plaintext from standard input and the pig component from `CONFIG_PIG`, so
+neither is passed as a process argument.
 Use `printf` rather than `echo`, because a trailing newline changes the encrypted value. For
-production, mount the same key read-only at `/opt/cloud/dog/beta`; only this file needs
-secret mounting. The independently encrypted configuration entries can then be changed without
-changing or remounting the key. Plain values do not require a key file.
+production, mount dog read-only at `/opt/cloud/dog/beta` and provide pig through the service
+configuration. The independently encrypted configuration entries can then be changed without
+changing either component. Plain values do not require dog or pig.
 
 Create an empty database and grant the service account schema-change permissions. The service applies pending embedded migrations before opening the HTTPS listener:
 

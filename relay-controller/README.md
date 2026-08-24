@@ -69,7 +69,8 @@ Environment variables:
 | `MGMT_CLIENT_KEY_PASSWORD` | Client-key password when the key is encrypted PKCS#8; omit for an unencrypted key |
 | `MGMT_CA_CERT_BASE64` | Optional Base64-encoded PEM CA for the Management Service certificate; otherwise the issuer bundled in `MGMT_CLIENT_CERT_BASE64` and system roots are used |
 | `DATABASE_DSN` | MySQL DSN, for example `user:password@tcp(host:3306)/database` |
-| `RELAY_CONFIG_KEY_FILE` | Configuration root-key file, default `/opt/cloud/dog/beta` |
+| `RELAY_CONFIG_DOG_FILE` | Dog key-component file, default `/opt/cloud/dog/beta` |
+| `RELAY_CONFIG_PIG` | Base64-encoded 32-byte pig key component, required for `ENC(...)` values |
 | `RELAY_REGION` | Region owned by this instance, default `cn-north-4` |
 | `RELAY_DOMAIN` | Tunnel DNS suffix, default `myhuaweicloud.com` |
 | `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute, default `120` |
@@ -77,7 +78,7 @@ Environment variables:
 
 Relay Controller serves HTTP only. A gateway or private ingress owns public HTTPS and forwards `X-API-Key`. Bind the service to loopback or a private interface; never expose its HTTP listener directly to the public network.
 
-`DATABASE_DSN`, `RELAY_JWT_PRIVATE_KEY`, `MGMT_CLIENT_KEY_BASE64`, and `MGMT_CLIENT_KEY_PASSWORD` accept either plaintext or an `ENC(v1.<nonce>.<ciphertext+tag>)` value produced with the same AES-256-GCM configuration key used by Management Service. The key file contains one Base64-encoded 32-byte key and is read only when an encrypted value is present. Base64 alone is encoding, not encryption.
+`DATABASE_DSN`, `RELAY_JWT_PRIVATE_KEY`, `MGMT_CLIENT_KEY_BASE64`, and `MGMT_CLIENT_KEY_PASSWORD` accept either plaintext or an `ENC(v1.<nonce>.<ciphertext+tag>)` value. The AES-256-GCM working key is reconstructed from dog in a read-only file, cat embedded in both services, and pig in runtime configuration. Each component is independently generated Base64-encoded 32-byte data. Dog and pig are only required when an encrypted value is present. Base64 alone is encoding, not encryption.
 
 ## Build And Run
 

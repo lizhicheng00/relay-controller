@@ -67,7 +67,7 @@ func TestLoadReadsOverrides(t *testing.T) {
 }
 
 func TestLoadReportsSecretDecryptionFailure(t *testing.T) {
-	t.Setenv("RELAY_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
+	t.Setenv("RELAY_CONFIG_DOG_FILE", filepath.Join(t.TempDir(), "missing-dog"))
 	t.Setenv("DATABASE_DSN", "ENC(invalid)")
 	_, err := Load()
 	if err == nil {
@@ -76,11 +76,15 @@ func TestLoadReportsSecretDecryptionFailure(t *testing.T) {
 }
 
 func TestLoadDecryptsSecrets(t *testing.T) {
-	keyFile := filepath.Join(t.TempDir(), "config.key")
-	if err := secret.GenerateKeyFile(keyFile); err != nil {
+	dogFile := filepath.Join(t.TempDir(), "dog")
+	if err := secret.GenerateDogFile(dogFile); err != nil {
 		t.Fatal(err)
 	}
-	codec, err := secret.Load(keyFile)
+	pig, err := secret.GenerateComponent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec, err := secret.Load(dogFile, pig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +97,8 @@ func TestLoadDecryptsSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("RELAY_CONFIG_KEY_FILE", keyFile)
+	t.Setenv("RELAY_CONFIG_DOG_FILE", dogFile)
+	t.Setenv("RELAY_CONFIG_PIG", pig)
 	t.Setenv("DATABASE_DSN", dsn)
 	t.Setenv("RELAY_JWT_PRIVATE_KEY", privateKey)
 	cfg, err := Load()

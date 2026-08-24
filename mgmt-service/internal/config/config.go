@@ -10,7 +10,7 @@ import (
 
 const (
 	defaultAddress = ":8443"
-	defaultKeyFile = "/opt/cloud/dog/beta"
+	defaultDogFile = "/opt/cloud/dog/beta"
 )
 
 type Config struct {
@@ -54,9 +54,11 @@ func Load() (Config, error) {
 			continue
 		}
 		if codec == nil {
-			keyFile := valueOrDefault("MGMT_CONFIG_KEY_FILE", defaultKeyFile)
 			var err error
-			codec, err = secret.Load(keyFile)
+			codec, err = secret.Load(
+				valueOrDefault("MGMT_CONFIG_DOG_FILE", defaultDogFile),
+				os.Getenv("MGMT_CONFIG_PIG"),
+			)
 			if err != nil {
 				return Config{}, err
 			}

@@ -12,23 +12,37 @@ import (
 )
 
 const (
-	prefix  = "ENC("
-	version = "v1"
-	keySize = 32
+	prefix        = "ENC("
+	version       = "v1"
+	componentSize = 32
+	encodedCat    = "2RVGMfRmj8kpmd/VhS0RNimLyfr6bPRq0NUreIY0EY0="
 )
 
 type Codec struct {
 	gcm cipher.AEAD
 }
 
-func Load(keyFile string) (*Codec, error) {
-	encoded, err := os.ReadFile(keyFile)
+func Load(dogFile, encodedPig string) (*Codec, error) {
+	encodedDog, err := os.ReadFile(dogFile)
 	if err != nil {
-		return nil, fmt.Errorf("read configuration key: %w", err)
+		return nil, fmt.Errorf("read dog component: %w", err)
 	}
-	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
-	if err != nil || len(key) != keySize {
-		return nil, errors.New("configuration key must be Base64-encoded 32-byte data")
+	dog, err := decodeComponent("dog", string(encodedDog))
+	if err != nil {
+		return nil, err
+	}
+	cat, err := decodeComponent("cat", encodedCat)
+	if err != nil {
+		return nil, err
+	}
+	pig, err := decodeComponent("pig", encodedPig)
+	if err != nil {
+		return nil, err
+	}
+	key := make([]byte, componentSize)
+	// XOR reconstructs a 3-of-3 key without exposing it in any single component.
+	for i := range key {
+		key[i] = dog[i] ^ cat[i] ^ pig[i]
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -41,23 +55,39 @@ func Load(keyFile string) (*Codec, error) {
 	return &Codec{gcm: gcm}, nil
 }
 
-func GenerateKeyFile(path string) error {
-	key := make([]byte, keySize)
-	if _, err := rand.Read(key); err != nil {
-		return fmt.Errorf("generate configuration key: %w", err)
+func GenerateDogFile(path string) error {
+	encoded, err := GenerateComponent()
+	if err != nil {
+		return err
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return fmt.Errorf("create configuration key: %w", err)
+		return fmt.Errorf("create dog component: %w", err)
 	}
-	if _, err := fmt.Fprintln(file, base64.StdEncoding.EncodeToString(key)); err != nil {
+	if _, err := fmt.Fprintln(file, encoded); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("write configuration key: %w", err)
+		return fmt.Errorf("write dog component: %w", err)
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("close configuration key: %w", err)
+		return fmt.Errorf("close dog component: %w", err)
 	}
 	return nil
+}
+
+func GenerateComponent() (string, error) {
+	component := make([]byte, componentSize)
+	if _, err := rand.Read(component); err != nil {
+		return "", fmt.Errorf("generate key component: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(component), nil
+}
+
+func decodeComponent(name, encoded string) ([]byte, error) {
+	component, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil || len(component) != componentSize {
+		return nil, fmt.Errorf("%s component must be Base64-encoded 32-byte data", name)
+	}
+	return component, nil
 }
 
 func IsEncrypted(value string) bool {

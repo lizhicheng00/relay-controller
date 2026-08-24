@@ -17,15 +17,23 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) == 1 && args[0] == "generate-pig" {
+		pig, err := secret.GenerateComponent()
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(os.Stdout, pig)
+		return err
+	}
 	if len(args) != 2 {
-		return errors.New("usage: mgmt-config <init-key|encrypt> <key-file>")
+		return usageError()
 	}
 
 	switch args[0] {
-	case "init-key":
-		return secret.GenerateKeyFile(args[1])
+	case "init-dog":
+		return secret.GenerateDogFile(args[1])
 	case "encrypt":
-		codec, err := secret.Load(args[1])
+		codec, err := secret.Load(args[1], os.Getenv("CONFIG_PIG"))
 		if err != nil {
 			return err
 		}
@@ -40,6 +48,10 @@ func run(args []string) error {
 		_, err = fmt.Fprintln(os.Stdout, value)
 		return err
 	default:
-		return errors.New("usage: mgmt-config <init-key|encrypt> <key-file>")
+		return usageError()
 	}
+}
+
+func usageError() error {
+	return errors.New("usage: mgmt-config generate-pig | <init-dog|encrypt> <dog-file>")
 }

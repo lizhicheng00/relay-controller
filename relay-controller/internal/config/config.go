@@ -16,7 +16,7 @@ const (
 	defaultManagementURL     = "https://127.0.0.1:8444"
 	defaultManagementName    = "mgmt.developer.myhuaweicloud.com"
 	defaultAddress           = ":8443"
-	defaultKeyFile           = "/opt/cloud/dog/beta"
+	defaultDogFile           = "/opt/cloud/dog/beta"
 )
 
 type Config struct {
@@ -85,7 +85,10 @@ func Load() (Config, error) {
 		}
 		if codec == nil {
 			var err error
-			codec, err = secret.Load(valueOrDefault("RELAY_CONFIG_KEY_FILE", defaultKeyFile))
+			codec, err = secret.Load(
+				valueOrDefault("RELAY_CONFIG_DOG_FILE", defaultDogFile),
+				os.Getenv("RELAY_CONFIG_PIG"),
+			)
 			if err != nil {
 				return Config{}, err
 			}

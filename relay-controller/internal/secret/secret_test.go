@@ -7,73 +7,86 @@ import (
 	"testing"
 )
 
-func TestKeyFileAndEncryption(t *testing.T) {
-	keyFile := filepath.Join(t.TempDir(), "config.key")
-	if err := GenerateKeyFile(keyFile); err != nil {
-		t.Fatalf("GenerateKeyFile() error = %v", err)
-	}
-	info, err := os.Stat(keyFile)
+func TestThreeComponentEncryption(t *testing.T) {
+	dogFile, _, codec := testCodec(t)
+	info, err := os.Stat(dogFile)
 	if err != nil {
-		t.Fatalf("Stat() error = %v", err)
+		t.Fatal(err)
 	}
 	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("key file mode = %o", info.Mode().Perm())
+		t.Fatalf("dog file mode = %o", info.Mode().Perm())
 	}
 
-	codec, err := Load(keyFile)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
 	encrypted, err := codec.Encrypt([]byte("secret-value"))
 	if err != nil {
-		t.Fatalf("Encrypt() error = %v", err)
+		t.Fatal(err)
 	}
 	if !strings.HasPrefix(encrypted, "ENC(v1.") || strings.Count(encrypted, ".") != 2 {
 		t.Fatalf("Encrypt() format = %q", encrypted)
 	}
 	decrypted, err := codec.Decrypt(encrypted)
 	if err != nil {
-		t.Fatalf("Decrypt() error = %v", err)
+		t.Fatal(err)
 	}
 	if decrypted != "secret-value" {
 		t.Fatalf("Decrypt() = %q", decrypted)
 	}
+
+	otherPig, err := GenerateComponent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherCodec, err := Load(dogFile, otherPig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := otherCodec.Decrypt(encrypted); err == nil {
+		t.Fatal("Decrypt() succeeded with a different pig component")
+	}
+	if _, err := Load(dogFile, ""); err == nil {
+		t.Fatal("Load() succeeded without the pig component")
+	}
 }
 
-func TestDecryptRejectsLegacyFormat(t *testing.T) {
-	keyFile := filepath.Join(t.TempDir(), "config.key")
-	if err := GenerateKeyFile(keyFile); err != nil {
-		t.Fatalf("GenerateKeyFile() error = %v", err)
+func TestDecryptRejectsInvalidValues(t *testing.T) {
+	_, _, codec := testCodec(t)
+	for _, value := range []string{
+		"ENC(c2luZ2xlLXNlZ21lbnQ)",
+		"ENC(v2.bm9uY2U.Y2lwaGVydGV4dA)",
+	} {
+		if _, err := codec.Decrypt(value); err == nil {
+			t.Fatalf("Decrypt(%q) error = nil", value)
+		}
 	}
-	codec, err := Load(keyFile)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if _, err := codec.Decrypt("ENC(c2luZ2xlLXNlZ21lbnQ)"); err == nil {
-		t.Fatal("Decrypt() error = nil for legacy format")
-	}
-}
 
-func TestDecryptRejectsModifiedValue(t *testing.T) {
-	keyFile := filepath.Join(t.TempDir(), "config.key")
-	if err := GenerateKeyFile(keyFile); err != nil {
-		t.Fatalf("GenerateKeyFile() error = %v", err)
-	}
-	codec, err := Load(keyFile)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
 	encrypted, err := codec.Encrypt([]byte("secret-value"))
 	if err != nil {
-		t.Fatalf("Encrypt() error = %v", err)
+		t.Fatal(err)
 	}
-	index := len(prefix) + 8
+	index := strings.LastIndex(encrypted, ".") + 1
 	replacement := "A"
 	if encrypted[index] == 'A' {
 		replacement = "B"
 	}
 	modified := encrypted[:index] + replacement + encrypted[index+1:]
 	if _, err := codec.Decrypt(modified); err == nil {
-		t.Fatal("Decrypt() error = nil for modified value")
+		t.Fatal("Decrypt() succeeded with modified ciphertext")
 	}
+}
+
+func testCodec(t *testing.T) (string, string, *Codec) {
+	t.Helper()
+	dogFile := filepath.Join(t.TempDir(), "dog")
+	if err := GenerateDogFile(dogFile); err != nil {
+		t.Fatal(err)
+	}
+	pig, err := GenerateComponent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec, err := Load(dogFile, pig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dogFile, pig, codec
 }
