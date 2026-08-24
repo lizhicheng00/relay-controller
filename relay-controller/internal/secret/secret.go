@@ -13,6 +13,7 @@ import (
 
 const (
 	prefix  = "ENC("
+	version = "v1"
 	keySize = 32
 )
 
@@ -68,8 +69,10 @@ func (c *Codec) Encrypt(plaintext []byte) (string, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return "", fmt.Errorf("generate encryption nonce: %w", err)
 	}
-	sealed := c.gcm.Seal(nonce, nonce, plaintext, nil)
-	return prefix + base64.RawStdEncoding.EncodeToString(sealed) + ")", nil
+	ciphertext := c.gcm.Seal(nil, nonce, plaintext, []byte(version))
+	return fmt.Sprintf("%s%s.%s.%s)", prefix, version,
+		base64.RawStdEncoding.EncodeToString(nonce),
+		base64.RawStdEncoding.EncodeToString(ciphertext)), nil
 }
 
 func (c *Codec) Decrypt(value string) (string, error) {
@@ -77,12 +80,19 @@ func (c *Codec) Decrypt(value string) (string, error) {
 		return "", errors.New("invalid encrypted value")
 	}
 	payload := strings.TrimSuffix(strings.TrimPrefix(value, prefix), ")")
-	sealed, err := base64.RawStdEncoding.DecodeString(payload)
-	if err != nil || len(sealed) < c.gcm.NonceSize() {
+	parts := strings.Split(payload, ".")
+	if len(parts) != 3 || parts[0] != version {
 		return "", errors.New("invalid encrypted value")
 	}
-	nonce, ciphertext := sealed[:c.gcm.NonceSize()], sealed[c.gcm.NonceSize():]
-	plaintext, err := c.gcm.Open(nil, nonce, ciphertext, nil)
+	nonce, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil || len(nonce) != c.gcm.NonceSize() {
+		return "", errors.New("invalid encrypted value")
+	}
+	ciphertext, err := base64.RawStdEncoding.DecodeString(parts[2])
+	if err != nil || len(ciphertext) < c.gcm.Overhead() {
+		return "", errors.New("invalid encrypted value")
+	}
+	plaintext, err := c.gcm.Open(nil, nonce, ciphertext, []byte(version))
 	if err != nil {
 		return "", errors.New("invalid encrypted value or configuration key")
 	}

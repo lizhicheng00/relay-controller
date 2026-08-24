@@ -79,8 +79,9 @@ The HTTPS server requires a trusted client certificate. TLS 1.2 and 1.3 are enab
 The key store contains the server private key and certificate chain; the trust store contains
 the accepted client CA.
 
-Each sensitive configuration entry accepts either a plain value or an AES-256-GCM `ENC(...)`
-value. The root-key file is read only when at least one encrypted value is configured.
+Each sensitive configuration entry accepts either a plain value or an AES-256-GCM value in
+`ENC(v1.<nonce>.<ciphertext+tag>)` format. The root-key file is read only when at least one
+encrypted value is configured.
 
 Build the service and its small configuration tool:
 

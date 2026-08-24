@@ -77,7 +77,7 @@ Environment variables:
 
 Relay Controller serves HTTP only. A gateway or private ingress owns public HTTPS and forwards `X-API-Key`. Bind the service to loopback or a private interface; never expose its HTTP listener directly to the public network.
 
-`DATABASE_DSN`, `RELAY_JWT_PRIVATE_KEY`, `MGMT_CLIENT_KEY_BASE64`, and `MGMT_CLIENT_KEY_PASSWORD` accept either plaintext or an `ENC(...)` value produced with the same AES-256-GCM configuration key used by Management Service. The key file contains one Base64-encoded 32-byte key and is read only when an encrypted value is present. Base64 alone is encoding, not encryption.
+`DATABASE_DSN`, `RELAY_JWT_PRIVATE_KEY`, `MGMT_CLIENT_KEY_BASE64`, and `MGMT_CLIENT_KEY_PASSWORD` accept either plaintext or an `ENC(v1.<nonce>.<ciphertext+tag>)` value produced with the same AES-256-GCM configuration key used by Management Service. The key file contains one Base64-encoded 32-byte key and is read only when an encrypted value is present. Base64 alone is encoding, not encryption.
 
 ## Build And Run
 
