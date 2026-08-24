@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"relay-controller/common/crypto"
+	"relay-controller/internal/secret"
 )
 
 const (
@@ -16,6 +16,7 @@ const (
 	defaultManagementURL     = "https://127.0.0.1:8444"
 	defaultManagementName    = "mgmt.developer.myhuaweicloud.com"
 	defaultAddress           = ":8443"
+	defaultKeyFile           = "/opt/cloud/dog/beta"
 )
 
 type Config struct {
@@ -51,17 +52,21 @@ func Load() (Config, error) {
 		requestsPerMinute = parsed
 	}
 	cfg := Config{
-		Address: valueOrDefault("SERVER_ADDRESS", defaultAddress),
+		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
+		DatabaseDSN: os.Getenv("DATABASE_DSN"),
 		Relay: Relay{
 			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
 			Region:            valueOrDefault("RELAY_REGION", defaultRelayRegion),
 			RequestsPerMinute: requestsPerMinute,
+			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
 		},
 		Management: Management{
-			URL:              valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
-			ServerName:       valueOrDefault("MGMT_SERVER_NAME", defaultManagementName),
-			ClientCertBase64: strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
-			CACertBase64:     strings.TrimSpace(os.Getenv("MGMT_CA_CERT_BASE64")),
+			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
+			ServerName:        valueOrDefault("MGMT_SERVER_NAME", defaultManagementName),
+			ClientCertBase64:  strings.TrimSpace(os.Getenv("MGMT_CLIENT_CERT_BASE64")),
+			ClientKeyBase64:   os.Getenv("MGMT_CLIENT_KEY_BASE64"),
+			ClientKeyPassword: os.Getenv("MGMT_CLIENT_KEY_PASSWORD"),
+			CACertBase64:      strings.TrimSpace(os.Getenv("MGMT_CA_CERT_BASE64")),
 		},
 	}
 	fields := []struct {
@@ -73,8 +78,19 @@ func Load() (Config, error) {
 		{"MGMT_CLIENT_KEY_BASE64", &cfg.Management.ClientKeyBase64},
 		{"MGMT_CLIENT_KEY_PASSWORD", &cfg.Management.ClientKeyPassword},
 	}
+	var codec *secret.Codec
 	for _, field := range fields {
-		value, err := crypto.GetEncryptedEnv(field.name)
+		if !secret.IsEncrypted(*field.value) {
+			continue
+		}
+		if codec == nil {
+			var err error
+			codec, err = secret.Load(valueOrDefault("RELAY_CONFIG_KEY_FILE", defaultKeyFile))
+			if err != nil {
+				return Config{}, err
+			}
+		}
+		value, err := codec.Decrypt(*field.value)
 		if err != nil {
 			return Config{}, fmt.Errorf("load %s: %w", field.name, err)
 		}

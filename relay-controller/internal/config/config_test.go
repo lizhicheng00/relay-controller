@@ -2,10 +2,9 @@ package config
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"relay-controller/common/crypto"
+	"relay-controller/internal/secret"
 )
 
 func TestLoadRejectsInvalidRateLimit(t *testing.T) {
@@ -70,11 +69,38 @@ func TestLoadReadsOverrides(t *testing.T) {
 func TestLoadReportsSecretDecryptionFailure(t *testing.T) {
 	t.Setenv("RELAY_CONFIG_KEY_FILE", filepath.Join(t.TempDir(), "missing-key"))
 	t.Setenv("DATABASE_DSN", "ENC(invalid)")
-	if err := crypto.Init(); err != nil {
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil")
+	}
+}
+
+func TestLoadDecryptsSecrets(t *testing.T) {
+	keyFile := filepath.Join(t.TempDir(), "config.key")
+	if err := secret.GenerateKeyFile(keyFile); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load()
-	if err == nil || !strings.Contains(err.Error(), "DATABASE_DSN") {
-		t.Fatalf("Load() error = %v", err)
+	codec, err := secret.Load(keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dsn, err := codec.Encrypt([]byte("relay:password@tcp(database:3306)/relay"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey, err := codec.Encrypt([]byte("private-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("RELAY_CONFIG_KEY_FILE", keyFile)
+	t.Setenv("DATABASE_DSN", dsn)
+	t.Setenv("RELAY_JWT_PRIVATE_KEY", privateKey)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DatabaseDSN != "relay:password@tcp(database:3306)/relay" || cfg.Relay.JWTPrivateKey != "private-key" {
+		t.Fatalf("Load() = %#v", cfg)
 	}
 }
