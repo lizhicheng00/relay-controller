@@ -11,7 +11,6 @@ import (
 const (
 	defaultAddress = ":8443"
 	defaultDogFile = "/opt/cloud/dog/beta"
-	pigOmega       = "MGMT_CONFIG_PIG"
 )
 
 type Config struct {
@@ -58,7 +57,7 @@ func Load() (Config, error) {
 			var err error
 			codec, err = secret.Load(
 				valueOrDefault("MGMT_CONFIG_DOG_FILE", defaultDogFile),
-				pigOmega,
+				os.Getenv("omega"),
 			)
 			if err != nil {
 				return Config{}, err

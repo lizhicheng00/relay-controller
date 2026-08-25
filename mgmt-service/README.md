@@ -69,7 +69,7 @@ migrations           embedded forward-only database migrations
 | --- | --- | --- |
 | `SERVER_ADDRESS` | no | HTTPS listen address, default `:8443` |
 | `MGMT_CONFIG_DOG_FILE` | no | Dog key-component file, default `/opt/cloud/dog/beta` |
-| `MGMT_CONFIG_PIG` | when using `ENC(...)` | Base64-encoded 32-byte pig key component |
+| `omega` | when using `ENC(...)` | Base64-encoded 32-byte pig key component |
 | `DATABASE_DSN` | yes | MySQL DSN |
 | `SERVER_SSL_KEY_STORE_BASE64` | yes | Base64 PKCS12 server key store |
 | `SERVER_SSL_KEY_STORE_PASSWORD` | yes | Server key store password |

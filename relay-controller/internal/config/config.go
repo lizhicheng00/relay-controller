@@ -17,7 +17,6 @@ const (
 	defaultManagementName    = "mgmt.developer.myhuaweicloud.com"
 	defaultAddress           = ":8443"
 	defaultDogFile           = "/opt/cloud/dog/beta"
-	pigOmega                 = "RELAY_CONFIG_PIG"
 )
 
 type Config struct {
@@ -88,7 +87,7 @@ func Load() (Config, error) {
 			var err error
 			codec, err = secret.Load(
 				valueOrDefault("RELAY_CONFIG_DOG_FILE", defaultDogFile),
-				pigOmega,
+				os.Getenv("omega"),
 			)
 			if err != nil {
 				return Config{}, err

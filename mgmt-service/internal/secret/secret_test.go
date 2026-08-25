@@ -35,16 +35,14 @@ func TestThreeComponentEncryption(t *testing.T) {
 	}
 
 	otherPig := testComponent(t)
-	t.Setenv("TEST_OTHER_CONFIG_PIG", otherPig)
-	otherCodec, err := Load(dogFile, "TEST_OTHER_CONFIG_PIG")
+	otherCodec, err := Load(dogFile, otherPig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := otherCodec.Decrypt(encrypted); err == nil {
 		t.Fatal("Decrypt() succeeded with a different pig component")
 	}
-	t.Setenv("TEST_MISSING_CONFIG_PIG", "")
-	if _, err := Load(dogFile, "TEST_MISSING_CONFIG_PIG"); err == nil {
+	if _, err := Load(dogFile, ""); err == nil {
 		t.Fatal("Load() succeeded without the pig component")
 	}
 }
@@ -82,8 +80,7 @@ func testCodec(t *testing.T) (string, string, *Codec) {
 		t.Fatal(err)
 	}
 	pig := testComponent(t)
-	t.Setenv("TEST_CONFIG_PIG", pig)
-	codec, err := Load(dogFile, "TEST_CONFIG_PIG")
+	codec, err := Load(dogFile, pig)
 	if err != nil {
 		t.Fatal(err)
 	}

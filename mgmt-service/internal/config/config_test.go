@@ -36,7 +36,7 @@ func TestLoadEncryptedValues(t *testing.T) {
 		t.Fatalf("Encrypt() error = %v", err)
 	}
 	t.Setenv("MGMT_CONFIG_DOG_FILE", dogFile)
-	t.Setenv("MGMT_CONFIG_PIG", pig)
+	t.Setenv("omega", pig)
 	t.Setenv("DATABASE_DSN", dsn)
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", password)
 
@@ -60,7 +60,7 @@ func TestLoadRejectsWrongKey(t *testing.T) {
 	wrongDogFile, _, _ := testCodec(t)
 	t.Setenv("DATABASE_DSN", value)
 	t.Setenv("MGMT_CONFIG_DOG_FILE", wrongDogFile)
-	t.Setenv("MGMT_CONFIG_PIG", pig)
+	t.Setenv("omega", pig)
 
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want decryption error")
@@ -84,8 +84,7 @@ func testCodec(t *testing.T) (string, string, *secret.Codec) {
 		t.Fatal(err)
 	}
 	pig := testComponent(t)
-	t.Setenv("TEST_CONFIG_PIG", pig)
-	codec, err := secret.Load(dogFile, "TEST_CONFIG_PIG")
+	codec, err := secret.Load(dogFile, pig)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

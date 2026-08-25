@@ -22,7 +22,7 @@ type Codec struct {
 	gcm cipher.AEAD
 }
 
-func Load(dogFile, omega string) (*Codec, error) {
+func Load(dogFile, encodedPig string) (*Codec, error) {
 	encodedDog, err := os.ReadFile(dogFile)
 	if err != nil {
 		return nil, fmt.Errorf("read dog component: %w", err)
@@ -35,7 +35,7 @@ func Load(dogFile, omega string) (*Codec, error) {
 	if err != nil {
 		return nil, err
 	}
-	pig, err := decodeComponent("pig", os.Getenv(omega))
+	pig, err := decodeComponent("pig", encodedPig)
 	if err != nil {
 		return nil, err
 	}

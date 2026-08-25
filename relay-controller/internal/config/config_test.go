@@ -84,8 +84,7 @@ func TestLoadDecryptsSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	pig := testComponent(t)
-	t.Setenv("TEST_CONFIG_PIG", pig)
-	codec, err := secret.Load(dogFile, "TEST_CONFIG_PIG")
+	codec, err := secret.Load(dogFile, pig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +98,7 @@ func TestLoadDecryptsSecrets(t *testing.T) {
 	}
 
 	t.Setenv("RELAY_CONFIG_DOG_FILE", dogFile)
-	t.Setenv("RELAY_CONFIG_PIG", pig)
+	t.Setenv("omega", pig)
 	t.Setenv("DATABASE_DSN", dsn)
 	t.Setenv("RELAY_JWT_PRIVATE_KEY", privateKey)
 	cfg, err := Load()

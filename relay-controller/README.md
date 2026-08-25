@@ -70,7 +70,7 @@ Environment variables:
 | `MGMT_CA_CERT_BASE64` | Optional Base64-encoded PEM CA for the Management Service certificate; otherwise the issuer bundled in `MGMT_CLIENT_CERT_BASE64` and system roots are used |
 | `DATABASE_DSN` | MySQL DSN, for example `user:password@tcp(host:3306)/database` |
 | `RELAY_CONFIG_DOG_FILE` | Dog key-component file, default `/opt/cloud/dog/beta` |
-| `RELAY_CONFIG_PIG` | Base64-encoded 32-byte pig key component, required for `ENC(...)` values |
+| `omega` | Base64-encoded 32-byte pig key component, required for `ENC(...)` values |
 | `RELAY_REGION` | Region owned by this instance, default `cn-north-4` |
 | `RELAY_DOMAIN` | Tunnel DNS suffix, default `myhuaweicloud.com` |
 | `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute, default `120` |
