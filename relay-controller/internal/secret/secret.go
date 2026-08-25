@@ -22,7 +22,7 @@ type Codec struct {
 	gcm cipher.AEAD
 }
 
-func Load(dogFile, encodedPig string) (*Codec, error) {
+func Load(dogFile, omega string) (*Codec, error) {
 	encodedDog, err := os.ReadFile(dogFile)
 	if err != nil {
 		return nil, fmt.Errorf("read dog component: %w", err)
@@ -35,7 +35,7 @@ func Load(dogFile, encodedPig string) (*Codec, error) {
 	if err != nil {
 		return nil, err
 	}
-	pig, err := decodeComponent("pig", encodedPig)
+	pig, err := decodeComponent("pig", os.Getenv(omega))
 	if err != nil {
 		return nil, err
 	}
@@ -53,33 +53,6 @@ func Load(dogFile, encodedPig string) (*Codec, error) {
 		return nil, fmt.Errorf("initialize configuration cipher: %w", err)
 	}
 	return &Codec{gcm: gcm}, nil
-}
-
-func GenerateDogFile(path string) error {
-	encoded, err := GenerateComponent()
-	if err != nil {
-		return err
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("create dog component: %w", err)
-	}
-	if _, err := fmt.Fprintln(file, encoded); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("write dog component: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close dog component: %w", err)
-	}
-	return nil
-}
-
-func GenerateComponent() (string, error) {
-	component := make([]byte, componentSize)
-	if _, err := rand.Read(component); err != nil {
-		return "", fmt.Errorf("generate key component: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(component), nil
 }
 
 func decodeComponent(name, encoded string) ([]byte, error) {

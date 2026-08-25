@@ -1,6 +1,8 @@
 package secret
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,18 +34,17 @@ func TestThreeComponentEncryption(t *testing.T) {
 		t.Fatalf("Decrypt() = %q", decrypted)
 	}
 
-	otherPig, err := GenerateComponent()
-	if err != nil {
-		t.Fatal(err)
-	}
-	otherCodec, err := Load(dogFile, otherPig)
+	otherPig := testComponent(t)
+	t.Setenv("TEST_OTHER_CONFIG_PIG", otherPig)
+	otherCodec, err := Load(dogFile, "TEST_OTHER_CONFIG_PIG")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := otherCodec.Decrypt(encrypted); err == nil {
 		t.Fatal("Decrypt() succeeded with a different pig component")
 	}
-	if _, err := Load(dogFile, ""); err == nil {
+	t.Setenv("TEST_MISSING_CONFIG_PIG", "")
+	if _, err := Load(dogFile, "TEST_MISSING_CONFIG_PIG"); err == nil {
 		t.Fatal("Load() succeeded without the pig component")
 	}
 }
@@ -77,16 +78,23 @@ func TestDecryptRejectsInvalidValues(t *testing.T) {
 func testCodec(t *testing.T) (string, string, *Codec) {
 	t.Helper()
 	dogFile := filepath.Join(t.TempDir(), "dog")
-	if err := GenerateDogFile(dogFile); err != nil {
+	if err := os.WriteFile(dogFile, []byte(testComponent(t)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pig, err := GenerateComponent()
-	if err != nil {
-		t.Fatal(err)
-	}
-	codec, err := Load(dogFile, pig)
+	pig := testComponent(t)
+	t.Setenv("TEST_CONFIG_PIG", pig)
+	codec, err := Load(dogFile, "TEST_CONFIG_PIG")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return dogFile, pig, codec
+}
+
+func testComponent(t *testing.T) string {
+	t.Helper()
+	component := make([]byte, componentSize)
+	if _, err := rand.Read(component); err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(component)
 }

@@ -1,6 +1,9 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -77,14 +80,12 @@ func TestLoadReportsSecretDecryptionFailure(t *testing.T) {
 
 func TestLoadDecryptsSecrets(t *testing.T) {
 	dogFile := filepath.Join(t.TempDir(), "dog")
-	if err := secret.GenerateDogFile(dogFile); err != nil {
+	if err := os.WriteFile(dogFile, []byte(testComponent(t)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pig, err := secret.GenerateComponent()
-	if err != nil {
-		t.Fatal(err)
-	}
-	codec, err := secret.Load(dogFile, pig)
+	pig := testComponent(t)
+	t.Setenv("TEST_CONFIG_PIG", pig)
+	codec, err := secret.Load(dogFile, "TEST_CONFIG_PIG")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,4 +109,13 @@ func TestLoadDecryptsSecrets(t *testing.T) {
 	if cfg.DatabaseDSN != "relay:password@tcp(database:3306)/relay" || cfg.Relay.JWTPrivateKey != "private-key" {
 		t.Fatalf("Load() = %#v", cfg)
 	}
+}
+
+func testComponent(t *testing.T) string {
+	t.Helper()
+	component := make([]byte, 32)
+	if _, err := rand.Read(component); err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(component)
 }

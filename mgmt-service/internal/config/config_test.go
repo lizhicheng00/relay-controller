@@ -1,6 +1,9 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -77,16 +80,23 @@ func setEnvironment(t *testing.T) {
 func testCodec(t *testing.T) (string, string, *secret.Codec) {
 	t.Helper()
 	dogFile := filepath.Join(t.TempDir(), "dog")
-	if err := secret.GenerateDogFile(dogFile); err != nil {
-		t.Fatalf("GenerateDogFile() error = %v", err)
+	if err := os.WriteFile(dogFile, []byte(testComponent(t)), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	pig, err := secret.GenerateComponent()
-	if err != nil {
-		t.Fatalf("GenerateComponent() error = %v", err)
-	}
-	codec, err := secret.Load(dogFile, pig)
+	pig := testComponent(t)
+	t.Setenv("TEST_CONFIG_PIG", pig)
+	codec, err := secret.Load(dogFile, "TEST_CONFIG_PIG")
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	return dogFile, pig, codec
+}
+
+func testComponent(t *testing.T) string {
+	t.Helper()
+	component := make([]byte, 32)
+	if _, err := rand.Read(component); err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(component)
 }
