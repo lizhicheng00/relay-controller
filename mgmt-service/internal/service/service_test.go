@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"testing"
@@ -14,7 +15,6 @@ import (
 )
 
 var testIdentity = core.Identity{
-	DomainID: "domain-1", UserID: "user-1",
 	AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
 }
 
@@ -22,7 +22,7 @@ var testAssertion = core.IdentityAssertion{DomainID: "domain-1", UserID: "user-1
 
 type fakeRepository struct {
 	identity     core.Identity
-	assertion    core.IdentityAssertion
+	fingerprint  core.IdentityFingerprint
 	keys         []core.APIKey
 	created      core.APIKey
 	createdKeys  []core.NewAPIKey
@@ -37,17 +37,18 @@ type fakeRepository struct {
 
 func (f *fakeRepository) EnsureIdentity(
 	_ context.Context,
-	assertion core.IdentityAssertion,
+	fingerprint core.IdentityFingerprint,
 	_ core.IdentitySeed,
 ) (core.Identity, error) {
-	f.assertion = assertion
+	f.fingerprint = fingerprint
 	return f.identity, f.identityErr
 }
 
 func (f *fakeRepository) FindIdentity(
 	_ context.Context,
-	_ core.IdentityAssertion,
+	fingerprint core.IdentityFingerprint,
 ) (core.Identity, error) {
+	f.fingerprint = fingerprint
 	return f.identity, f.identityErr
 }
 
@@ -116,9 +117,12 @@ func TestResolveIdentityEnsuresMapping(t *testing.T) {
 	application := newTestService(repository)
 
 	identity, err := application.ResolveIdentity(context.Background(), testAssertion)
-	if err != nil || identity != testIdentity || repository.assertion != testAssertion {
-		t.Fatalf("ResolveIdentity() = %#v, assertion = %#v, error = %v",
-			identity, repository.assertion, err)
+	if err != nil || identity != testIdentity || len(repository.fingerprint.Domain) != sha256.Size ||
+		len(repository.fingerprint.User) != sha256.Size ||
+		bytes.Contains(repository.fingerprint.Domain, []byte(testAssertion.DomainID)) ||
+		bytes.Contains(repository.fingerprint.User, []byte(testAssertion.UserID)) {
+		t.Fatalf("ResolveIdentity() = %#v, fingerprint = %#v, error = %v",
+			identity, repository.fingerprint, err)
 	}
 }
 
@@ -224,5 +228,17 @@ func assertAppError(t *testing.T, err error, status int, code string) {
 }
 
 func newTestService(repository repository) *Service {
-	return New(repository)
+	return New(repository, testFingerprinter{})
+}
+
+type testFingerprinter struct{}
+
+func (testFingerprinter) Fingerprint(purpose string, values ...string) []byte {
+	digest := sha256.New()
+	_, _ = digest.Write([]byte(purpose))
+	for _, value := range values {
+		_, _ = digest.Write([]byte{0})
+		_, _ = digest.Write([]byte(value))
+	}
+	return digest.Sum(nil)
 }

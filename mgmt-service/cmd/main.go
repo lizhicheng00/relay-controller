@@ -46,7 +46,7 @@ func run() error {
 		return err
 	}
 	defer func() { _ = repository.Close() }()
-	application := service.New(repository)
+	application := service.New(repository, cfg.Secrets)
 	tlsConfig, err := security.TLSConfig(cfg.TLS)
 	if err != nil {
 		return err

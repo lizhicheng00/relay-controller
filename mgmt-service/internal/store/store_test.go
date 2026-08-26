@@ -21,7 +21,8 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 	ctx := context.Background()
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	assertion := core.IdentityAssertion{DomainID: "domain-" + suffix, UserID: "user-a-" + suffix}
-	identity, err := repository.EnsureIdentity(ctx, assertion, identitySeed(suffix, "a"))
+	fingerprint := testIdentityFingerprint(assertion)
+	identity, err := repository.EnsureIdentity(ctx, fingerprint, identitySeed(suffix, "a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +36,7 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		}
 	}
 
-	if found, err := repository.FindIdentity(ctx, assertion); err != nil || found != identity {
+	if found, err := repository.FindIdentity(ctx, fingerprint); err != nil || found != identity {
 		t.Fatalf("FindIdentity() = %#v, %v", found, err)
 	}
 	if found, err := repository.FindIdentityByAPIKey(ctx, firstLoginKey.Digest); err != nil || found != identity {
@@ -72,9 +73,9 @@ func TestIdentityAndAPIKeyLifecycle(t *testing.T) {
 		t.Fatal("authenticated key has no last-used time")
 	}
 
-	secondIdentity, err := repository.EnsureIdentity(ctx, core.IdentityAssertion{
+	secondIdentity, err := repository.EnsureIdentity(ctx, testIdentityFingerprint(core.IdentityAssertion{
 		DomainID: assertion.DomainID, UserID: "user-b-" + suffix,
-	}, identitySeed(suffix, "b"))
+	}), identitySeed(suffix, "b"))
 	if err != nil || secondIdentity.AccountNamespace != identity.AccountNamespace ||
 		secondIdentity.Namespace == identity.Namespace {
 		t.Fatalf("second identity = %#v, %v", secondIdentity, err)
@@ -105,7 +106,9 @@ func TestConcurrentAPIKeyLimit(t *testing.T) {
 	ctx := context.Background()
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	identity, err := repository.EnsureIdentity(ctx,
-		core.IdentityAssertion{DomainID: "concurrent-domain-" + suffix, UserID: "user-" + suffix},
+		testIdentityFingerprint(core.IdentityAssertion{
+			DomainID: "concurrent-domain-" + suffix, UserID: "user-" + suffix,
+		}),
 		identitySeed(suffix, "concurrent"))
 	if err != nil {
 		t.Fatal(err)
@@ -167,6 +170,12 @@ func identitySeed(suffix, user string) core.IdentitySeed {
 		AccountID: "acc_" + suffix, AccountNamespace: "ns-a-" + suffix,
 		Namespace: "ns-u-" + user + "-" + suffix,
 	}
+}
+
+func testIdentityFingerprint(assertion core.IdentityAssertion) core.IdentityFingerprint {
+	domain := sha256.Sum256([]byte("domain:" + assertion.DomainID))
+	user := sha256.Sum256([]byte("user:" + assertion.DomainID + "\x00" + assertion.UserID))
+	return core.IdentityFingerprint{Domain: domain[:], User: user[:]}
 }
 
 func newTestKey(id, name string) core.NewAPIKey {

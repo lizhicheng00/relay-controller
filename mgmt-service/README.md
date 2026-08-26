@@ -5,7 +5,7 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 ## Business Rules
 
 - One cloud domain maps to one shared `accountNamespace`.
-- One `(domainId, userId)` maps to one permanent `namespace`.
+- One `(domainId, userId)` maps to one permanent `namespace` through keyed fingerprints.
 - Callers never submit or select a namespace.
 - Each namespace has an API key limit for each scope.
 - CLI login and the management page create API keys through the same API. The caller supplies a descriptive name such as `CLI login`.
@@ -18,7 +18,7 @@ Management Service maps trusted cloud identities to DevBridge namespaces and API
 
 ## Namespace Ownership
 
-Namespaces are internal resources. The trusted identity layer provides only `domainId` and `userId`; Management Service creates and resolves the corresponding namespace. It does not expose namespace creation, selection, enumeration, or deletion APIs.
+Namespaces are internal resources. The trusted identity layer provides only `domainId` and `userId`; Management Service converts them to non-reversible keyed fingerprints and resolves the corresponding namespace. Original identity values are neither stored nor returned.
 
 Users in the same cloud domain receive different namespaces but share one `accountNamespace`. This keeps tunnel resources isolated by user while allowing account-level quota sharing.
 
@@ -42,13 +42,13 @@ Opening the management page does not create an identity or an API key. Listing k
 
 ## Data Ownership
 
-- `domain_account` owns the cloud-domain mapping and shared `accountNamespace`.
-- `user_identity` owns the `(domainId, userId)` mapping and user namespace.
+- `domain_account` maps a domain fingerprint to the shared `accountNamespace`.
+- `user_identity` maps a user fingerprint to its namespace.
 - `api_key` stores key metadata and SHA-256 digests as child records of `user_identity`.
 
 Every creation produces a new key. Creating and deleting keys locks the user identity while checking the per-scope count, preserving the limit across concurrent requests and service replicas. Successful API key authentication updates `lastUsedAt` at most once per minute.
 
-For an existing DevBridge deployment, preload the known `domainId`, `userId`, `accountNamespace`, and namespace mappings into `domain_account` and `user_identity` before routing users to this service. Creating the first API key does not replace the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
+For an existing DevBridge deployment, preload the identity fingerprints and known namespace mappings before routing users to this service. Creating the first API key does not replace the imported namespace. Runtime APIs do not accept a namespace supplied by the caller.
 
 ## Structure
 

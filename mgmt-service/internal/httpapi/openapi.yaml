@@ -12,13 +12,13 @@ paths:
     post:
       summary: Validate an API key and resolve its identity
       description: >-
-        Used internally by business services. A valid key returns its current identity mapping
+        Used internally by business services. A valid key returns its current namespace mapping
         and scope and records its latest use; an invalid or disabled key returns 401.
       security:
         - apiKeyAuth: []
       responses:
         '200':
-          description: Current user identity and namespaces
+          description: Current namespace mapping and API key scope
           content:
             application/json:
               schema:
@@ -88,7 +88,7 @@ paths:
         - $ref: '#/components/parameters/UserId'
       responses:
         '200':
-          description: Current user identity and namespaces
+          description: Current namespace mapping
           content:
             application/json:
               schema:
@@ -152,12 +152,8 @@ components:
   schemas:
     Identity:
       type: object
-      required: [domainId, userId, accountNamespace, namespace]
+      required: [accountNamespace, namespace]
       properties:
-        domainId:
-          type: string
-        userId:
-          type: string
         accountNamespace:
           type: string
         namespace:

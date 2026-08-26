@@ -16,6 +16,11 @@ type IdentityAssertion struct {
 	UserID   string
 }
 
+type IdentityFingerprint struct {
+	Domain []byte
+	User   []byte
+}
+
 type IdentitySeed struct {
 	AccountID        string
 	AccountNamespace string
@@ -23,8 +28,6 @@ type IdentitySeed struct {
 }
 
 type Identity struct {
-	DomainID         string `json:"domainId"`
-	UserID           string `json:"userId"`
 	AccountNamespace string `json:"accountNamespace"`
 	Namespace        string `json:"namespace"`
 }

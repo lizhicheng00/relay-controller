@@ -94,7 +94,6 @@ func TestValidationErrorUsesRelayFormat(t *testing.T) {
 func TestCheckAPIKeyReturnsIdentity(t *testing.T) {
 	identity := core.APIKeyIdentity{
 		Identity: core.Identity{
-			DomainID: "domain-1", UserID: "user-1",
 			AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
 		},
 		Scope: core.APIKeyScopeDevBridge,
@@ -135,7 +134,6 @@ func TestCheckAPIKeyRejectsInvalidKey(t *testing.T) {
 
 func TestResolveIdentityReturnsNamespaceMapping(t *testing.T) {
 	identity := core.Identity{
-		DomainID: "domain-1", UserID: "user-1",
 		AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
 	}
 	application := &fakeAPI{resolved: identity}

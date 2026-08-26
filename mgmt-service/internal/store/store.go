@@ -55,13 +55,13 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) EnsureIdentity(
 	ctx context.Context,
-	assertion core.IdentityAssertion,
+	fingerprint core.IdentityFingerprint,
 	seed core.IdentitySeed,
 ) (core.Identity, error) {
 	var identity core.Identity
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		var err error
-		identity, err = ensureIdentity(ctx, tx, assertion, seed)
+		identity, err = ensureIdentity(ctx, tx, fingerprint, seed)
 		return err
 	})
 	return identity, err
@@ -70,14 +70,14 @@ func (s *Store) EnsureIdentity(
 func ensureIdentity(
 	ctx context.Context,
 	tx *sql.Tx,
-	assertion core.IdentityAssertion,
+	fingerprint core.IdentityFingerprint,
 	seed core.IdentitySeed,
 ) (core.Identity, error) {
 	_, err := tx.ExecContext(ctx, `
-		INSERT INTO domain_account (id, domain_id, account_namespace)
+		INSERT INTO domain_account (id, domain_fingerprint, account_namespace)
 		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE id = id`,
-		seed.AccountID, assertion.DomainID, seed.AccountNamespace)
+		seed.AccountID, fingerprint.Domain, seed.AccountNamespace)
 	if err != nil {
 		return core.Identity{}, fmt.Errorf("create domain account: %w", err)
 	}
@@ -85,11 +85,11 @@ func ensureIdentity(
 	var identity core.Identity
 	var accountID, accountStatus string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id, domain_id, account_namespace, status
+		SELECT id, account_namespace, status
 		FROM domain_account
-		WHERE domain_id = ?
-		FOR UPDATE`, assertion.DomainID).Scan(
-		&accountID, &identity.DomainID, &identity.AccountNamespace, &accountStatus)
+		WHERE domain_fingerprint = ?
+		FOR UPDATE`, fingerprint.Domain).Scan(
+		&accountID, &identity.AccountNamespace, &accountStatus)
 	if err != nil {
 		return core.Identity{}, mapQueryError("load domain account", err)
 	}
@@ -98,21 +98,21 @@ func ensureIdentity(
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO user_identity (account_id, user_id, namespace)
+		INSERT INTO user_identity (account_id, user_fingerprint, namespace)
 		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE account_id = account_id`,
-		accountID, assertion.UserID, seed.Namespace)
+		accountID, fingerprint.User, seed.Namespace)
 	if err != nil {
 		return core.Identity{}, fmt.Errorf("create user identity: %w", err)
 	}
 
 	var userStatus string
 	err = tx.QueryRowContext(ctx, `
-		SELECT user_id, namespace, status
+		SELECT namespace, status
 		FROM user_identity
-		WHERE account_id = ? AND user_id = ?
-		FOR UPDATE`, accountID, assertion.UserID).Scan(
-		&identity.UserID, &identity.Namespace, &userStatus)
+		WHERE account_id = ? AND user_fingerprint = ?
+		FOR UPDATE`, accountID, fingerprint.User).Scan(
+		&identity.Namespace, &userStatus)
 	if err != nil {
 		return core.Identity{}, mapQueryError("load user identity", err)
 	}
@@ -125,19 +125,17 @@ func ensureIdentity(
 
 func (s *Store) FindIdentity(
 	ctx context.Context,
-	assertion core.IdentityAssertion,
+	fingerprint core.IdentityFingerprint,
 ) (core.Identity, error) {
 	var identity core.Identity
 	err := s.db.QueryRowContext(ctx, `
-		SELECT a.domain_id, u.user_id, a.account_namespace, u.namespace
+		SELECT a.account_namespace, u.namespace
 		FROM domain_account a
 		JOIN user_identity u ON u.account_id = a.id
-		WHERE a.domain_id = ?
-		  AND u.user_id = ?
+		WHERE a.domain_fingerprint = ?
+		  AND u.user_fingerprint = ?
 		  AND a.status = 'active'
-		  AND u.status = 'active'`, assertion.DomainID, assertion.UserID).Scan(
-		&identity.DomainID,
-		&identity.UserID,
+		  AND u.status = 'active'`, fingerprint.Domain, fingerprint.User).Scan(
 		&identity.AccountNamespace,
 		&identity.Namespace,
 	)
@@ -151,15 +149,13 @@ func (s *Store) FindIdentityByAPIKey(ctx context.Context, apiKeyHash []byte) (co
 	var identity core.Identity
 	var keyID string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT a.domain_id, u.user_id, a.account_namespace, u.namespace, k.id
+		SELECT a.account_namespace, u.namespace, k.id
 		FROM api_key k
 		JOIN user_identity u ON u.namespace = k.namespace
 		JOIN domain_account a ON a.id = u.account_id
 		WHERE k.key_hash = ?
 		  AND a.status = 'active'
 		  AND u.status = 'active'`, apiKeyHash).Scan(
-		&identity.DomainID,
-		&identity.UserID,
 		&identity.AccountNamespace,
 		&identity.Namespace,
 		&keyID,

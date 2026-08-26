@@ -17,6 +17,7 @@ type Config struct {
 	Address     string
 	DatabaseDSN string
 	TLS         TLS
+	Secrets     *secret.Codec
 }
 
 type TLS struct {
@@ -27,9 +28,17 @@ type TLS struct {
 }
 
 func Load() (Config, error) {
+	codec, err := secret.Load(
+		valueOrDefault("MGMT_CONFIG_DOG_FILE", defaultDogFile),
+		os.Getenv("omega"),
+	)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		DatabaseDSN: os.Getenv("DATABASE_DSN"),
+		Secrets:     codec,
 		TLS: TLS{
 			KeyStoreBase64:     os.Getenv("SERVER_SSL_KEY_STORE_BASE64"),
 			KeyStorePassword:   os.Getenv("SERVER_SSL_KEY_STORE_PASSWORD"),
@@ -48,20 +57,9 @@ func Load() (Config, error) {
 		{"SERVER_SSL_TRUST_STORE_BASE64", &cfg.TLS.TrustStoreBase64},
 		{"SERVER_SSL_TRUST_STORE_PASSWORD", &cfg.TLS.TrustStorePassword},
 	}
-	var codec *secret.Codec
 	for _, field := range fields {
 		if !secret.IsEncrypted(*field.value) {
 			continue
-		}
-		if codec == nil {
-			var err error
-			codec, err = secret.Load(
-				valueOrDefault("MGMT_CONFIG_DOG_FILE", defaultDogFile),
-				os.Getenv("omega"),
-			)
-			if err != nil {
-				return Config{}, err
-			}
 		}
 		value, err := codec.Decrypt(*field.value)
 		if err != nil {

@@ -15,16 +15,21 @@ import (
 )
 
 type repository interface {
-	EnsureIdentity(context.Context, core.IdentityAssertion, core.IdentitySeed) (core.Identity, error)
-	FindIdentity(context.Context, core.IdentityAssertion) (core.Identity, error)
+	EnsureIdentity(context.Context, core.IdentityFingerprint, core.IdentitySeed) (core.Identity, error)
+	FindIdentity(context.Context, core.IdentityFingerprint) (core.Identity, error)
 	FindIdentityByAPIKey(context.Context, []byte) (core.Identity, error)
 	ListAPIKeys(context.Context, string) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, string, core.NewAPIKey) (core.APIKey, error)
 	DeleteAPIKey(context.Context, string, string) error
 }
 
+type fingerprinter interface {
+	Fingerprint(string, ...string) []byte
+}
+
 type Service struct {
-	store repository
+	store         repository
+	fingerprinter fingerprinter
 }
 
 var (
@@ -32,8 +37,8 @@ var (
 	keyIDPattern    = regexp.MustCompile(`^[a-z2-7]{26}$`)
 )
 
-func New(repository repository) *Service {
-	return &Service{store: repository}
+func New(repository repository, identityFingerprinter fingerprinter) *Service {
+	return &Service{store: repository, fingerprinter: identityFingerprinter}
 }
 
 func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.APIKeyIdentity, error) {
@@ -62,7 +67,7 @@ func (s *Service) ListAPIKeys(
 	if err := validateIdentity(assertion); err != nil {
 		return nil, err
 	}
-	identity, err := s.store.FindIdentity(ctx, assertion)
+	identity, err := s.store.FindIdentity(ctx, s.fingerprint(assertion))
 	if errors.Is(err, store.ErrNotFound) {
 		return []core.APIKey{}, nil
 	}
@@ -111,7 +116,7 @@ func (s *Service) ensureIdentity(
 	if err := validateIdentity(assertion); err != nil {
 		return core.Identity{}, err
 	}
-	identity, err := s.store.EnsureIdentity(ctx, assertion, newIdentitySeed())
+	identity, err := s.store.EnsureIdentity(ctx, s.fingerprint(assertion), newIdentitySeed())
 	if err != nil {
 		return core.Identity{}, mapStoreError("ensure identity", "X-User-Id", err)
 	}
@@ -143,7 +148,7 @@ func (s *Service) findIdentity(
 	if err := validateIdentity(assertion); err != nil {
 		return core.Identity{}, err
 	}
-	identity, err := s.store.FindIdentity(ctx, assertion)
+	identity, err := s.store.FindIdentity(ctx, s.fingerprint(assertion))
 	if errors.Is(err, store.ErrNotFound) {
 		return core.Identity{}, core.IdentityNotFound()
 	}
@@ -183,6 +188,13 @@ func validateAPIKeyName(value string) (string, error) {
 
 func validIdentifier(value string) bool {
 	return identityPattern.MatchString(value)
+}
+
+func (s *Service) fingerprint(assertion core.IdentityAssertion) core.IdentityFingerprint {
+	return core.IdentityFingerprint{
+		Domain: s.fingerprinter.Fingerprint("domain", assertion.DomainID),
+		User:   s.fingerprinter.Fingerprint("user", assertion.DomainID, assertion.UserID),
+	}
 }
 
 func mapStoreError(operation, target string, err error) error {

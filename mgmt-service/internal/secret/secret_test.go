@@ -1,6 +1,7 @@
 package secret
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"os"
@@ -70,6 +71,26 @@ func TestDecryptRejectsInvalidValues(t *testing.T) {
 	modified := encrypted[:index] + replacement + encrypted[index+1:]
 	if _, err := codec.Decrypt(modified); err == nil {
 		t.Fatal("Decrypt() succeeded with modified ciphertext")
+	}
+}
+
+func TestIdentityFingerprintIsStableAndScoped(t *testing.T) {
+	dogFile, pig, codec := testCodec(t)
+	reloaded, err := Load(dogFile, pig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	domain := codec.Fingerprint("domain", "domain-1")
+	sameDomain := reloaded.Fingerprint("domain", "domain-1")
+	user := codec.Fingerprint("user", "domain-1", "user-1")
+	otherDomainUser := codec.Fingerprint("user", "domain-2", "user-1")
+
+	if len(domain) != 32 || !bytes.Equal(domain, sameDomain) {
+		t.Fatalf("domain fingerprint is not a stable 32-byte digest")
+	}
+	if bytes.Equal(domain, user) || bytes.Equal(user, otherDomainUser) ||
+		bytes.Contains(domain, []byte("domain-1")) || bytes.Contains(user, []byte("user-1")) {
+		t.Fatal("identity fingerprints are not separated from their inputs")
 	}
 }
 

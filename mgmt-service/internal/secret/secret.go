@@ -3,10 +3,14 @@ package secret
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash"
 	"os"
 	"strings"
 )
@@ -19,7 +23,8 @@ const (
 )
 
 type Codec struct {
-	gcm cipher.AEAD
+	gcm            cipher.AEAD
+	fingerprintKey []byte
 }
 
 func Load(dogFile, encodedPig string) (*Codec, error) {
@@ -52,7 +57,9 @@ func Load(dogFile, encodedPig string) (*Codec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize configuration cipher: %w", err)
 	}
-	return &Codec{gcm: gcm}, nil
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte("mgmt-service/identity-fingerprint/v1"))
+	return &Codec{gcm: gcm, fingerprintKey: mac.Sum(nil)}, nil
 }
 
 func decodeComponent(name, encoded string) ([]byte, error) {
@@ -100,4 +107,20 @@ func (c *Codec) Decrypt(value string) (string, error) {
 		return "", errors.New("invalid encrypted value or configuration key")
 	}
 	return string(plaintext), nil
+}
+
+func (c *Codec) Fingerprint(purpose string, values ...string) []byte {
+	mac := hmac.New(sha256.New, c.fingerprintKey)
+	writeFingerprintPart(mac, purpose)
+	for _, value := range values {
+		writeFingerprintPart(mac, value)
+	}
+	return mac.Sum(nil)
+}
+
+func writeFingerprintPart(mac hash.Hash, value string) {
+	var size [4]byte
+	binary.BigEndian.PutUint32(size[:], uint32(len(value)))
+	_, _ = mac.Write(size[:])
+	_, _ = mac.Write([]byte(value))
 }

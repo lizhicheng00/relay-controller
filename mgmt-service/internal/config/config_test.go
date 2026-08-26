@@ -12,7 +12,6 @@ import (
 
 func TestLoadPlainValues(t *testing.T) {
 	setEnvironment(t)
-	t.Setenv("MGMT_CONFIG_DOG_FILE", filepath.Join(t.TempDir(), "missing-dog"))
 
 	cfg, err := Load()
 	if err != nil {
@@ -69,8 +68,11 @@ func TestLoadRejectsWrongKey(t *testing.T) {
 
 func setEnvironment(t *testing.T) {
 	t.Helper()
+	dogFile, pig, _ := testCodec(t)
 	t.Setenv("SERVER_ADDRESS", "")
 	t.Setenv("DATABASE_DSN", "plain-dsn")
+	t.Setenv("MGMT_CONFIG_DOG_FILE", dogFile)
+	t.Setenv("omega", pig)
 	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "key-password")
 	t.Setenv("SERVER_SSL_TRUST_STORE_BASE64", "trust-store")
