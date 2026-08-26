@@ -15,6 +15,7 @@ import (
 
 type fakeAPI struct {
 	identity     core.APIKeyIdentity
+	resolved     core.Identity
 	keys         []core.APIKey
 	issued       core.IssuedAPIKey
 	assertion    core.IdentityAssertion
@@ -31,6 +32,14 @@ type fakeAPI struct {
 func (f *fakeAPI) CheckAPIKey(_ context.Context, value string) (core.APIKeyIdentity, error) {
 	f.checkedKey = value
 	return f.identity, f.authError
+}
+
+func (f *fakeAPI) ResolveIdentity(
+	_ context.Context,
+	assertion core.IdentityAssertion,
+) (core.Identity, error) {
+	f.assertion = assertion
+	return f.resolved, nil
 }
 
 func (f *fakeAPI) ListAPIKeys(
@@ -122,6 +131,29 @@ func TestCheckAPIKeyRejectsInvalidKey(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
 	}
 	assertErrorCode(t, response, core.CodeUnauthorized)
+}
+
+func TestResolveIdentityReturnsNamespaceMapping(t *testing.T) {
+	identity := core.Identity{
+		DomainID: "domain-1", UserID: "user-1",
+		AccountNamespace: "ns-a-test", Namespace: "ns-u-test",
+	}
+	application := &fakeAPI{resolved: identity}
+	server := newTestServer(application)
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/identities/resolve", nil)
+	setIdentityHeaders(request)
+	response := httptest.NewRecorder()
+
+	server.ServeHTTP(response, request)
+
+	var result core.Identity
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result != identity {
+		t.Fatalf("identity = %#v, %v", result, err)
+	}
+	if response.Code != http.StatusOK ||
+		application.assertion != (core.IdentityAssertion{DomainID: "domain-1", UserID: "user-1"}) {
+		t.Fatalf("status = %d, assertion = %#v", response.Code, application.assertion)
+	}
 }
 
 func TestAPIKeyManagementRoutes(t *testing.T) {

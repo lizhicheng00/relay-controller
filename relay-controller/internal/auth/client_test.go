@@ -26,7 +26,7 @@ func TestClientResolvesAPIKey(t *testing.T) {
 		_, _ = response.Write([]byte(`{"accountNamespace":"ns-account","namespace":"ns-user","scope":"devbridge"}`))
 	}))
 	defer server.Close()
-	client := &Client{endpoint: server.URL + checkPath, httpClient: server.Client()}
+	client := &Client{checkEndpoint: server.URL + checkPath, httpClient: server.Client()}
 	principal, err := client.ResolveAPIKey(context.Background(), "devbridge_test")
 	if err != nil || principal.Namespace != "ns-user" || principal.AccountNamespace != "ns-account" || principal.Scope != "devbridge" {
 		t.Fatalf("ResolveAPIKey() = %#v, %v", principal, err)
@@ -38,9 +38,28 @@ func TestClientMapsUnauthorized(t *testing.T) {
 		response.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
-	client := &Client{endpoint: server.URL + checkPath, httpClient: server.Client()}
+	client := &Client{checkEndpoint: server.URL + checkPath, httpClient: server.Client()}
 	if _, err := client.ResolveAPIKey(context.Background(), "invalid"); err != ErrUnauthorized {
 		t.Fatalf("ResolveAPIKey() error = %v", err)
+	}
+}
+
+func TestClientResolvesTrustedIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost || request.URL.Path != resolveIdentityPath ||
+			request.Header.Get("X-Domain-Id") != "domain-1" || request.Header.Get("X-User-Id") != "user-1" {
+			t.Fatalf("unexpected request: %s %s %#v", request.Method, request.URL.Path, request.Header)
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"accountNamespace":"ns-account","namespace":"ns-user"}`))
+	}))
+	defer server.Close()
+	client := &Client{identityEndpoint: server.URL + resolveIdentityPath, httpClient: server.Client()}
+
+	principal, err := client.ResolveIdentity(context.Background(), "domain-1", "user-1")
+	if err != nil || principal.Namespace != "ns-user" || principal.AccountNamespace != "ns-account" ||
+		principal.Scope != "devbridge" {
+		t.Fatalf("ResolveIdentity() = %#v, %v", principal, err)
 	}
 }
 

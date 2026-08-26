@@ -42,7 +42,13 @@ type Handler struct {
 	log *slog.Logger
 }
 
-func New(api API, resolver auth.Resolver, logger *slog.Logger, limiter *RateLimiter) http.Handler {
+func New(
+	api API,
+	resolver auth.Resolver,
+	trustedIdentityToken string,
+	logger *slog.Logger,
+	limiter *RateLimiter,
+) http.Handler {
 	handler := &Handler{api: api, log: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+apiBase+"/auth/check", handler.checkAuthentication)
@@ -64,7 +70,7 @@ func New(api API, resolver auth.Resolver, logger *slog.Logger, limiter *RateLimi
 	if limiter != nil {
 		result = limiter.Middleware(result)
 	}
-	result = handler.authenticate(resolver, result)
+	result = handler.authenticate(resolver, trustedIdentityToken, result)
 	return handler.recover(result)
 }
 

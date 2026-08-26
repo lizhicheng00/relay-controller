@@ -22,6 +22,7 @@ var testAssertion = core.IdentityAssertion{DomainID: "domain-1", UserID: "user-1
 
 type fakeRepository struct {
 	identity     core.Identity
+	assertion    core.IdentityAssertion
 	keys         []core.APIKey
 	created      core.APIKey
 	createdKeys  []core.NewAPIKey
@@ -36,9 +37,10 @@ type fakeRepository struct {
 
 func (f *fakeRepository) EnsureIdentity(
 	_ context.Context,
-	_ core.IdentityAssertion,
+	assertion core.IdentityAssertion,
 	_ core.IdentitySeed,
 ) (core.Identity, error) {
+	f.assertion = assertion
 	return f.identity, f.identityErr
 }
 
@@ -106,6 +108,17 @@ func TestCheckAPIKeyReturnsMappedIdentity(t *testing.T) {
 	}
 	if len(repository.findDigest) != 32 {
 		t.Fatalf("digest length = %d", len(repository.findDigest))
+	}
+}
+
+func TestResolveIdentityEnsuresMapping(t *testing.T) {
+	repository := &fakeRepository{identity: testIdentity}
+	application := newTestService(repository)
+
+	identity, err := application.ResolveIdentity(context.Background(), testAssertion)
+	if err != nil || identity != testIdentity || repository.assertion != testAssertion {
+		t.Fatalf("ResolveIdentity() = %#v, assertion = %#v, error = %v",
+			identity, repository.assertion, err)
 	}
 }
 

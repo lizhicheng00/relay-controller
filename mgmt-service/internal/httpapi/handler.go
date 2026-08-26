@@ -22,6 +22,7 @@ const apiBase = "/open-api-inner/v1/mgmt-service"
 
 type API interface {
 	CheckAPIKey(context.Context, string) (core.APIKeyIdentity, error)
+	ResolveIdentity(context.Context, core.IdentityAssertion) (core.Identity, error)
 	ListAPIKeys(context.Context, core.IdentityAssertion) ([]core.APIKey, error)
 	CreateAPIKey(context.Context, core.IdentityAssertion, string, core.APIKeyScope) (core.IssuedAPIKey, error)
 	DeleteAPIKey(context.Context, core.IdentityAssertion, string) error
@@ -42,10 +43,20 @@ func New(api API, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /openapi.yaml", handler.openapi)
 	mux.HandleFunc("POST "+apiBase+"/api-keys/check", handler.checkAPIKey)
+	mux.HandleFunc("POST "+apiBase+"/identities/resolve", handler.resolveIdentity)
 	mux.HandleFunc("GET "+apiBase+"/api-keys", handler.listAPIKeys)
 	mux.HandleFunc("POST "+apiBase+"/api-keys", handler.createAPIKey)
 	mux.HandleFunc("DELETE "+apiBase+"/api-keys/{keyId}", handler.deleteAPIKey)
 	return handler.recover(mux)
+}
+
+func (h *Handler) resolveIdentity(response http.ResponseWriter, request *http.Request) {
+	identity, err := h.api.ResolveIdentity(request.Context(), identityAssertion(request))
+	if err != nil {
+		h.writeError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, identity)
 }
 
 func (h *Handler) checkAPIKey(response http.ResponseWriter, request *http.Request) {

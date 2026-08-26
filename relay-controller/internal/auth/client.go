@@ -17,9 +17,12 @@ import (
 	"github.com/youmark/pkcs8"
 )
 
-const checkPath = "/open-api-inner/v1/mgmt-service/api-keys/check"
+const (
+	checkPath           = "/open-api-inner/v1/mgmt-service/api-keys/check"
+	resolveIdentityPath = "/open-api-inner/v1/mgmt-service/identities/resolve"
+)
 
-var ErrUnauthorized = errors.New("API key authentication failed")
+var ErrUnauthorized = errors.New("authentication failed")
 
 type Principal struct {
 	AccountNamespace string `json:"accountNamespace"`
@@ -29,11 +32,13 @@ type Principal struct {
 
 type Resolver interface {
 	ResolveAPIKey(context.Context, string) (Principal, error)
+	ResolveIdentity(context.Context, string, string) (Principal, error)
 }
 
 type Client struct {
-	endpoint   string
-	httpClient *http.Client
+	checkEndpoint    string
+	identityEndpoint string
+	httpClient       *http.Client
 }
 
 type TLSConfig struct {
@@ -49,9 +54,13 @@ func NewClient(baseURL string, cfg TLSConfig) (*Client, error) {
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return nil, fmt.Errorf("management service URL must use HTTPS")
 	}
-	endpoint, err := url.JoinPath(baseURL, checkPath)
+	checkEndpoint, err := url.JoinPath(baseURL, checkPath)
 	if err != nil {
-		return nil, fmt.Errorf("build management service URL: %w", err)
+		return nil, fmt.Errorf("build API key check URL: %w", err)
+	}
+	identityEndpoint, err := url.JoinPath(baseURL, resolveIdentityPath)
+	if err != nil {
+		return nil, fmt.Errorf("build identity resolution URL: %w", err)
 	}
 	tlsConfig, err := newTLSConfig(cfg)
 	if err != nil {
@@ -60,7 +69,8 @@ func NewClient(baseURL string, cfg TLSConfig) (*Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = tlsConfig
 	return &Client{
-		endpoint: endpoint,
+		checkEndpoint:    checkEndpoint,
+		identityEndpoint: identityEndpoint,
 		httpClient: &http.Client{
 			Transport: transport,
 			Timeout:   3 * time.Second,
@@ -135,27 +145,48 @@ func loadKeyPair(certificatePEM, privateKeyPEM []byte, password string) (tls.Cer
 }
 
 func (c *Client) ResolveAPIKey(ctx context.Context, apiKey string) (Principal, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.checkEndpoint, nil)
 	if err != nil {
 		return Principal{}, fmt.Errorf("create API key check request: %w", err)
 	}
 	request.Header.Set("X-API-Key", apiKey)
+	return c.resolve(request)
+}
+
+func (c *Client) ResolveIdentity(ctx context.Context, domainID, userID string) (Principal, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.identityEndpoint, nil)
+	if err != nil {
+		return Principal{}, fmt.Errorf("create identity resolution request: %w", err)
+	}
+	request.Header.Set("X-Domain-Id", domainID)
+	request.Header.Set("X-User-Id", userID)
+	principal, err := c.resolve(request)
+	if err != nil {
+		return Principal{}, err
+	}
+	principal.Scope = "devbridge"
+	return principal, nil
+}
+
+func (c *Client) resolve(request *http.Request) (Principal, error) {
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		return Principal{}, fmt.Errorf("check API key: %w", err)
+		return Principal{}, fmt.Errorf("resolve identity: %w", err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		if response.StatusCode == http.StatusUnauthorized {
+		if response.StatusCode == http.StatusBadRequest ||
+			response.StatusCode == http.StatusUnauthorized ||
+			response.StatusCode == http.StatusForbidden {
 			return Principal{}, ErrUnauthorized
 		}
-		return Principal{}, fmt.Errorf("check API key: management service returned %s", response.Status)
+		return Principal{}, fmt.Errorf("resolve identity: management service returned %s", response.Status)
 	}
 	var principal Principal
 	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&principal); err != nil {
-		return Principal{}, fmt.Errorf("decode API key identity: %w", err)
+		return Principal{}, fmt.Errorf("decode identity: %w", err)
 	}
 	return principal, nil
 }

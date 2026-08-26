@@ -28,16 +28,17 @@ All business APIs use the prefix `/open-api-inner/v1/mgmt-service`.
 
 ```text
 POST /open-api-inner/v1/mgmt-service/api-keys/check    validate a key and resolve its identity and scope
+POST /open-api-inner/v1/mgmt-service/identities/resolve  resolve a trusted identity without issuing a key
 GET  /open-api-inner/v1/mgmt-service/api-keys  list API key metadata
 POST /open-api-inner/v1/mgmt-service/api-keys  create an API key
 DELETE /open-api-inner/v1/mgmt-service/api-keys/{keyId}  delete an API key
 ```
 
-All endpoints require mTLS. The upper identity layer confirms the user before API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. Only the internal check endpoint accepts `X-API-Key`; Relay Controller uses its returned namespace, account namespace, and scope to authenticate business requests. The OpenAPI document is available at `/openapi.yaml`.
+All endpoints require mTLS. The upper identity layer confirms the user before API key management, then supplies trusted `X-Domain-Id` and `X-User-Id` headers. Management Service does not receive login credentials or use an API key to authorize key management. The internal identity endpoint lets Relay Controller resolve an already authenticated legacy user without creating an API key. The API key check endpoint resolves new clients by credential. The OpenAPI document is available at `/openapi.yaml`.
 
 The management endpoints always operate on the namespace resolved from the supplied cloud identity; a caller cannot submit a namespace. Lists contain metadata, scopes, masks, and last-use times only. Creating a key requires `name` and `scope`; the complete value is returned once.
 
-Opening the management page does not create an identity or an API key. Listing keys for a new user returns an empty list. Creating a key creates the user's namespace when needed.
+Opening the management page does not create an identity or an API key. Listing keys for a new user returns an empty list. Creating a key or resolving a trusted legacy identity creates the user's namespace when needed.
 
 ## Data Ownership
 
@@ -52,7 +53,7 @@ For an existing DevBridge deployment, preload the known `domainId`, `userId`, `a
 ## Structure
 
 ```text
-cmd                  service and configuration-tool entrypoints
+cmd                  service process startup
 internal/config      environment configuration loading
 internal/core        identity models and application errors
 internal/httpapi     HTTP routes and OpenAPI

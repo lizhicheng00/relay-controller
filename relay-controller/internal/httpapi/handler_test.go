@@ -19,6 +19,8 @@ var testPrincipal = auth.Principal{
 	Namespace: "ns-sub-user-001", AccountNamespace: "ns-user-001", Scope: "devbridge",
 }
 
+const testTrustedIdentityToken = "trusted-identity-token"
+
 func TestCreateTunnelReturnsDirectResponse(t *testing.T) {
 	api := stubAPI{createTunnel: func(_ context.Context, namespace, accountNamespace string, request core.CreateTunnelRequest) (core.TunnelResponse, error) {
 		if namespace != "ns-sub-user-001" || accountNamespace != "ns-user-001" || request.ClusterID != "cluster-a" {
@@ -40,7 +42,7 @@ func TestMissingAPIKeyReturnsStructured401(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, apiBase+"/tunnels", strings.NewReader(`{"name":"dev"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	New(stubAPI{}, stubResolver{principal: testPrincipal}, testLogger(), nil).ServeHTTP(response, request)
+	New(stubAPI{}, stubResolver{principal: testPrincipal}, "", testLogger(), nil).ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized || !strings.Contains(response.Body.String(), `"code":"40100"`) || !strings.Contains(response.Body.String(), `"target":"X-API-Key"`) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
 	}
@@ -69,7 +71,7 @@ func TestAPIKeyAuthenticationFailures(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, apiBase+"/tunnels", nil)
 			request.Header.Set("X-API-Key", "devbridge_test")
 			response := httptest.NewRecorder()
-			New(stubAPI{}, test.resolver, testLogger(), nil).ServeHTTP(response, request)
+			New(stubAPI{}, test.resolver, "", testLogger(), nil).ServeHTTP(response, request)
 			if response.Code != test.status || !strings.Contains(response.Body.String(), `"code":"`+test.code+`"`) {
 				t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
 			}
@@ -99,7 +101,7 @@ func TestInvalidJSONMediaTypeIsRejected(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json-malformed")
 	request.Header.Set("X-API-Key", "devbridge_test")
 	response := httptest.NewRecorder()
-	New(stubAPI{}, stubResolver{principal: testPrincipal}, testLogger(), nil).ServeHTTP(response, request)
+	New(stubAPI{}, stubResolver{principal: testPrincipal}, "", testLogger(), nil).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"target":"requestBody"`) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
 	}
@@ -119,6 +121,65 @@ func TestPortCollectionDoesNotSupportDelete(t *testing.T) {
 	response := serve(t, stubAPI{}, http.MethodDelete, apiBase+"/tunnels/aaaadysa/ports", "", true)
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", response.Code)
+	}
+}
+
+func TestTrustedIdentityUsesResolvedPrincipal(t *testing.T) {
+	resolved := false
+	resolver := stubResolver{resolveIdentity: func(_ context.Context, domainID, userID string) (auth.Principal, error) {
+		resolved = true
+		if domainID != "domain-1" || userID != "user-1" {
+			t.Fatalf("identity = %q %q", domainID, userID)
+		}
+		return testPrincipal, nil
+	}}
+	api := stubAPI{createTunnel: func(_ context.Context, namespace, accountNamespace string, _ core.CreateTunnelRequest) (core.TunnelResponse, error) {
+		if namespace != testPrincipal.Namespace || accountNamespace != testPrincipal.AccountNamespace {
+			t.Fatalf("principal = %q %q", namespace, accountNamespace)
+		}
+		return core.TunnelResponse{}, nil
+	}}
+	request := httptest.NewRequest(http.MethodPost, apiBase+"/tunnels", strings.NewReader(`{"name":"dev","clusterId":"cluster-a"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(trustedIdentityTokenHeader, testTrustedIdentityToken)
+	request.Header.Set(domainIDHeader, "domain-1")
+	request.Header.Set(userIDHeader, "user-1")
+	response := httptest.NewRecorder()
+
+	New(api, resolver, testTrustedIdentityToken, testLogger(), nil).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !resolved {
+		t.Fatalf("status = %d, resolved = %t, body = %s", response.Code, resolved, response.Body)
+	}
+}
+
+func TestTrustedIdentityRejectsInvalidOrAmbiguousCredential(t *testing.T) {
+	tests := []struct {
+		configuredToken string
+		configure       func(*http.Request)
+	}{
+		{configuredToken: testTrustedIdentityToken, configure: func(request *http.Request) {
+			request.Header.Set(trustedIdentityTokenHeader, "invalid")
+		}},
+		{configure: func(request *http.Request) {
+			request.Header.Set(trustedIdentityTokenHeader, testTrustedIdentityToken)
+		}},
+		{configuredToken: testTrustedIdentityToken, configure: func(request *http.Request) {
+			request.Header.Set(trustedIdentityTokenHeader, testTrustedIdentityToken)
+			request.Header.Set(apiKeyHeader, "devbridge_test")
+		}},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(http.MethodGet, apiBase+"/tunnels", nil)
+		request.Header.Set(domainIDHeader, "domain-1")
+		request.Header.Set(userIDHeader, "user-1")
+		test.configure(request)
+		response := httptest.NewRecorder()
+		New(stubAPI{}, stubResolver{principal: testPrincipal}, test.configuredToken,
+			testLogger(), nil).ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, body = %s", response.Code, response.Body)
+		}
 	}
 }
 
@@ -147,7 +208,7 @@ func serve(t *testing.T, api API, method, target, body string, authenticated boo
 		request.Header.Set("X-Account-Namespace", "forged-account")
 	}
 	response := httptest.NewRecorder()
-	New(api, stubResolver{principal: testPrincipal}, testLogger(), nil).ServeHTTP(response, request)
+	New(api, stubResolver{principal: testPrincipal}, "", testLogger(), nil).ServeHTTP(response, request)
 	return response
 }
 
@@ -162,11 +223,19 @@ type stubAPI struct {
 }
 
 type stubResolver struct {
-	principal auth.Principal
-	err       error
+	principal       auth.Principal
+	err             error
+	resolveIdentity func(context.Context, string, string) (auth.Principal, error)
 }
 
 func (s stubResolver) ResolveAPIKey(context.Context, string) (auth.Principal, error) {
+	return s.principal, s.err
+}
+
+func (s stubResolver) ResolveIdentity(ctx context.Context, domainID, userID string) (auth.Principal, error) {
+	if s.resolveIdentity != nil {
+		return s.resolveIdentity(ctx, domainID, userID)
+	}
 	return s.principal, s.err
 }
 

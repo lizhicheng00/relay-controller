@@ -17,7 +17,9 @@ Relay Controller is the regional DevBridge control plane. It manages tunnels, po
 
 ## API
 
-All business APIs use the prefix `/open-api-inner/v1/relay-controller` and require `X-API-Key`.
+All business APIs use the prefix `/open-api-inner/v1/relay-controller`. New clients authenticate with
+`X-API-Key`; the trusted upper identity layer can forward an authenticated legacy client with
+`X-Trusted-Identity-Token`, `X-Domain-Id`, and `X-User-Id`.
 
 ```text
 GET    /auth/check
@@ -38,14 +40,14 @@ DELETE /tunnels/{tunnelId}/ports/{port}
 GET    /limits
 ```
 
-`GET /auth/check` performs the same API key and scope validation as every business request and returns `204` without querying tunnel or billing data. CLI clients use it once when accepting a manually supplied API key; normal commands call their business endpoint directly.
+`GET /auth/check` performs the same authentication as every business request and returns `204` without querying tunnel or billing data. CLI clients use it once when accepting a manually supplied API key; normal commands call their business endpoint directly.
 
 ## Structure
 
 ```text
 cmd                    process startup and graceful shutdown
 internal/httpapi       HTTP routing, JSON errors, recovery, rate limiting
-internal/auth          API key resolution through Management Service
+internal/auth          API key and trusted identity resolution through Management Service
 internal/service       tunnel, port, token, billing, cleanup workflows
 internal/core          business models and deterministic rules
 internal/store         MySQL queries and transactions
@@ -75,10 +77,11 @@ Environment variables:
 | `RELAY_DOMAIN` | Tunnel DNS suffix, default `myhuaweicloud.com` |
 | `RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | API requests allowed per namespace and process each minute, default `120` |
 | `RELAY_JWT_PRIVATE_KEY` | PKCS8 RSA private key, PEM or Base64 DER, at least 2048 bits |
+| `RELAY_TRUSTED_IDENTITY_TOKEN` | Optional shared token enabling the private trusted-identity path; omit to disable it |
 
 Relay Controller serves HTTP only. A gateway or private ingress owns public HTTPS and forwards `X-API-Key`. Bind the service to loopback or a private interface; never expose its HTTP listener directly to the public network.
 
-`DATABASE_DSN`, `RELAY_JWT_PRIVATE_KEY`, `MGMT_CLIENT_KEY_BASE64`, and `MGMT_CLIENT_KEY_PASSWORD` accept either plaintext or an `ENC(v1.<nonce>.<ciphertext+tag>)` value. The AES-256-GCM working key is reconstructed from dog in a read-only file, cat embedded in both services, and pig in runtime configuration. Each component is independently generated Base64-encoded 32-byte data. Dog and pig are only required when an encrypted value is present. Base64 alone is encoding, not encryption.
+`DATABASE_DSN`, `RELAY_JWT_PRIVATE_KEY`, `RELAY_TRUSTED_IDENTITY_TOKEN`, `MGMT_CLIENT_KEY_BASE64`, and `MGMT_CLIENT_KEY_PASSWORD` accept either plaintext or an `ENC(v1.<nonce>.<ciphertext+tag>)` value. The AES-256-GCM working key is reconstructed from dog in a read-only file, cat embedded in both services, and pig in runtime configuration. Each component is independently generated Base64-encoded 32-byte data. Dog and pig are only required when an encrypted value is present. Base64 alone is encoding, not encryption.
 
 ## Build And Run
 
@@ -99,6 +102,8 @@ export RELAY_REGION='cn-north-4'
 export RELAY_DOMAIN='myhuaweicloud.com'
 export RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE='120'
 export RELAY_JWT_PRIVATE_KEY='<PKCS8 PEM or Base64 DER>'
+# Optional: only the trusted AK/SK compatibility layer receives this value.
+export RELAY_TRUSTED_IDENTITY_TOKEN='<random shared token>'
 export SERVER_ADDRESS='127.0.0.1:8443'
 export MGMT_SERVICE_URL='https://127.0.0.1:8444'
 export MGMT_SERVER_NAME='mgmt.developer.myhuaweicloud.com'
@@ -114,8 +119,10 @@ The service applies embedded migrations before opening the application store. Ap
 
 ## Security Boundary
 
-The caller supplies only `X-API-Key`. Relay Controller resolves it through Management Service over mTLS, requires `scope=devbridge`, and places the returned namespace identity in request context. Caller-supplied namespace headers are ignored. Missing or invalid credentials return `401`, an incompatible scope returns `403`, and a Management Service failure returns `503`.
+New clients supply `X-API-Key`. Relay Controller resolves it through Management Service over mTLS, requires `scope=devbridge`, and places the returned namespace identity in request context. For legacy clients, the upper identity layer validates AK/SK and forwards `X-Domain-Id` and `X-User-Id` together with `X-Trusted-Identity-Token`; Relay resolves the same namespace identity through Management Service without issuing an API key. Both paths produce the same request Principal before rate limiting and business handling.
 
-The API key Check endpoint remains owned by Management Service because it owns key hashes and identity mappings. Relay Controller owns when that check is required. Public HTTPS terminates at the gateway; the Relay HTTP listener remains private. Relay authenticates itself to Management Service with its client certificate and verifies the Management Service certificate against an explicitly configured CA, the issuer bundled in the client certificate chain, or the system trust store.
+The trusted-identity token is optional and its absence disables the legacy path. It must only be configured on Relay Controller and the trusted upper identity layer. Public ingress must remove these internal headers from external requests; only the trusted identity layer may set them on the private hop. Requests cannot combine API key and trusted-identity credentials. Missing or invalid credentials return `401`, an incompatible scope returns `403`, and a Management Service failure returns `503`.
+
+The API key check and trusted identity resolution endpoints remain owned by Management Service because it owns key hashes and identity mappings. Public HTTPS terminates at the gateway; the Relay HTTP listener remains private. Relay authenticates itself to Management Service with its client certificate and verifies the Management Service certificate against an explicitly configured CA, the issuer bundled in the client certificate chain, or the system trust store.
 
 Gateway enforces data-plane limits such as one Host per tunnel, bandwidth, HTTP request rate, and concurrent connections. The Controller's in-memory request limiter is only a bounded per-instance safety limit; strict cross-replica API limiting belongs at ingress.

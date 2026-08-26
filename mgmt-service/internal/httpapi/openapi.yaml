@@ -76,6 +76,29 @@ paths:
           $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
+  /open-api-inner/v1/mgmt-service/identities/resolve:
+    post:
+      summary: Resolve a trusted cloud identity
+      description: >-
+        Used internally by Relay Controller for authenticated legacy clients. Validates the trusted
+        domain and user identity, creates its stable namespace mapping when first seen, and returns
+        the mapping without issuing an API key.
+      parameters:
+        - $ref: '#/components/parameters/DomainId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Current user identity and namespaces
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /open-api-inner/v1/mgmt-service/api-keys/{keyId}:
     delete:
       summary: Delete an API key

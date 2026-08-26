@@ -68,7 +68,8 @@ func run() error {
 	application := service.New(database, signer, cfg.Relay.Domain, cfg.Relay.Region, logger)
 	limiter := httpapi.NewRateLimiter(cfg.Relay.RequestsPerMinute)
 	server := &http.Server{
-		Handler:           httpapi.New(application, identityResolver, logger, limiter),
+		Handler: httpapi.New(
+			application, identityResolver, cfg.Relay.TrustedIdentityToken, logger, limiter),
 		ErrorLog:          log.New(io.Discard, "", 0),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

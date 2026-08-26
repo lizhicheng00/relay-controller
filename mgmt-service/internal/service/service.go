@@ -48,6 +48,13 @@ func (s *Service) CheckAPIKey(ctx context.Context, value string) (core.APIKeyIde
 	return core.APIKeyIdentity{Identity: identity, Scope: scope}, nil
 }
 
+func (s *Service) ResolveIdentity(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+) (core.Identity, error) {
+	return s.ensureIdentity(ctx, assertion)
+}
+
 func (s *Service) ListAPIKeys(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
@@ -82,12 +89,9 @@ func (s *Service) CreateAPIKey(
 	if !security.ValidAPIKeyScope(scope) {
 		return core.IssuedAPIKey{}, core.Invalid("scope", "scope must be devbridge or devbox")
 	}
-	if err := validateIdentity(assertion); err != nil {
-		return core.IssuedAPIKey{}, err
-	}
-	identity, err := s.store.EnsureIdentity(ctx, assertion, newIdentitySeed())
+	identity, err := s.ensureIdentity(ctx, assertion)
 	if err != nil {
-		return core.IssuedAPIKey{}, mapStoreError("ensure identity", "X-User-Id", err)
+		return core.IssuedAPIKey{}, err
 	}
 	value, digest := security.NewAPIKey(scope)
 	key, err := s.store.CreateAPIKey(ctx, identity.Namespace, core.NewAPIKey{
@@ -100,6 +104,20 @@ func (s *Service) CreateAPIKey(
 	return core.IssuedAPIKey{APIKey: key, Value: value}, nil
 }
 
+func (s *Service) ensureIdentity(
+	ctx context.Context,
+	assertion core.IdentityAssertion,
+) (core.Identity, error) {
+	if err := validateIdentity(assertion); err != nil {
+		return core.Identity{}, err
+	}
+	identity, err := s.store.EnsureIdentity(ctx, assertion, newIdentitySeed())
+	if err != nil {
+		return core.Identity{}, mapStoreError("ensure identity", "X-User-Id", err)
+	}
+	return identity, nil
+}
+
 func (s *Service) DeleteAPIKey(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
@@ -108,7 +126,7 @@ func (s *Service) DeleteAPIKey(
 	if !keyIDPattern.MatchString(keyID) {
 		return core.Invalid("keyId", "keyId is invalid")
 	}
-	identity, err := s.resolveIdentity(ctx, assertion)
+	identity, err := s.findIdentity(ctx, assertion)
 	if err != nil {
 		return err
 	}
@@ -118,7 +136,7 @@ func (s *Service) DeleteAPIKey(
 	return nil
 }
 
-func (s *Service) resolveIdentity(
+func (s *Service) findIdentity(
 	ctx context.Context,
 	assertion core.IdentityAssertion,
 ) (core.Identity, error) {

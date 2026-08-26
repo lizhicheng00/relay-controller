@@ -28,6 +28,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("RELAY_DOMAIN", "")
 	t.Setenv("RELAY_REGION", "")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "")
+	t.Setenv("RELAY_TRUSTED_IDENTITY_TOKEN", "")
 	t.Setenv("DATABASE_DSN", "")
 	cfg, err := Load()
 	if err != nil {
@@ -51,6 +52,7 @@ func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("MGMT_CLIENT_KEY_BASE64", "private-key")
 	t.Setenv("MGMT_CLIENT_KEY_PASSWORD", "secret")
 	t.Setenv("MGMT_CA_CERT_BASE64", "ca-certificate")
+	t.Setenv("RELAY_TRUSTED_IDENTITY_TOKEN", "identity-token")
 	t.Setenv("DATABASE_DSN", "relay:secret@tcp(database:3306)/relay_controller")
 	cfg, err := Load()
 	if err != nil {
@@ -59,7 +61,8 @@ func TestLoadReadsOverrides(t *testing.T) {
 	if cfg.Address != "10.0.0.1:9443" ||
 		cfg.DatabaseDSN != "relay:secret@tcp(database:3306)/relay_controller" ||
 		cfg.Management.URL != "https://mgmt.example.com" ||
-		cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 {
+		cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 ||
+		cfg.Relay.TrustedIdentityToken != "identity-token" {
 		t.Fatalf("relay overrides = %#v", cfg.Relay)
 	}
 	if cfg.Management.ServerName != "huaweicloud.com" || cfg.Management.ClientCertBase64 != "certificate" ||
@@ -96,16 +99,22 @@ func TestLoadDecryptsSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	identityToken, err := codec.Encrypt([]byte("identity-token"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("RELAY_CONFIG_DOG_FILE", dogFile)
 	t.Setenv("omega", pig)
 	t.Setenv("DATABASE_DSN", dsn)
 	t.Setenv("RELAY_JWT_PRIVATE_KEY", privateKey)
+	t.Setenv("RELAY_TRUSTED_IDENTITY_TOKEN", identityToken)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DatabaseDSN != "relay:password@tcp(database:3306)/relay" || cfg.Relay.JWTPrivateKey != "private-key" {
+	if cfg.DatabaseDSN != "relay:password@tcp(database:3306)/relay" ||
+		cfg.Relay.JWTPrivateKey != "private-key" || cfg.Relay.TrustedIdentityToken != "identity-token" {
 		t.Fatalf("Load() = %#v", cfg)
 	}
 }

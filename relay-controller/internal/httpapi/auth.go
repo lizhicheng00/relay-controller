@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"strings"
@@ -9,18 +11,60 @@ import (
 	"relay-controller/internal/core"
 )
 
-const apiKeyHeader = "X-API-Key"
+const (
+	apiKeyHeader               = "X-API-Key"
+	trustedIdentityTokenHeader = "X-Trusted-Identity-Token"
+	domainIDHeader             = "X-Domain-Id"
+	userIDHeader               = "X-User-Id"
+)
 
-func (h *Handler) authenticate(resolver auth.Resolver, next http.Handler) http.Handler {
+func (h *Handler) authenticate(
+	resolver auth.Resolver,
+	trustedIdentityToken string,
+	next http.Handler,
+) http.Handler {
+	trustedIdentityEnabled := trustedIdentityToken != ""
+	trustedIdentityTokenHash := sha256.Sum256([]byte(trustedIdentityToken))
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		apiKey := strings.TrimSpace(request.Header.Get(apiKeyHeader))
-		if apiKey == "" {
+		identityToken := request.Header.Get(trustedIdentityTokenHeader)
+		if apiKey != "" && identityToken != "" {
+			h.writeError(response, core.Unauthorized("authentication"))
+			return
+		}
+
+		var principal auth.Principal
+		var err error
+		target := apiKeyHeader
+		switch {
+		case apiKey != "":
+			principal, err = resolver.ResolveAPIKey(request.Context(), apiKey)
+		case identityToken != "":
+			target = trustedIdentityTokenHeader
+			identityTokenHash := sha256.Sum256([]byte(identityToken))
+			if !trustedIdentityEnabled ||
+				subtle.ConstantTimeCompare(identityTokenHash[:], trustedIdentityTokenHash[:]) != 1 {
+				h.writeError(response, core.Unauthorized(target))
+				return
+			}
+			domainID := strings.TrimSpace(request.Header.Get(domainIDHeader))
+			userID := strings.TrimSpace(request.Header.Get(userIDHeader))
+			if domainID == "" {
+				h.writeError(response, core.MissingHeader(domainIDHeader))
+				return
+			}
+			if userID == "" {
+				h.writeError(response, core.MissingHeader(userIDHeader))
+				return
+			}
+			principal, err = resolver.ResolveIdentity(request.Context(), domainID, userID)
+		default:
 			h.writeError(response, core.MissingHeader(apiKeyHeader))
 			return
 		}
-		principal, err := resolver.ResolveAPIKey(request.Context(), apiKey)
+
 		if errors.Is(err, auth.ErrUnauthorized) {
-			h.writeError(response, core.Unauthorized(apiKeyHeader))
+			h.writeError(response, core.Unauthorized(target))
 			return
 		}
 		if err != nil {
@@ -28,7 +72,7 @@ func (h *Handler) authenticate(resolver auth.Resolver, next http.Handler) http.H
 			return
 		}
 		if principal.Scope != "devbridge" {
-			h.writeError(response, core.Forbidden(apiKeyHeader, "API key scope is not allowed"))
+			h.writeError(response, core.Forbidden(target, "credential scope is not allowed"))
 			return
 		}
 		if !core.ValidIdentifier(principal.Namespace) || !core.ValidIdentifier(principal.AccountNamespace) {

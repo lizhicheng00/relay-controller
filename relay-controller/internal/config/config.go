@@ -27,10 +27,11 @@ type Config struct {
 }
 
 type Relay struct {
-	Domain            string
-	Region            string
-	RequestsPerMinute int
-	JWTPrivateKey     string
+	Domain               string
+	Region               string
+	RequestsPerMinute    int
+	JWTPrivateKey        string
+	TrustedIdentityToken string
 }
 
 type Management struct {
@@ -55,10 +56,11 @@ func Load() (Config, error) {
 		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		DatabaseDSN: os.Getenv("DATABASE_DSN"),
 		Relay: Relay{
-			Domain:            valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
-			Region:            valueOrDefault("RELAY_REGION", defaultRelayRegion),
-			RequestsPerMinute: requestsPerMinute,
-			JWTPrivateKey:     os.Getenv("RELAY_JWT_PRIVATE_KEY"),
+			Domain:               valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
+			Region:               valueOrDefault("RELAY_REGION", defaultRelayRegion),
+			RequestsPerMinute:    requestsPerMinute,
+			JWTPrivateKey:        os.Getenv("RELAY_JWT_PRIVATE_KEY"),
+			TrustedIdentityToken: os.Getenv("RELAY_TRUSTED_IDENTITY_TOKEN"),
 		},
 		Management: Management{
 			URL:               valueOrDefault("MGMT_SERVICE_URL", defaultManagementURL),
@@ -75,6 +77,7 @@ func Load() (Config, error) {
 	}{
 		{"DATABASE_DSN", &cfg.DatabaseDSN},
 		{"RELAY_JWT_PRIVATE_KEY", &cfg.Relay.JWTPrivateKey},
+		{"RELAY_TRUSTED_IDENTITY_TOKEN", &cfg.Relay.TrustedIdentityToken},
 		{"MGMT_CLIENT_KEY_BASE64", &cfg.Management.ClientKeyBase64},
 		{"MGMT_CLIENT_KEY_PASSWORD", &cfg.Management.ClientKeyPassword},
 	}
