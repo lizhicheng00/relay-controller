@@ -56,3 +56,36 @@ func TestServerTLSConfigRequiresCertificateAndKey(t *testing.T) {
 		t.Fatal("NewServerTLSConfig() accepted missing certificate material")
 	}
 }
+
+func TestLoadKeyPairSupportsLegacyEncryptedKeyAndCertificateChain(t *testing.T) {
+	privateKey := testPrivateKey(t, 2048)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "relay-controller"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	certificateDER, err := x509.CreateCertificate(
+		rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificateBlock := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
+	certificateChain := append(append(append([]byte{}, certificateBlock...), certificateBlock...), certificateBlock...)
+	encryptedBlock, err := x509.EncryptPEMBlock(
+		rand.Reader, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(privateKey), []byte("password"), x509.PEMCipherAES256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := append(append([]byte{}, certificateBlock...), pem.EncodeToMemory(encryptedBlock)...)
+
+	certificate, err := LoadKeyPair(certificateChain, keyPEM, "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(certificate.Certificate) != 3 {
+		t.Fatalf("certificate chain length = %d, want 3", len(certificate.Certificate))
+	}
+}

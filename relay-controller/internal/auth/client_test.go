@@ -93,7 +93,7 @@ func TestTLSConfigLoadsEncryptedClientKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	certificateBlock := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
-	certificatePEM := append(append([]byte{}, certificateBlock...), certificateBlock...)
+	certificatePEM := append(append(append([]byte{}, certificateBlock...), certificateBlock...), certificateBlock...)
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: encryptedKey})
 	tlsConfig, err := newTLSConfig(TLSConfig{
 		ServerName:        "huaweicloud.com",
@@ -105,7 +105,8 @@ func TestTLSConfigLoadsEncryptedClientKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tlsConfig.ServerName != "huaweicloud.com" || len(tlsConfig.Certificates) != 1 || tlsConfig.RootCAs == nil {
+	if tlsConfig.ServerName != "huaweicloud.com" || len(tlsConfig.Certificates) != 1 ||
+		len(tlsConfig.Certificates[0].Certificate) != 3 || tlsConfig.RootCAs == nil {
 		t.Fatal("client certificate or CA pool was not loaded")
 	}
 	withoutCustomCA, err := newTLSConfig(TLSConfig{
