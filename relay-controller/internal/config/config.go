@@ -22,8 +22,15 @@ const (
 type Config struct {
 	Address     string
 	DatabaseDSN string
+	TLS         TLS
 	Relay       Relay
 	Management  Management
+}
+
+type TLS struct {
+	CertificateBase64  string
+	PrivateKeyBase64   string
+	PrivateKeyPassword string
 }
 
 type Relay struct {
@@ -55,6 +62,11 @@ func Load() (Config, error) {
 	cfg := Config{
 		Address:     valueOrDefault("SERVER_ADDRESS", defaultAddress),
 		DatabaseDSN: os.Getenv("DATABASE_DSN"),
+		TLS: TLS{
+			CertificateBase64:  strings.TrimSpace(os.Getenv("SERVER_SSL_CERT_BASE64")),
+			PrivateKeyBase64:   os.Getenv("SERVER_SSL_KEY_BASE64"),
+			PrivateKeyPassword: os.Getenv("SERVER_SSL_KEY_PASSWORD"),
+		},
 		Relay: Relay{
 			Domain:               valueOrDefault("RELAY_DOMAIN", defaultRelayDomain),
 			Region:               valueOrDefault("RELAY_REGION", defaultRelayRegion),
@@ -76,6 +88,8 @@ func Load() (Config, error) {
 		value *string
 	}{
 		{"DATABASE_DSN", &cfg.DatabaseDSN},
+		{"SERVER_SSL_KEY_BASE64", &cfg.TLS.PrivateKeyBase64},
+		{"SERVER_SSL_KEY_PASSWORD", &cfg.TLS.PrivateKeyPassword},
 		{"RELAY_JWT_PRIVATE_KEY", &cfg.Relay.JWTPrivateKey},
 		{"RELAY_TRUSTED_IDENTITY_TOKEN", &cfg.Relay.TrustedIdentityToken},
 		{"MGMT_CLIENT_KEY_BASE64", &cfg.Management.ClientKeyBase64},
@@ -103,6 +117,7 @@ func Load() (Config, error) {
 		*field.value = value
 	}
 	cfg.DatabaseDSN = strings.TrimSpace(cfg.DatabaseDSN)
+	cfg.TLS.PrivateKeyBase64 = strings.TrimSpace(cfg.TLS.PrivateKeyBase64)
 	cfg.Management.ClientKeyBase64 = strings.TrimSpace(cfg.Management.ClientKeyBase64)
 	return cfg, nil
 }

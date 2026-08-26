@@ -38,6 +38,11 @@ func run() error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
+	serverTLS, err := security.NewServerTLSConfig(
+		cfg.TLS.CertificateBase64, cfg.TLS.PrivateKeyBase64, cfg.TLS.PrivateKeyPassword)
+	if err != nil {
+		return err
+	}
 	signer, err := security.NewJWTSigner(cfg.Relay.JWTPrivateKey)
 	if err != nil {
 		return err
@@ -76,6 +81,7 @@ func run() error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
+		TLSConfig:         serverTLS,
 	}
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
@@ -84,16 +90,16 @@ func run() error {
 	jobs := application.StartJobs(ctx)
 	serverErrors := make(chan error, 1)
 	go func() {
-		serverErrors <- server.Serve(listener)
+		serverErrors <- server.ServeTLS(listener, "", "")
 	}()
-	logger.Info("Relay Controller started", "address", cfg.Address, "region", cfg.Relay.Region)
+	logger.Info("Relay Controller started", "address", cfg.Address, "protocol", "https", "region", cfg.Relay.Region)
 
 	var serveErr error
 	select {
 	case <-ctx.Done():
 	case err := <-serverErrors:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serveErr = fmt.Errorf("serve HTTP: %w", err)
+			serveErr = fmt.Errorf("serve HTTPS: %w", err)
 		}
 	}
 	stop()
@@ -101,7 +107,7 @@ func run() error {
 	defer cancel()
 	shutdownErr := server.Shutdown(shutdownContext)
 	if shutdownErr != nil {
-		shutdownErr = fmt.Errorf("shutdown HTTP server: %w", shutdownErr)
+		shutdownErr = fmt.Errorf("shutdown HTTPS server: %w", shutdownErr)
 	}
 	jobs.Wait()
 	if err := errors.Join(serveErr, shutdownErr); err != nil {

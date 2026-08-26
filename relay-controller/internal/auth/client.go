@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/youmark/pkcs8"
+	"relay-controller/internal/security"
 )
 
 const (
@@ -93,7 +92,7 @@ func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode management service client key: %w", err)
 	}
-	certificate, err := loadKeyPair(certificatePEM, privateKeyPEM, cfg.ClientKeyPassword)
+	certificate, err := security.LoadKeyPair(certificatePEM, privateKeyPEM, cfg.ClientKeyPassword)
 	if err != nil {
 		return nil, fmt.Errorf("load management service client certificate: %w", err)
 	}
@@ -123,25 +122,6 @@ func newTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		Certificates: []tls.Certificate{certificate},
 		RootCAs:      roots,
 	}, nil
-}
-
-func loadKeyPair(certificatePEM, privateKeyPEM []byte, password string) (tls.Certificate, error) {
-	block, _ := pem.Decode(privateKeyPEM)
-	if block == nil || block.Type != "ENCRYPTED PRIVATE KEY" {
-		return tls.X509KeyPair(certificatePEM, privateKeyPEM)
-	}
-	if password == "" {
-		return tls.Certificate{}, fmt.Errorf("client key password is required")
-	}
-	privateKey, err := pkcs8.ParsePKCS8PrivateKey(block.Bytes, []byte(password))
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("decrypt private key: %w", err)
-	}
-	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("marshal private key: %w", err)
-	}
-	return tls.X509KeyPair(certificatePEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
 }
 
 func (c *Client) ResolveAPIKey(ctx context.Context, apiKey string) (Principal, error) {

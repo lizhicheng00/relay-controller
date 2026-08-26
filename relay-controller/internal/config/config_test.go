@@ -23,6 +23,9 @@ func TestLoadRejectsInvalidRateLimit(t *testing.T) {
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("SERVER_ADDRESS", "")
+	t.Setenv("SERVER_SSL_CERT_BASE64", "")
+	t.Setenv("SERVER_SSL_KEY_BASE64", "")
+	t.Setenv("SERVER_SSL_KEY_PASSWORD", "")
 	t.Setenv("MGMT_SERVICE_URL", "")
 	t.Setenv("MGMT_SERVER_NAME", "")
 	t.Setenv("RELAY_DOMAIN", "")
@@ -46,6 +49,9 @@ func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("RELAY_DOMAIN", "relay.example.com")
 	t.Setenv("RELAY_RATE_LIMIT_REQUESTS_PER_MINUTE", "240")
 	t.Setenv("SERVER_ADDRESS", "10.0.0.1:9443")
+	t.Setenv("SERVER_SSL_CERT_BASE64", "server-certificate")
+	t.Setenv("SERVER_SSL_KEY_BASE64", "server-key")
+	t.Setenv("SERVER_SSL_KEY_PASSWORD", "server-password")
 	t.Setenv("MGMT_SERVICE_URL", "https://mgmt.example.com")
 	t.Setenv("MGMT_SERVER_NAME", "huaweicloud.com")
 	t.Setenv("MGMT_CLIENT_CERT_BASE64", "certificate")
@@ -64,6 +70,10 @@ func TestLoadReadsOverrides(t *testing.T) {
 		cfg.Relay.Domain != "relay.example.com" || cfg.Relay.RequestsPerMinute != 240 ||
 		cfg.Relay.TrustedIdentityToken != "identity-token" {
 		t.Fatalf("relay overrides = %#v", cfg.Relay)
+	}
+	if cfg.TLS.CertificateBase64 != "server-certificate" || cfg.TLS.PrivateKeyBase64 != "server-key" ||
+		cfg.TLS.PrivateKeyPassword != "server-password" {
+		t.Fatalf("TLS overrides = %#v", cfg.TLS)
 	}
 	if cfg.Management.ServerName != "huaweicloud.com" || cfg.Management.ClientCertBase64 != "certificate" ||
 		cfg.Management.ClientKeyBase64 != "private-key" ||
@@ -103,18 +113,29 @@ func TestLoadDecryptsSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	serverKey, err := codec.Encrypt([]byte("server-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverKeyPassword, err := codec.Encrypt([]byte("server-password"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("RELAY_CONFIG_DOG_FILE", dogFile)
 	t.Setenv("omega", pig)
 	t.Setenv("DATABASE_DSN", dsn)
 	t.Setenv("RELAY_JWT_PRIVATE_KEY", privateKey)
 	t.Setenv("RELAY_TRUSTED_IDENTITY_TOKEN", identityToken)
+	t.Setenv("SERVER_SSL_KEY_BASE64", serverKey)
+	t.Setenv("SERVER_SSL_KEY_PASSWORD", serverKeyPassword)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.DatabaseDSN != "relay:password@tcp(database:3306)/relay" ||
-		cfg.Relay.JWTPrivateKey != "private-key" || cfg.Relay.TrustedIdentityToken != "identity-token" {
+		cfg.Relay.JWTPrivateKey != "private-key" || cfg.Relay.TrustedIdentityToken != "identity-token" ||
+		cfg.TLS.PrivateKeyBase64 != "server-key" || cfg.TLS.PrivateKeyPassword != "server-password" {
 		t.Fatalf("Load() = %#v", cfg)
 	}
 }
