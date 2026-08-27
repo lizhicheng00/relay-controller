@@ -2,30 +2,30 @@ START TRANSACTION;
 
 CREATE TEMPORARY TABLE legacy_identity (
     identity_type VARCHAR(8) NOT NULL,
-    domain_fingerprint BINARY(32) NOT NULL,
-    user_fingerprint BINARY(32) NOT NULL,
+    account_mapping_key BINARY(32) NOT NULL,
+    member_mapping_key BINARY(32) NOT NULL,
     namespace VARCHAR(128) COLLATE utf8mb4_bin NOT NULL,
-    PRIMARY KEY (domain_fingerprint, user_fingerprint),
+    PRIMARY KEY (account_mapping_key, member_mapping_key),
     UNIQUE KEY uk_legacy_identity_namespace (namespace)
 );
 
--- Add precomputed HMAC-SHA256 fingerprints before production deployment:
--- INSERT INTO legacy_identity (identity_type, domain_fingerprint, user_fingerprint, namespace) VALUES
---     ('main', UNHEX('<domain-fingerprint>'), UNHEX('<user-fingerprint>'), 'namespace'),
---     ('sub', UNHEX('<domain-fingerprint>'), UNHEX('<user-fingerprint>'), 'ns-sub-namespace');
+-- Add precomputed HMAC-SHA256 mapping keys before production deployment:
+-- INSERT INTO legacy_identity (identity_type, account_mapping_key, member_mapping_key, namespace) VALUES
+--     ('main', UNHEX('<account-mapping-key>'), UNHEX('<member-mapping-key>'), 'namespace'),
+--     ('sub', UNHEX('<account-mapping-key>'), UNHEX('<member-mapping-key>'), 'ns-sub-namespace');
 
-INSERT INTO domain_account (id, domain_fingerprint, account_namespace)
+INSERT INTO domain_account (id, mapping_key, account_namespace)
 SELECT
-    CONCAT('acc_', LEFT(LOWER(HEX(domain_fingerprint)), 28)),
-    domain_fingerprint,
+    CONCAT('acc_', LEFT(LOWER(HEX(account_mapping_key)), 28)),
+    account_mapping_key,
     namespace
 FROM legacy_identity
 WHERE identity_type = 'main';
 
-INSERT INTO user_identity (account_id, user_fingerprint, namespace)
+INSERT INTO user_identity (account_id, mapping_key, namespace)
 SELECT
-    CONCAT('acc_', LEFT(LOWER(HEX(domain_fingerprint)), 28)),
-    user_fingerprint,
+    CONCAT('acc_', LEFT(LOWER(HEX(account_mapping_key)), 28)),
+    member_mapping_key,
     namespace
 FROM legacy_identity;
 

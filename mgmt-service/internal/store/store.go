@@ -74,7 +74,7 @@ func ensureIdentity(
 	seed core.IdentitySeed,
 ) (core.Identity, error) {
 	_, err := tx.ExecContext(ctx, `
-		INSERT INTO domain_account (id, domain_fingerprint, account_namespace)
+		INSERT INTO domain_account (id, mapping_key, account_namespace)
 		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE id = id`,
 		seed.AccountID, fingerprint.Domain, seed.AccountNamespace)
@@ -87,7 +87,7 @@ func ensureIdentity(
 	err = tx.QueryRowContext(ctx, `
 		SELECT id, account_namespace, status
 		FROM domain_account
-		WHERE domain_fingerprint = ?
+		WHERE mapping_key = ?
 		FOR UPDATE`, fingerprint.Domain).Scan(
 		&accountID, &identity.AccountNamespace, &accountStatus)
 	if err != nil {
@@ -98,7 +98,7 @@ func ensureIdentity(
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO user_identity (account_id, user_fingerprint, namespace)
+		INSERT INTO user_identity (account_id, mapping_key, namespace)
 		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE account_id = account_id`,
 		accountID, fingerprint.User, seed.Namespace)
@@ -110,7 +110,7 @@ func ensureIdentity(
 	err = tx.QueryRowContext(ctx, `
 		SELECT namespace, status
 		FROM user_identity
-		WHERE account_id = ? AND user_fingerprint = ?
+		WHERE account_id = ? AND mapping_key = ?
 		FOR UPDATE`, accountID, fingerprint.User).Scan(
 		&identity.Namespace, &userStatus)
 	if err != nil {
@@ -132,8 +132,8 @@ func (s *Store) FindIdentity(
 		SELECT a.account_namespace, u.namespace
 		FROM domain_account a
 		JOIN user_identity u ON u.account_id = a.id
-		WHERE a.domain_fingerprint = ?
-		  AND u.user_fingerprint = ?
+		WHERE a.mapping_key = ?
+		  AND u.mapping_key = ?
 		  AND a.status = 'active'
 		  AND u.status = 'active'`, fingerprint.Domain, fingerprint.User).Scan(
 		&identity.AccountNamespace,
