@@ -54,7 +54,9 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	application.now = func() time.Time { return now }
 
 	accountNamespace := fmt.Sprintf("ns-integration-account-%d", time.Now().UnixNano())
-	if _, err := application.GetLimits(ctx, accountNamespace); err != nil {
+	firstNamespace := fmt.Sprintf("ns-integration-user-a-%d", time.Now().UnixNano())
+	secondNamespace := fmt.Sprintf("ns-integration-user-b-%d", time.Now().UnixNano())
+	if _, err := application.GetLimits(ctx, firstNamespace, accountNamespace); err != nil {
 		t.Fatal(err)
 	}
 
@@ -69,7 +71,10 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 		waitGroup.Add(1)
 		go func(index int) {
 			defer waitGroup.Done()
-			namespace := fmt.Sprintf("ns-integration-%02d", index)
+			namespace := firstNamespace
+			if index%2 != 0 {
+				namespace = secondNamespace
+			}
 			response, err := application.CreateTunnel(ctx, namespace, accountNamespace, core.CreateTunnelRequest{
 				Name: fmt.Sprintf("tunnel-%02d", index), ClusterID: "cluster-a",
 			})
@@ -91,12 +96,17 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	for failure := range failures {
 		createFailures = append(createFailures, failure)
 	}
-	if len(tunnels) != 10 {
-		t.Fatalf("created %d tunnels concurrently, want 10; failures: %v", len(tunnels), createFailures)
+	if len(tunnels) != 20 || len(createFailures) != 0 {
+		t.Fatalf("created %d tunnels concurrently, want 20; failures: %v", len(tunnels), createFailures)
 	}
-	for _, failure := range createFailures {
-		assertErrorCode(t, failure, core.CodeTunnelQuotaExceeded)
-	}
+	_, err = application.CreateTunnel(ctx, firstNamespace, accountNamespace, core.CreateTunnelRequest{
+		Name: "tunnel-overflow", ClusterID: "cluster-a",
+	})
+	assertErrorCode(t, err, core.CodeTunnelQuotaExceeded)
+	_, err = application.CreateTunnel(ctx, secondNamespace, accountNamespace, core.CreateTunnelRequest{
+		Name: "tunnel-overflow", ClusterID: "cluster-a",
+	})
+	assertErrorCode(t, err, core.CodeTunnelQuotaExceeded)
 
 	first := tunnels[0]
 	if first.response.Type != "bridge" || first.response.ExpirationHours != 72 || first.response.URL != first.response.TunnelID+".cluster-a.myhuaweicloud.com" {
@@ -167,7 +177,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if err != nil || detail.BandwidthUsed != 300 {
 		t.Fatalf("tunnel usage = %d, err = %v", detail.BandwidthUsed, err)
 	}
-	limits, err := application.GetLimits(ctx, accountNamespace)
+	limits, err := application.GetLimits(ctx, first.namespace, accountNamespace)
 	if err != nil {
 		t.Fatal(err)
 	}

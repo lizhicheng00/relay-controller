@@ -34,7 +34,7 @@ type API interface {
 	GetPort(context.Context, string, string, uint16) (core.TunnelPortResponse, error)
 	UpdatePort(context.Context, string, string, uint16, core.UpdateTunnelPortRequest) (core.TunnelPortResponse, error)
 	DeletePort(context.Context, string, string, uint16) (bool, error)
-	GetLimits(context.Context, string) (core.LimitsResponse, error)
+	GetLimits(context.Context, string, string) (core.LimitsResponse, error)
 }
 
 type Handler struct {
@@ -219,8 +219,8 @@ func (h *Handler) deletePort(response http.ResponseWriter, request *http.Request
 }
 
 func (h *Handler) getLimits(response http.ResponseWriter, request *http.Request) {
-	_, accountNamespace := requestContext(request)
-	result, err := h.api.GetLimits(request.Context(), accountNamespace)
+	namespace, accountNamespace := requestContext(request)
+	result, err := h.api.GetLimits(request.Context(), namespace, accountNamespace)
 	h.writeResult(response, result, err)
 }
 

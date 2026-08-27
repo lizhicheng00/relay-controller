@@ -89,6 +89,19 @@ func TestIssueTokenPreventsCaching(t *testing.T) {
 	}
 }
 
+func TestLimitsUsesUserAndAccountNamespaces(t *testing.T) {
+	api := stubAPI{getLimits: func(_ context.Context, namespace, accountNamespace string) (core.LimitsResponse, error) {
+		if namespace != testPrincipal.Namespace || accountNamespace != testPrincipal.AccountNamespace {
+			t.Fatalf("limits identity = %q %q", namespace, accountNamespace)
+		}
+		return core.LimitsResponse{ActiveTunnels: 3}, nil
+	}}
+	response := serve(t, api, http.MethodGet, apiBase+"/limits", "", true)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"activeTunnels":3`) {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body)
+	}
+}
+
 func TestMalformedBodyReturnsRequestBodyTarget(t *testing.T) {
 	response := serve(t, stubAPI{}, http.MethodPost, apiBase+"/tunnels", `{`, true)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"target":"requestBody"`) {
@@ -220,6 +233,7 @@ type stubAPI struct {
 	createTunnel func(context.Context, string, string, core.CreateTunnelRequest) (core.TunnelResponse, error)
 	getTunnel    func(context.Context, string, string) (core.TunnelResponse, error)
 	issueToken   func(context.Context, string, string, string) (core.TunnelTokenResponse, error)
+	getLimits    func(context.Context, string, string) (core.LimitsResponse, error)
 }
 
 type stubResolver struct {
@@ -280,6 +294,9 @@ func (stubAPI) UpdatePort(context.Context, string, string, uint16, core.UpdateTu
 func (stubAPI) DeletePort(context.Context, string, string, uint16) (bool, error) {
 	return true, nil
 }
-func (stubAPI) GetLimits(context.Context, string) (core.LimitsResponse, error) {
+func (s stubAPI) GetLimits(ctx context.Context, namespace, accountNamespace string) (core.LimitsResponse, error) {
+	if s.getLimits != nil {
+		return s.getLimits(ctx, namespace, accountNamespace)
+	}
 	return core.LimitsResponse{}, nil
 }

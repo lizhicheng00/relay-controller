@@ -7,7 +7,7 @@ import (
 	"relay-controller/internal/store"
 )
 
-func (s *Service) GetLimits(ctx context.Context, accountNamespace string) (core.LimitsResponse, error) {
+func (s *Service) GetLimits(ctx context.Context, namespace, accountNamespace string) (core.LimitsResponse, error) {
 	now := s.now().Unix()
 	var response core.LimitsResponse
 	if err := s.store.CreateAccountIfAbsent(ctx, accountNamespace, defaultPlanCode); err != nil {
@@ -26,7 +26,7 @@ func (s *Service) GetLimits(ctx context.Context, accountNamespace string) (core.
 		if err != nil {
 			return err
 		}
-		activeTunnels, err := tx.CountActiveTunnels(ctx, account.ID, now)
+		activeTunnels, err := tx.CountActiveTunnels(ctx, namespace, now)
 		if err != nil {
 			return internal("count active tunnels", err)
 		}

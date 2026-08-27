@@ -109,10 +109,10 @@ func (s *Store) LockNamespaceTunnels(ctx context.Context, namespace, region stri
 	return result, rows.Err()
 }
 
-func (s *Store) CountActiveTunnels(ctx context.Context, accountID uint64, now int64) (uint64, error) {
+func (s *Store) CountActiveTunnels(ctx context.Context, namespace string, now int64) (uint64, error) {
 	var count uint64
 	err := s.exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM tunnel
-		WHERE account_id = ? AND deleted = 0 AND expiration > ?`, accountID, now).Scan(&count)
+		WHERE namespace = ? AND deleted = 0 AND expiration > ?`, namespace, now).Scan(&count)
 	return count, err
 }
 

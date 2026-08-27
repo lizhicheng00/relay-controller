@@ -63,7 +63,7 @@ func (s *Service) CreateTunnel(ctx context.Context, namespace, accountNamespace 
 		if err != nil {
 			return err
 		}
-		activeTunnels, err := tx.CountActiveTunnels(ctx, account.ID, now)
+		activeTunnels, err := tx.CountActiveTunnels(ctx, namespace, now)
 		if err != nil {
 			return internal("count active tunnels", err)
 		}
