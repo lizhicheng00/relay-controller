@@ -54,8 +54,8 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	application.now = func() time.Time { return now }
 
 	accountNamespace := fmt.Sprintf("ns-integration-account-%d", time.Now().UnixNano())
-	firstNamespace := fmt.Sprintf("ns-integration-user-a-%d", time.Now().UnixNano())
-	secondNamespace := fmt.Sprintf("ns-integration-user-b-%d", time.Now().UnixNano())
+	namespaceSuffix := time.Now().UnixNano()
+	firstNamespace := fmt.Sprintf("ns-integration-user-00-%d", namespaceSuffix)
 	if _, err := application.GetLimits(ctx, firstNamespace, accountNamespace); err != nil {
 		t.Fatal(err)
 	}
@@ -71,10 +71,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 		waitGroup.Add(1)
 		go func(index int) {
 			defer waitGroup.Done()
-			namespace := firstNamespace
-			if index%2 != 0 {
-				namespace = secondNamespace
-			}
+			namespace := fmt.Sprintf("ns-integration-user-%02d-%d", index, namespaceSuffix)
 			response, err := application.CreateTunnel(ctx, namespace, accountNamespace, core.CreateTunnelRequest{
 				Name: fmt.Sprintf("tunnel-%02d", index), ClusterID: "cluster-a",
 			})
@@ -96,19 +93,18 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	for failure := range failures {
 		createFailures = append(createFailures, failure)
 	}
-	if len(tunnels) != 20 || len(createFailures) != 0 {
-		t.Fatalf("created %d tunnels concurrently, want 20; failures: %v", len(tunnels), createFailures)
+	if len(tunnels) != 10 || len(createFailures) != 10 {
+		t.Fatalf("created %d tunnels concurrently, want 10; failures: %v", len(tunnels), createFailures)
 	}
-	_, err = application.CreateTunnel(ctx, firstNamespace, accountNamespace, core.CreateTunnelRequest{
-		Name: "tunnel-overflow", ClusterID: "cluster-a",
-	})
-	assertErrorCode(t, err, core.CodeTunnelQuotaExceeded)
-	_, err = application.CreateTunnel(ctx, secondNamespace, accountNamespace, core.CreateTunnelRequest{
-		Name: "tunnel-overflow", ClusterID: "cluster-a",
-	})
-	assertErrorCode(t, err, core.CodeTunnelQuotaExceeded)
+	for _, failure := range createFailures {
+		assertErrorCode(t, failure, core.CodeTunnelQuotaExceeded)
+	}
 
 	first := tunnels[0]
+	_, err = application.CreateTunnel(ctx, first.namespace, accountNamespace, core.CreateTunnelRequest{
+		Name: "tunnel-overflow", ClusterID: "cluster-a",
+	})
+	assertErrorCode(t, err, core.CodeTunnelQuotaExceeded)
 	if first.response.Type != "bridge" || first.response.ExpirationHours != 72 || first.response.URL != first.response.TunnelID+".cluster-a.myhuaweicloud.com" {
 		t.Fatalf("unexpected tunnel response: %#v", first.response)
 	}
@@ -181,7 +177,7 @@ func TestServiceAgainstMariaDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limits.ActiveTunnels != 10 || limits.RemainingBytes != limits.QuotaBytes-300 {
+	if limits.ActiveTunnels != 1 || limits.RemainingBytes != limits.QuotaBytes-300 {
 		t.Fatalf("unexpected limits: %#v", limits)
 	}
 

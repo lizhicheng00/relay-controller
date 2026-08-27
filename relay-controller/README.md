@@ -6,7 +6,7 @@ Relay Controller is the regional DevBridge control plane. It manages tunnels, po
 
 - One process serves one `RELAY_REGION`; only clusters registered to that region are accepted.
 - A `devbridge` API key resolves to one namespace and its quota-sharing account namespace through Management Service.
-- A trial account has 20 GiB per Beijing calendar month. Each user namespace has 10 active tunnels and 10 ports per tunnel.
+- A trial account shares 20 GiB per Beijing calendar month and 10 active tunnels across its users. Each tunnel has 10 ports.
 - `tunnelCode` is a random positive 40-bit integer. `tunnelId` is its fixed eight-character lowercase Base32 encoding.
 - Tunnel URLs use `{tunnelId}.{clusterId}.{RELAY_DOMAIN}`.
 - Tunnel names are unique within a namespace.
@@ -39,6 +39,8 @@ DELETE /tunnels/{tunnelId}/ports/{port}
 
 GET    /limits
 ```
+
+`activeTunnels` reports the current user namespace count, while `maxTunnels` is the shared account limit.
 
 `GET /auth/check` performs the same authentication as every business request and returns `204` without querying tunnel or billing data. CLI clients use it once when accepting a manually supplied API key; normal commands call their business endpoint directly.
 

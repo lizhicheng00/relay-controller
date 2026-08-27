@@ -26,7 +26,7 @@ func (s *Service) GetLimits(ctx context.Context, namespace, accountNamespace str
 		if err != nil {
 			return err
 		}
-		activeTunnels, err := tx.CountActiveTunnels(ctx, namespace, now)
+		activeTunnels, err := tx.CountNamespaceActiveTunnels(ctx, namespace, now)
 		if err != nil {
 			return internal("count active tunnels", err)
 		}
