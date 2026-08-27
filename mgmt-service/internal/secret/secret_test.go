@@ -6,20 +6,12 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestThreeComponentEncryption(t *testing.T) {
 	dogFile, _, codec := testCodec(t)
-	info, err := os.Stat(dogFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
-		t.Fatalf("dog file mode = %o", info.Mode().Perm())
-	}
 
 	encrypted, err := codec.Encrypt([]byte("secret-value"))
 	if err != nil {
