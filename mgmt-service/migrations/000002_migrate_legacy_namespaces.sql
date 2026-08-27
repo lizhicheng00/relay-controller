@@ -9,7 +9,8 @@ CREATE TEMPORARY TABLE legacy_identity (
     UNIQUE KEY uk_legacy_identity_namespace (namespace)
 );
 
--- Add precomputed HMAC-SHA256 mapping keys before production deployment:
+-- Generate the rows with: go run ./tools/identity-cutover
+-- Add the generated HMAC-SHA256 mapping keys before production deployment:
 -- INSERT INTO legacy_identity (identity_type, account_mapping_key, member_mapping_key, namespace) VALUES
 --     ('main', UNHEX('<account-mapping-key>'), UNHEX('<member-mapping-key>'), 'namespace'),
 --     ('sub', UNHEX('<account-mapping-key>'), UNHEX('<member-mapping-key>'), 'ns-sub-namespace');
