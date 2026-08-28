@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,16 +12,32 @@ import (
 	"mgmt-service/internal/secret"
 )
 
-const identitySource = `
-main domain-id user-id namespace
-sub domain-id user-id ns-sub-namespace
+const namespaceSource = `
+[
+  {"namespace": "namespace", "user_domain_id": "domain-id"}
+]
+`
+
+const userSource = `
+[
+  {"user_id": "user-id", "customer_id": "domain-id"}
+]
 `
 
 type identity struct {
-	kind      string
 	domainID  string
 	userID    string
 	namespace string
+}
+
+type namespaceRecord struct {
+	Namespace string `json:"namespace"`
+	DomainID  string `json:"user_domain_id"`
+}
+
+type userRecord struct {
+	UserID     string `json:"user_id"`
+	CustomerID string `json:"customer_id"`
 }
 
 func main() {
@@ -35,11 +52,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	return convert(identitySource, os.Stdout, cfg.Secrets)
+	return convert(namespaceSource, userSource, os.Stdout, cfg.Secrets)
 }
 
-func convert(source string, output io.Writer, codec *secret.Codec) error {
-	identities, err := parseIdentities(source)
+func convert(namespacesJSON, usersJSON string, output io.Writer, codec *secret.Codec) error {
+	identities, err := joinIdentities(namespacesJSON, usersJSON)
 	if err != nil {
 		return err
 	}
@@ -58,26 +75,38 @@ func convert(source string, output io.Writer, codec *secret.Codec) error {
 			separator = ";"
 		}
 		_, _ = fmt.Fprintf(output, "    ('%s', UNHEX('%s'), UNHEX('%s'), '%s')%s\n",
-			item.kind, hex.EncodeToString(accountKey), hex.EncodeToString(memberKey),
+			"main", hex.EncodeToString(accountKey), hex.EncodeToString(memberKey),
 			strings.ReplaceAll(item.namespace, "'", "''"), separator)
 	}
 	return nil
 }
 
-func parseIdentities(source string) ([]identity, error) {
-	var identities []identity
-	for index, sourceLine := range strings.Split(source, "\n") {
-		lineNumber := index + 1
-		line := strings.TrimSpace(sourceLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+func joinIdentities(namespacesJSON, usersJSON string) ([]identity, error) {
+	var namespaces []namespaceRecord
+	if err := json.Unmarshal([]byte(namespacesJSON), &namespaces); err != nil {
+		return nil, fmt.Errorf("parse namespace JSON: %w", err)
+	}
+	var users []userRecord
+	if err := json.Unmarshal([]byte(usersJSON), &users); err != nil {
+		return nil, fmt.Errorf("parse user JSON: %w", err)
+	}
+
+	usersByCustomer := make(map[string]string, len(users))
+	for _, user := range users {
+		if existing, found := usersByCustomer[user.CustomerID]; found && existing != user.UserID {
+			return nil, fmt.Errorf("customer %q maps to multiple users", user.CustomerID)
 		}
-		fields := strings.Fields(line)
-		if len(fields) != 4 || (fields[0] != "main" && fields[0] != "sub") {
-			return nil, fmt.Errorf("line %d must be: main|sub domain user namespace", lineNumber)
+		usersByCustomer[user.CustomerID] = user.UserID
+	}
+
+	identities := make([]identity, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		userID, found := usersByCustomer[namespace.DomainID]
+		if !found {
+			return nil, fmt.Errorf("domain %q has no matching user", namespace.DomainID)
 		}
 		identities = append(identities, identity{
-			kind: fields[0], domainID: fields[1], userID: fields[2], namespace: fields[3],
+			domainID: namespace.DomainID, userID: userID, namespace: namespace.Namespace,
 		})
 	}
 	return identities, nil

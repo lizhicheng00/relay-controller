@@ -13,23 +13,36 @@ import (
 
 func TestConvert(t *testing.T) {
 	codec := testCodec(t)
-	input := "# legacy identities\nmain domain-1 user-1 ns-main\nsub domain-1 user-2 ns-sub-1\n"
+	namespaces := `[
+		{"namespace":"ns-main","user_domain_id":"domain-1"},
+		{"namespace":"ns-other","user_domain_id":"domain-2"}
+	]`
+	users := `[
+		{"user_id":"user-2","customer_id":"domain-2"},
+		{"user_id":"user-1","customer_id":"domain-1"}
+	]`
 	var output strings.Builder
 
-	if err := convert(input, &output, codec); err != nil {
+	if err := convert(namespaces, users, &output, codec); err != nil {
 		t.Fatal(err)
 	}
 	result := output.String()
 	if strings.Contains(result, "domain-1") || strings.Contains(result, "user-1") ||
 		strings.Contains(result, "user-2") || strings.Count(result, "UNHEX('") != 4 ||
-		!strings.Contains(result, "'ns-main'") || !strings.Contains(result, "'ns-sub-1'") {
+		!strings.Contains(result, "'ns-main'") || !strings.Contains(result, "'ns-other'") ||
+		strings.Count(result, "('main'") != 2 {
 		t.Fatalf("unexpected SQL:\n%s", result)
 	}
 }
 
-func TestConvertRejectsInvalidLine(t *testing.T) {
-	if err := convert("main domain user\n", &strings.Builder{}, testCodec(t)); err == nil {
-		t.Fatal("convert accepted an invalid line")
+func TestConvertRejectsAmbiguousUserMapping(t *testing.T) {
+	namespaces := `[{"namespace":"ns-main","user_domain_id":"domain-1"}]`
+	users := `[
+		{"user_id":"user-1","customer_id":"domain-1"},
+		{"user_id":"user-2","customer_id":"domain-1"}
+	]`
+	if err := convert(namespaces, users, &strings.Builder{}, testCodec(t)); err == nil {
+		t.Fatal("convert accepted an ambiguous user mapping")
 	}
 }
 
