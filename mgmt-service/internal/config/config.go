@@ -30,7 +30,7 @@ type TLS struct {
 func Load() (Config, error) {
 	codec, err := secret.Load(
 		valueOrDefault("MGMT_CONFIG_DOG_FILE", defaultDogFile),
-		os.Getenv("omega"),
+		valueOrDefault("omega", os.Getenv("OMEGA")),
 	)
 	if err != nil {
 		return Config{}, err
