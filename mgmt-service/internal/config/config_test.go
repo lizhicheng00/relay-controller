@@ -66,37 +66,6 @@ func TestLoadRejectsWrongKey(t *testing.T) {
 	}
 }
 
-func TestLoadOmegaAliases(t *testing.T) {
-	dogFile, pig, codec := testCodec(t)
-	dsn, err := codec.Encrypt([]byte("encrypted-dsn"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		name, lower, upper string
-	}{
-		{"lowercase", pig, ""},
-		{"uppercase", "", pig},
-		{"lowercase takes precedence", pig, testComponent(t)},
-		{"blank lowercase", " \t", pig},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			setEnvironment(t)
-			t.Setenv("MGMT_CONFIG_DOG_FILE", dogFile)
-			t.Setenv("DATABASE_DSN", dsn)
-			t.Setenv("omega", tc.lower)
-			t.Setenv("OMEGA", tc.upper)
-			cfg, err := Load()
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
-			if cfg.DatabaseDSN != "encrypted-dsn" {
-				t.Fatal("Load() did not decrypt DATABASE_DSN")
-			}
-		})
-	}
-}
-
 func setEnvironment(t *testing.T) {
 	t.Helper()
 	dogFile, pig, _ := testCodec(t)
@@ -104,7 +73,6 @@ func setEnvironment(t *testing.T) {
 	t.Setenv("DATABASE_DSN", "plain-dsn")
 	t.Setenv("MGMT_CONFIG_DOG_FILE", dogFile)
 	t.Setenv("omega", pig)
-	t.Setenv("OMEGA", "")
 	t.Setenv("SERVER_SSL_KEY_STORE_BASE64", "key-store")
 	t.Setenv("SERVER_SSL_KEY_STORE_PASSWORD", "key-password")
 	t.Setenv("SERVER_SSL_TRUST_STORE_BASE64", "trust-store")
